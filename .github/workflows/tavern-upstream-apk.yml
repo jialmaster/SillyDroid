@@ -81,6 +81,7 @@ jobs:
       - name: Checkout version metadata
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           sparse-checkout: |
             android-tavern/gradle.properties
 
@@ -155,11 +156,26 @@ jobs:
           fi
 
           normalized_tag="${tavern_tag#refs/tags/}"
-          host_version="$(sed -n 's/^staiAndroidHostVersion=//p' android-tavern/gradle.properties | head -n 1 | tr -d '\r')"
-          if [ -z "$host_version" ]; then
-            echo '无法解析 Android 宿主版本号；请检查 android-tavern/gradle.properties 中的 staiAndroidHostVersion。' >&2
+          host_version_base="$(sed -n 's/^staiAndroidHostVersion=//p' android-tavern/gradle.properties | head -n 1 | tr -d '\r' | tr -d '[:space:]')"
+          if [ -z "$host_version_base" ]; then
+            echo '无法解析 Android 宿主版本基线；请检查 android-tavern/gradle.properties 中的 staiAndroidHostVersion。' >&2
             exit 1
           fi
+
+          if ! printf '%s' "$host_version_base" | grep -E '^[0-9]+(\.[0-9]+)*$' > /dev/null 2>&1; then
+            echo "Android 宿主版本基线格式非法：$host_version_base" >&2
+            exit 1
+          fi
+
+          repo_revision_count="$(git rev-list --count HEAD | tr -d '\r')"
+          if ! printf '%s' "$repo_revision_count" | grep -E '^[0-9]+$' > /dev/null 2>&1; then
+            echo "无法解析当前仓库提交计数：$repo_revision_count" >&2
+            exit 1
+          fi
+
+          # 宿主版本号按“基线版本 + 当前仓库提交计数”自动生成。
+          # 这样同一代码状态重跑 workflow 不会继续涨版本，只有 master/main 推进到新提交时才生成新版本号。
+          host_version="${host_version_base}.${repo_revision_count}"
 
           safe_host_version="$(printf '%s' "$host_version" | sed 's#[^0-9A-Za-z._-]#-#g')"
           safe_tag="$(printf '%s' "$normalized_tag" | sed 's#[^0-9A-Za-z._-]#-#g')"
