@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.net.Uri
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -56,10 +57,13 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var extensionsEmptyView: TextView
     private lateinit var extensionsInstallButton: MaterialButton
     private lateinit var extensionsReloadButton: MaterialButton
+    private lateinit var extensionsProgressIndicator: LinearProgressIndicator
+    private lateinit var extensionsProgressLabel: TextView
     private lateinit var logsPanelView: View
     private lateinit var logsMetaView: TextView
     private lateinit var logsEmptyView: TextView
     private lateinit var logsContentView: TextView
+    private lateinit var logsExportButton: MaterialButton
     private lateinit var logsReloadButton: MaterialButton
     private lateinit var settingsPanelView: View
     private lateinit var sectionContainer: LinearLayout
@@ -94,6 +98,15 @@ class BootstrapSettingsActivity : AppCompatActivity() {
                     dataCoordinator.importArchive(sourceUri, preview)
                 }
             }
+        }
+    }
+
+    private var pendingLogExportFileName: String? = null
+    private val exportLogLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { targetUri ->
+        val requestedFileName = pendingLogExportFileName
+        pendingLogExportFileName = null
+        if (targetUri != null && requestedFileName != null) {
+            logsCoordinator.exportCurrentLog(targetUri)
         }
     }
 
@@ -189,10 +202,13 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         extensionsEmptyView = findViewById(R.id.bootstrapSettingsExtensionsEmpty)
         extensionsInstallButton = findViewById(R.id.bootstrapSettingsExtensionsInstallButton)
         extensionsReloadButton = findViewById(R.id.bootstrapSettingsExtensionsReloadButton)
+        extensionsProgressIndicator = findViewById(R.id.bootstrapSettingsExtensionsProgress)
+        extensionsProgressLabel = findViewById(R.id.bootstrapSettingsExtensionsProgressLabel)
         logsPanelView = findViewById(R.id.bootstrapSettingsLogsPanel)
         logsMetaView = findViewById(R.id.bootstrapSettingsLogsMeta)
         logsEmptyView = findViewById(R.id.bootstrapSettingsLogsEmpty)
         logsContentView = findViewById(R.id.bootstrapSettingsLogsContent)
+        logsExportButton = findViewById(R.id.bootstrapSettingsLogsExportButton)
         logsReloadButton = findViewById(R.id.bootstrapSettingsLogsReloadButton)
         settingsPanelView = findViewById(R.id.bootstrapSettingsSettingsPanel)
         sectionContainer = findViewById(R.id.bootstrapSettingsSectionContainer)
@@ -273,6 +289,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             emptyView = extensionsEmptyView,
             installButton = extensionsInstallButton,
             reloadButton = extensionsReloadButton,
+            progressIndicator = extensionsProgressIndicator,
+            progressLabel = extensionsProgressLabel,
             setBusy = screenController::setBusy,
             showError = settingsCoordinator::showValidationMessage,
             showBanner = { message -> screenController.showBanner(message) },
@@ -283,9 +301,17 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             metaView = logsMetaView,
             emptyView = logsEmptyView,
             contentView = logsContentView,
+            exportButton = logsExportButton,
             reloadButton = logsReloadButton,
             setBusy = screenController::setBusy,
-            showError = settingsCoordinator::showValidationMessage
+            showError = settingsCoordinator::showValidationMessage,
+            showMessage = screenController::showMessage,
+            requestExport = ::requestLogExport
         )
+    }
+
+    private fun requestLogExport(fileName: String) {
+        pendingLogExportFileName = fileName
+        exportLogLauncher.launch(fileName)
     }
 }

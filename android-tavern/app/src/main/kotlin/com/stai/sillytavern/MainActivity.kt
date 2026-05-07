@@ -130,7 +130,6 @@ class MainActivity : AppCompatActivity() {
     private var hasRestoredWebViewState = false
     private var skipNextWebViewStateRestore = false
     private var isOpeningBootstrapSettings = false
-    private var pendingResumeAfterSettings = false
     private var pendingFileChooserCallback: ValueCallback<Array<Uri>>? = null
     private var floatingLogsRefreshJob: Job? = null
     private var lastFloatingLogSnapshot: HostLogSnapshot? = null
@@ -156,27 +155,11 @@ class MainActivity : AppCompatActivity() {
     private val bootstrapSettingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         isOpeningBootstrapSettings = false
         if (result.resultCode == Activity.RESULT_OK && BootstrapSettingsActivity.shouldStartBootstrap(result.data)) {
-            pendingResumeAfterSettings = false
             skipNextWebViewStateRestore = true
             hasRestoredWebViewState = false
             loadedUrl = ""
             recreate()
             return@registerForActivityResult
-        }
-
-        when (StartupRuntimeStore.state.value.phase) {
-            StartupPhase.CONFIGURING -> {
-                pendingResumeAfterSettings = false
-                startBootstrap(true)
-            }
-
-            StartupPhase.PAUSING -> {
-                pendingResumeAfterSettings = true
-            }
-
-            else -> {
-                pendingResumeAfterSettings = false
-            }
         }
     }
 
@@ -1460,10 +1443,6 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 StartupRuntimeStore.state.collect { state ->
-                    if (pendingResumeAfterSettings && state.phase == StartupPhase.CONFIGURING) {
-                        pendingResumeAfterSettings = false
-                        startBootstrap(true)
-                    }
                     renderBootstrapState(state)
                 }
             }
@@ -1471,12 +1450,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderBootstrapState(state: StartupState) {
-        val details = state.details.takeIf { it.isNotBlank() }
-        bootstrapStatus.text = if (details == null) {
+        val displayMessage = if (state.phase == StartupPhase.CONFIGURING) {
+            getString(R.string.bootstrap_paused_message)
+        } else {
             state.message
+        }
+        val displayDetails = if (state.phase == StartupPhase.CONFIGURING) {
+            getString(R.string.bootstrap_paused_details)
+        } else {
+            state.details
+        }
+        val details = displayDetails.takeIf { it.isNotBlank() }
+        bootstrapStatus.text = if (details == null) {
+            displayMessage
         } else {
             buildString {
-                append(state.message)
+                append(displayMessage)
                 append('\n')
                 append(details)
             }
@@ -1543,7 +1532,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         isOpeningBootstrapSettings = true
-        pendingResumeAfterSettings = false
         bootstrapSettingsButton.isEnabled = false
         val localUrl = BootConfig.localServiceUrl(this)
         StartupRuntimeStore.update(

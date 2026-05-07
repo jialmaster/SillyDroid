@@ -14,6 +14,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +34,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
     private val emptyView: TextView,
     private val installButton: MaterialButton,
     private val reloadButton: MaterialButton,
+    private val progressIndicator: LinearProgressIndicator,
+    private val progressLabel: TextView,
     private val setBusy: (Boolean) -> Unit,
     private val showError: (String) -> Unit,
     private val showBanner: (String) -> Unit,
@@ -65,6 +68,22 @@ internal class BootstrapSettingsExtensionsCoordinator(
         val branch: String?
     )
 
+    private data class ExtensionRuntimeProgress(
+        val step: String?,
+        val phase: String?,
+        val loaded: Int?,
+        val total: Int?,
+        val indeterminate: Boolean,
+        val message: String?
+    )
+
+    private data class ExtensionProgressState(
+        val actionLabel: String,
+        val stageLabel: String,
+        val percent: Int?,
+        val indeterminate: Boolean
+    )
+
     private val stoppedPhases = setOf(
         StartupPhase.CONFIGURING,
         StartupPhase.IDLE,
@@ -76,6 +95,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
     private val runtimeProvisioner by lazy { RootfsRuntimeProvisioner(launcher, paths) }
     private var extensions: List<ManagedExtension> = emptyList()
     private var busy = false
+    private var progressState: ExtensionProgressState? = null
 
     fun initialize() {
         installButton.setOnClickListener {
@@ -85,6 +105,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             reloadExtensions()
         }
         renderExtensions()
+        renderProgress()
     }
 
     fun reloadExtensions() {
@@ -163,6 +184,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
     private fun renderExtensions() {
         installButton.isEnabled = !busy
         reloadButton.isEnabled = !busy
+        renderProgress()
         listContainer.removeAllViews()
         emptyView.isVisible = extensions.isEmpty()
         if (extensions.isEmpty()) {
@@ -342,14 +364,30 @@ internal class BootstrapSettingsExtensionsCoordinator(
         }
 
         activity.lifecycleScope.launch {
+            setProgressState(
+                actionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_reinstall),
+                stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_prepare),
+                percent = null,
+                indeterminate = true
+            )
             setBusyState(true)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     stopServiceForMaintenance()
-                    runExtensionReinstall(extension.folderName, normalizedRepository)
+                    runExtensionReinstall(
+                        extension.folderName,
+                        normalizedRepository,
+                        onProgress = { runtimeProgress ->
+                            publishRuntimeProgress(
+                                activity.getString(R.string.bootstrap_settings_extensions_progress_action_reinstall),
+                                runtimeProgress
+                            )
+                        }
+                    )
                 }
             }
             setBusyState(false)
+            clearProgressState()
 
             result.onSuccess {
                 val message = activity.getString(R.string.bootstrap_settings_extensions_reinstall_success, extension.displayName)
@@ -408,14 +446,30 @@ internal class BootstrapSettingsExtensionsCoordinator(
 
     private fun previewInstallExtension(repositoryUrl: String, normalizedRepository: NormalizedExtensionRepository) {
         activity.lifecycleScope.launch {
+            setProgressState(
+                actionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_preview),
+                stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_prepare),
+                percent = null,
+                indeterminate = true
+            )
             setBusyState(true)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     stopServiceForMaintenance()
-                    runExtensionInstallPreview(repositoryUrl, normalizedRepository)
+                    runExtensionInstallPreview(
+                        repositoryUrl,
+                        normalizedRepository,
+                        onProgress = { runtimeProgress ->
+                            publishRuntimeProgress(
+                                activity.getString(R.string.bootstrap_settings_extensions_progress_action_preview),
+                                runtimeProgress
+                            )
+                        }
+                    )
                 }
             }
             setBusyState(false)
+            clearProgressState()
 
             result.onSuccess { preview ->
                 confirmInstallPreview(preview)
@@ -465,6 +519,12 @@ internal class BootstrapSettingsExtensionsCoordinator(
 
     private fun installPreviewedExtension(preview: ExtensionInstallPreview) {
         activity.lifecycleScope.launch {
+            setProgressState(
+                actionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_install),
+                stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating),
+                percent = null,
+                indeterminate = true
+            )
             setBusyState(true)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
@@ -473,6 +533,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
                 }
             }
             setBusyState(false)
+            clearProgressState()
 
             result.onSuccess {
                 val message = activity.getString(R.string.bootstrap_settings_extensions_install_success, preview.displayName)
@@ -504,7 +565,11 @@ internal class BootstrapSettingsExtensionsCoordinator(
         }
     }
 
-    private fun runExtensionReinstall(folderName: String, repository: NormalizedExtensionRepository) {
+    private fun runExtensionReinstall(
+        folderName: String,
+        repository: NormalizedExtensionRepository,
+        onProgress: ((ExtensionRuntimeProgress) -> Unit)? = null
+    ) {
         val requestName = "extension-reinstall-${folderName.replace(Regex("[^A-Za-z0-9._-]"), "_")}"
         val environment = mutableMapOf(
             "APP_DATA_ROOT" to paths.serverDataDir.absolutePath,
@@ -519,6 +584,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             commandFileName = "$requestName.mjs",
             commandContent = extensionReinstallCommand(),
             environment = environment,
+            onProgress = onProgress,
             failureMessage = { logPath ->
                 activity.getString(R.string.bootstrap_settings_extensions_runtime_timeout, logPath)
             }
@@ -530,6 +596,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
         commandFileName: String,
         commandContent: String,
         environment: Map<String, String>,
+        onProgress: ((ExtensionRuntimeProgress) -> Unit)? = null,
         failureMessage: (String) -> String
     ): String {
         paths.ensureWorkingDirectories()
@@ -544,30 +611,67 @@ internal class BootstrapSettingsExtensionsCoordinator(
         launchScript.writeText(extensionRuntimeScript())
 
         val logPath = File(paths.logsDir, "$requestName.log").absolutePath
+        val progressFile = File(maintenanceRoot, "$requestName.progress.json")
+        val guestProgressFile = "/tavern/data/.stai-maintenance/${progressFile.name}"
+        progressFile.delete()
         val request = LaunchRequest(
             name = requestName,
             scriptFile = launchScript,
             workingDirectory = paths.bootstrapRoot,
             environment = environment + mapOf(
                 "APP_DATA_ROOT" to paths.serverDataDir.absolutePath,
-                "COMMAND_JS" to "/tavern/data/.stai-maintenance/$commandFileName"
+                "COMMAND_JS" to "/tavern/data/.stai-maintenance/$commandFileName",
+                "STAI_EXTENSION_PROGRESS_FILE" to guestProgressFile
             )
         )
         val process = launcher.start(request)
-        if (!process.waitFor(5, TimeUnit.MINUTES)) {
-            process.stop()
-            throw BootstrapException(failureMessage(logPath))
-        }
-        val exitCode = process.waitFor()
-        if (exitCode != 0) {
-            throw BootstrapException(failureMessage(logPath))
+        var lastProgressPayload: String? = null
+        val timeoutAtNanos = System.nanoTime() + TimeUnit.MINUTES.toNanos(5)
+        try {
+            while (!process.waitFor(250, TimeUnit.MILLISECONDS)) {
+                if (onProgress != null) {
+                    val progressUpdate = readRuntimeProgress(progressFile)
+                    if (progressUpdate != null && progressUpdate.first != lastProgressPayload) {
+                        lastProgressPayload = progressUpdate.first
+                        onProgress(progressUpdate.second)
+                    }
+                }
+
+                if (System.nanoTime() >= timeoutAtNanos) {
+                    process.stop()
+                    throw BootstrapException(failureMessage(logPath))
+                }
+            }
+
+            if (onProgress != null) {
+                val progressUpdate = readRuntimeProgress(progressFile)
+                if (progressUpdate != null && progressUpdate.first != lastProgressPayload) {
+                    onProgress(progressUpdate.second)
+                }
+            }
+
+            val exitCode = process.waitFor()
+            if (exitCode != 0) {
+                throw BootstrapException(failureMessage(logPath))
+            }
+        } catch (exception: Exception) {
+            if (process.isAlive()) {
+                process.stop()
+            }
+            if (exception is BootstrapException) {
+                throw exception
+            }
+            throw exception
+        } finally {
+            progressFile.delete()
         }
         return logPath
     }
 
     private fun runExtensionInstallPreview(
         repositoryUrl: String,
-        normalizedRepository: NormalizedExtensionRepository
+        normalizedRepository: NormalizedExtensionRepository,
+        onProgress: ((ExtensionRuntimeProgress) -> Unit)? = null
     ): ExtensionInstallPreview {
         val previewId = System.currentTimeMillis()
         val requestName = "extension-install-preview-$previewId"
@@ -590,6 +694,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             commandFileName = "$requestName.mjs",
             commandContent = extensionInstallPreviewCommand(),
             environment = environment,
+            onProgress = onProgress,
             failureMessage = { failedLogPath ->
                 activity.getString(R.string.bootstrap_settings_extensions_install_preview_failed, failedLogPath)
             }
@@ -845,7 +950,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
         return """
             import fs from 'node:fs';
             import path from 'node:path';
-            import { createGitClient } from '/tavern/server/src/git/client.js';
+            import git from 'isomorphic-git';
+            import http from 'isomorphic-git/http/node';
 
             const targetDir = process.env.STAI_EXTENSION_TARGET_DIR;
             const repoUrl = process.env.STAI_EXTENSION_REPO_URL;
@@ -854,28 +960,45 @@ internal class BootstrapSettingsExtensionsCoordinator(
                 throw new Error('Missing extension target or repository URL.');
             }
 
+            ${extensionProgressHelpers()}
+
             const parentDir = path.dirname(targetDir);
             const backupDir = targetDir + '.stai-backup-' + Date.now();
             fs.mkdirSync(parentDir, { recursive: true });
 
             try {
+                writeProgress({ step: 'backup', indeterminate: true });
                 if (fs.existsSync(targetDir)) {
                     fs.renameSync(targetDir, backupDir);
                 }
 
-                const git = createGitClient({ backend: 'builtin' });
-                const cloneOptions = { depth: 1 };
-                if (repoBranch) {
-                    cloneOptions.branch = repoBranch;
-                }
-                await git.clone(repoUrl, targetDir, cloneOptions);
+                writeProgress({ step: 'prepare', indeterminate: true });
+                await git.clone({
+                    fs,
+                    http,
+                    dir: targetDir,
+                    url: repoUrl,
+                    depth: 1,
+                    ref: repoBranch,
+                    singleBranch: true,
+                    onProgress: event => {
+                        writeProgress({
+                            step: 'clone',
+                            phase: event.phase,
+                            loaded: event.loaded,
+                            total: event.total,
+                        });
+                    },
+                });
 
+                writeProgress({ step: 'validate', indeterminate: true });
                 const manifestPath = path.join(targetDir, 'manifest.json');
                 if (!fs.existsSync(manifestPath)) {
                     throw new Error('Manifest file not found at ' + manifestPath);
                 }
 
                 JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+                writeProgress({ step: 'completed', loaded: 1, total: 1 });
 
                 if (fs.existsSync(backupDir)) {
                     fs.rmSync(backupDir, { recursive: true, force: true });
@@ -898,7 +1021,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
         return """
             import fs from 'node:fs';
             import path from 'node:path';
-            import { createGitClient } from '/tavern/server/src/git/client.js';
+            import git from 'isomorphic-git';
+            import http from 'isomorphic-git/http/node';
 
             const repoUrl = process.env.STAI_EXTENSION_REPO_URL;
             const repoBranch = process.env.STAI_EXTENSION_REPO_BRANCH || undefined;
@@ -907,6 +1031,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
             if (!repoUrl || !previewFile || !tempDir) {
                 throw new Error('Missing preview environment.');
             }
+
+            ${extensionProgressHelpers()}
 
             const parsedUrl = new URL(repoUrl);
             if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
@@ -923,13 +1049,26 @@ internal class BootstrapSettingsExtensionsCoordinator(
                     fs.rmSync(tempDir, { recursive: true, force: true });
                 }
 
-                const git = createGitClient({ backend: 'builtin' });
-                const cloneOptions = { depth: 1 };
-                if (repoBranch) {
-                    cloneOptions.branch = repoBranch;
-                }
-                await git.clone(parsedUrl.href, tempDir, cloneOptions);
+                writeProgress({ step: 'prepare', indeterminate: true });
+                await git.clone({
+                    fs,
+                    http,
+                    dir: tempDir,
+                    url: parsedUrl.href,
+                    depth: 1,
+                    ref: repoBranch,
+                    singleBranch: true,
+                    onProgress: event => {
+                        writeProgress({
+                            step: 'clone',
+                            phase: event.phase,
+                            loaded: event.loaded,
+                            total: event.total,
+                        });
+                    },
+                });
 
+                writeProgress({ step: 'validate', indeterminate: true });
                 const manifestPath = path.join(tempDir, 'manifest.json');
                 if (!fs.existsSync(manifestPath)) {
                     throw new Error('Manifest file not found at ' + manifestPath);
@@ -947,6 +1086,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
                     author: typeof manifest.author === 'string' && manifest.author.trim() ? manifest.author.trim() : null,
                     homePage: typeof manifest.homePage === 'string' && manifest.homePage.trim() ? manifest.homePage.trim() : null,
                 }));
+                writeProgress({ step: 'completed', loaded: 1, total: 1 });
             } catch (error) {
                 if (fs.existsSync(tempDir)) {
                     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -957,6 +1097,147 @@ internal class BootstrapSettingsExtensionsCoordinator(
                 throw error;
             }
         """.trimIndent()
+    }
+
+    private fun extensionProgressHelpers(): String {
+        return """
+            const progressFile = process.env.STAI_EXTENSION_PROGRESS_FILE || null;
+
+            function writeProgress({ step = null, phase = null, loaded = null, total = null, indeterminate = false, message = null }) {
+                if (!progressFile) {
+                    return;
+                }
+
+                const payload = {
+                    step,
+                    phase,
+                    loaded: Number.isFinite(loaded) ? loaded : null,
+                    total: Number.isFinite(total) ? total : null,
+                    indeterminate: Boolean(indeterminate),
+                    message,
+                    updatedAt: Date.now(),
+                };
+
+                const tempFile = progressFile + '.tmp';
+                fs.writeFileSync(tempFile, JSON.stringify(payload));
+                fs.renameSync(tempFile, progressFile);
+            }
+        """.trimIndent()
+    }
+
+    private fun readRuntimeProgress(file: File): Pair<String, ExtensionRuntimeProgress>? {
+        if (!file.exists()) {
+            return null
+        }
+
+        return runCatching {
+            val rawPayload = file.readText()
+            if (rawPayload.isBlank()) {
+                return null
+            }
+
+            val json = JSONObject(rawPayload)
+            rawPayload to ExtensionRuntimeProgress(
+                step = json.optString("step").ifBlank { null },
+                phase = json.optString("phase").ifBlank { null },
+                loaded = json.optInt("loaded").takeIf { !json.isNull("loaded") },
+                total = json.optInt("total").takeIf { !json.isNull("total") },
+                indeterminate = json.optBoolean("indeterminate", false),
+                message = json.optString("message").ifBlank { null }
+            )
+        }.getOrNull()
+    }
+
+    private fun publishRuntimeProgress(actionLabel: String, runtimeProgress: ExtensionRuntimeProgress) {
+        val nextState = mapProgressState(actionLabel, runtimeProgress)
+        activity.runOnUiThread {
+            progressState = nextState
+            renderProgress()
+        }
+    }
+
+    private fun mapProgressState(actionLabel: String, runtimeProgress: ExtensionRuntimeProgress): ExtensionProgressState {
+        val stageLabel = when {
+            !runtimeProgress.message.isNullOrBlank() -> runtimeProgress.message
+            runtimeProgress.step == "backup" -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_backup)
+            runtimeProgress.step == "validate" -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_validating)
+            runtimeProgress.step == "completed" -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_completed)
+            runtimeProgress.phase?.contains("receiving objects", ignoreCase = true) == true -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_receiving)
+            runtimeProgress.phase?.contains("resolving deltas", ignoreCase = true) == true -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_resolving)
+            runtimeProgress.phase?.contains("updating workdir", ignoreCase = true) == true -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating)
+            else -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_prepare)
+        }
+
+        val percent = when {
+            runtimeProgress.step == "completed" -> 100
+            runtimeProgress.phase?.contains("receiving objects", ignoreCase = true) == true -> scaleProgress(runtimeProgress.loaded, runtimeProgress.total, 6, 82)
+            runtimeProgress.phase?.contains("resolving deltas", ignoreCase = true) == true -> scaleProgress(runtimeProgress.loaded, runtimeProgress.total, 82, 94)
+            runtimeProgress.phase?.contains("updating workdir", ignoreCase = true) == true -> scaleProgress(runtimeProgress.loaded, runtimeProgress.total, 94, 99)
+            else -> null
+        }
+
+        return ExtensionProgressState(
+            actionLabel = actionLabel,
+            stageLabel = stageLabel,
+            percent = percent,
+            indeterminate = runtimeProgress.indeterminate || percent == null
+        )
+    }
+
+    private fun scaleProgress(loaded: Int?, total: Int?, minPercent: Int, maxPercent: Int): Int? {
+        val safeLoaded = loaded ?: return null
+        val safeTotal = total ?: return null
+        if (safeTotal <= 0) {
+            return null
+        }
+
+        val boundedRatio = safeLoaded.coerceIn(0, safeTotal).toDouble() / safeTotal.toDouble()
+        return (minPercent + ((maxPercent - minPercent) * boundedRatio).toInt()).coerceIn(minPercent, maxPercent)
+    }
+
+    private fun setProgressState(actionLabel: String, stageLabel: String, percent: Int?, indeterminate: Boolean) {
+        progressState = ExtensionProgressState(
+            actionLabel = actionLabel,
+            stageLabel = stageLabel,
+            percent = percent,
+            indeterminate = indeterminate
+        )
+        renderProgress()
+    }
+
+    private fun clearProgressState() {
+        progressState = null
+        renderProgress()
+    }
+
+    private fun renderProgress() {
+        val currentProgress = progressState
+        progressIndicator.isVisible = currentProgress != null
+        progressLabel.isVisible = currentProgress != null
+        if (currentProgress == null) {
+            return
+        }
+
+        progressIndicator.isIndeterminate = currentProgress.indeterminate
+        if (!currentProgress.indeterminate) {
+            progressIndicator.max = 100
+            progressIndicator.setProgressCompat(currentProgress.percent ?: 0, true)
+        }
+
+        progressLabel.text = if (!currentProgress.indeterminate && currentProgress.percent != null) {
+            activity.getString(
+                R.string.bootstrap_settings_extensions_progress_label,
+                currentProgress.actionLabel,
+                currentProgress.stageLabel,
+                currentProgress.percent
+            )
+        } else {
+            activity.getString(
+                R.string.bootstrap_settings_extensions_progress_indeterminate,
+                currentProgress.actionLabel,
+                currentProgress.stageLabel
+            )
+        }
     }
 
     private fun setBusyState(value: Boolean) {

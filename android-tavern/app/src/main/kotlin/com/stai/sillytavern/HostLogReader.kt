@@ -8,6 +8,7 @@ import java.util.Date
 import java.util.Locale
 
 internal data class HostLogSnapshot(
+    val sourceFile: File,
     val fileName: String,
     val updatedAt: String,
     val content: String
@@ -41,6 +42,7 @@ internal object HostLogReader {
         )
 
         return HostLogSnapshot(
+            sourceFile = latestLog,
             fileName = latestLog.name,
             updatedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(latestLog.lastModified())),
             content = content

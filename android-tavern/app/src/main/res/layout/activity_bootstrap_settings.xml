@@ -419,6 +419,22 @@
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="11sp" />
 
+                        <com.google.android.material.progressindicator.LinearProgressIndicator
+                            android:id="@+id/bootstrapSettingsExtensionsProgress"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/bootstrapSettingsExtensionsProgressLabel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:textSize="11sp"
+                            android:visibility="gone" />
+
                         <TextView
                             android:id="@+id/bootstrapSettingsExtensionsEmpty"
                             android:layout_width="match_parent"
@@ -483,6 +499,17 @@
                                 android:textColor="?attr/colorOnSurface"
                                 android:textSize="13sp"
                                 android:textStyle="bold" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/bootstrapSettingsLogsExportButton"
+                                style="@style/Widget.Material3.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="8dp"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:minHeight="36dp"
+                                android:text="@string/bootstrap_settings_logs_export" />
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/bootstrapSettingsLogsReloadButton"

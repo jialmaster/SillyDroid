@@ -1,5 +1,6 @@
 package com.stai.sillytavern
 
+import android.net.Uri
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
@@ -14,18 +15,52 @@ internal class BootstrapSettingsLogsCoordinator(
     private val metaView: TextView,
     private val emptyView: TextView,
     private val contentView: TextView,
+    private val exportButton: MaterialButton,
     private val reloadButton: MaterialButton,
     private val setBusy: (Boolean) -> Unit,
-    private val showError: (String) -> Unit
+    private val showError: (String) -> Unit,
+    private val showMessage: (String) -> Unit,
+    private val requestExport: (String) -> Unit
 ) {
     private var busy = false
     private var currentSnapshot: HostLogSnapshot? = null
 
     fun initialize() {
+        exportButton.setOnClickListener {
+            val snapshot = currentSnapshot ?: return@setOnClickListener
+            requestExport(snapshot.fileName)
+        }
         reloadButton.setOnClickListener {
             reloadLatestLog()
         }
         renderSnapshot()
+    }
+
+    fun exportCurrentLog(targetUri: Uri) {
+        val snapshot = currentSnapshot ?: run {
+            showError(activity.getString(R.string.bootstrap_settings_logs_export_failed))
+            return
+        }
+
+        activity.lifecycleScope.launch {
+            setBusyState(true)
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    activity.contentResolver.openOutputStream(targetUri)?.use { output ->
+                        snapshot.sourceFile.inputStream().use { input ->
+                            input.copyTo(output)
+                        }
+                    } ?: throw IllegalStateException("Failed to open export target.")
+                }
+            }
+            setBusyState(false)
+
+            result.onSuccess {
+                showMessage(activity.getString(R.string.bootstrap_settings_logs_export_success, snapshot.fileName))
+            }.onFailure {
+                showError(activity.getString(R.string.bootstrap_settings_logs_export_failed))
+            }
+        }
     }
 
     fun reloadLatestLog() {
@@ -56,6 +91,7 @@ internal class BootstrapSettingsLogsCoordinator(
     }
 
     private fun renderSnapshot() {
+        exportButton.isEnabled = !busy && currentSnapshot != null
         reloadButton.isEnabled = !busy
         val snapshot = currentSnapshot
         emptyView.isVisible = snapshot == null
