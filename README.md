@@ -77,23 +77,44 @@ bash ./scripts/build-tavern-android-apk.sh \
 
 ## GitHub Actions
 
-仓库内已提供 [`.github/workflows/tavern-upstream-apk.yml`](.github/workflows/tavern-upstream-apk.yml) 这条工作流，用来监控上游 SillyTavern release 并自动打 APK。
+仓库内现在拆成两条工作流：
+
+- `.github/workflows/tavern-runtime-image-release.yml`
+  只负责构建 Linux runtime + Node 环境包，并把最新资产覆盖发布到固定 Release tag `tavern-runtime-linux-arm64`。
+- `.github/workflows/tavern-upstream-apk.yml`
+  只负责下载上面这份最新 runtime 环境包，再同步指定上游 SillyTavern tag 的 server package，最后组装 APK。
+
+### Runtime 环境包发布规则
+
+- 监控目录：`scripts/android-build-common.sh`、`scripts/sync-android-rootfs.sh`、`scripts/build-tavern-android-runtime-image.sh`、`android-tavern/app/src/main/assets/bootstrap/scripts/`。
+- 只要这些路径有变更，`tavern-runtime-image-release` 就会重打环境包并覆盖同一个 Release tag 下的最新资产。
+- 环境包固定 Release tag：`tavern-runtime-linux-arm64`
+- 环境包固定资产名：`tavern-android-runtime-linux-arm64.zip`
+- APK 工作流始终下载这份最新环境包，因此后续常规打包不再重新编译 runtime，只打 APK + 酒馆 server package。
+- 如果是 runtime 源目录发生变化的 push，APK 工作流会先跳过，等 runtime 工作流发布完最新环境包后，再自动重触发一次 release APK 构建，避免用到旧环境包。
+
+### APK 自动发布规则
 
 - 定时触发：每 6 小时检查一次 `SillyTavern/SillyTavern` 的最新 GitHub Release tag。
 - 自动去重：如果当前仓库已经存在同一上游 tag 和同一 build type 的 APK release 资产，则跳过，不重复打包。
 - 手动触发：可手动指定 `tavern_tag`、`build_type`、`force_rebuild` 与 `publish_release`。
-- 默认行为：定时任务默认自动打 `debug` APK，并上传到当前仓库 GitHub Release。
+- 默认行为：push、定时任务和手动触发默认都打 `release` APK，并上传到当前仓库 GitHub Release。
 
 ### Release 签名密钥
 
-如果你要在 Actions 里打 `release` APK，需要在仓库 Secrets 中配置下面四个值：
+Actions 里打 `release` APK 优先读取下面四个 Secrets：
 
 - `ANDROID_RELEASE_KEYSTORE_BASE64`
 - `ANDROID_RELEASE_STORE_PASSWORD`
 - `ANDROID_RELEASE_KEY_ALIAS`
 - `ANDROID_RELEASE_KEY_PASSWORD`
 
-其中 `ANDROID_RELEASE_KEYSTORE_BASE64` 需要是 keystore 文件的 base64 文本。未配置这些 Secrets 时，手动触发 `release` 构建会直接失败。
+其中 `ANDROID_RELEASE_KEYSTORE_BASE64` 需要是 keystore 文件的 base64 文本。
+
+如果这 4 个 Secrets 一个都没配，工作流会自动回退到仓库内的：
+
+- `android-tavern/app/signing/release.keystore`
+- `android-tavern/app/signing/release-signing.properties`
 
 ### 自动发布的 Release 规则
 

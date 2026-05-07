@@ -1,0 +1,216 @@
+name: tavern-runtime-image-release
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - .github/workflows/tavern-runtime-image-release.yml
+      - android-tavern/app/src/main/assets/bootstrap/scripts/**
+      - scripts/android-build-common.sh
+      - scripts/build-tavern-android-runtime-image.sh
+      - scripts/sync-android-rootfs.sh
+  workflow_dispatch:
+    inputs:
+      runtime_rid:
+        description: Android runtime RID
+        required: false
+        default: linux-arm64
+        type: choice
+        options:
+          - linux-arm64
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: tavern-runtime-image-release-${{ github.event_name == 'workflow_dispatch' && inputs.runtime_rid || 'linux-arm64' }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      runtime_rid: ${{ steps.plan.outputs.runtime_rid }}
+      artifact_bundle_name: ${{ steps.plan.outputs.artifact_bundle_name }}
+      release_tag: ${{ steps.plan.outputs.release_tag }}
+      release_title: ${{ steps.plan.outputs.release_title }}
+      runtime_asset_name: ${{ steps.plan.outputs.runtime_asset_name }}
+      runtime_metadata_name: ${{ steps.plan.outputs.runtime_metadata_name }}
+      runtime_sha256_name: ${{ steps.plan.outputs.runtime_sha256_name }}
+      runtime_sha256: ${{ steps.package.outputs.runtime_sha256 }}
+      runtime_size_bytes: ${{ steps.package.outputs.runtime_size_bytes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            android-tavern
+            scripts
+
+      - name: Resolve runtime release plan
+        id: plan
+        run: |
+          set -euo pipefail
+
+          runtime_rid='${{ github.event_name == 'workflow_dispatch' && inputs.runtime_rid || 'linux-arm64' }}'
+
+          case "$runtime_rid" in
+            linux-arm64)
+              ;;
+            *)
+              echo "Unsupported runtime_rid: $runtime_rid" >&2
+              exit 1
+              ;;
+          esac
+
+          artifact_bundle_name="tavern-runtime-$runtime_rid"
+          release_tag="tavern-runtime-$runtime_rid"
+          release_title="Tavern Android runtime $runtime_rid"
+          runtime_asset_name="tavern-android-runtime-$runtime_rid.zip"
+          runtime_metadata_name="tavern-android-runtime-$runtime_rid.metadata.json"
+          runtime_sha256_name="$runtime_asset_name.sha256"
+
+          {
+            printf 'runtime_rid=%s\n' "$runtime_rid"
+            printf 'artifact_bundle_name=%s\n' "$artifact_bundle_name"
+            printf 'release_tag=%s\n' "$release_tag"
+            printf 'release_title=%s\n' "$release_title"
+            printf 'runtime_asset_name=%s\n' "$runtime_asset_name"
+            printf 'runtime_metadata_name=%s\n' "$runtime_metadata_name"
+            printf 'runtime_sha256_name=%s\n' "$runtime_sha256_name"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore Tavern runtime build caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/stai-android-toolchain
+            ~/.cache/stai-android-rootfs
+          key: tavern-runtime-image-${{ runner.os }}-${{ steps.plan.outputs.runtime_rid }}-${{ hashFiles('scripts/android-build-common.sh', 'scripts/build-tavern-android-runtime-image.sh', 'scripts/sync-android-rootfs.sh', 'android-tavern/app/src/main/assets/bootstrap/scripts/**') }}
+          restore-keys: |
+            tavern-runtime-image-${{ runner.os }}-${{ steps.plan.outputs.runtime_rid }}-
+
+      - name: Install Android build prerequisites
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y unzip zip binutils xz-utils
+
+      - name: Build runtime release asset
+        id: package
+        run: |
+          set -euo pipefail
+
+          release_asset_dir="$GITHUB_WORKSPACE/artifacts/release"
+          runtime_asset_path="$release_asset_dir/${{ steps.plan.outputs.runtime_asset_name }}"
+          runtime_metadata_path="$release_asset_dir/${{ steps.plan.outputs.runtime_metadata_name }}"
+          runtime_sha256_path="$release_asset_dir/${{ steps.plan.outputs.runtime_sha256_name }}"
+
+          mkdir -p "$release_asset_dir"
+
+          bash ./scripts/build-tavern-android-runtime-image.sh \
+            --runtime-rid '${{ steps.plan.outputs.runtime_rid }}' \
+            --output "$runtime_asset_path" \
+            --artifact-name 'tavern-android-runtime-${{ steps.plan.outputs.runtime_rid }}' \
+            --metadata-out "$runtime_metadata_path"
+
+          runtime_sha256="$(sha256sum "$runtime_asset_path" | awk '{print $1}')"
+          runtime_size_bytes="$(stat -c '%s' "$runtime_asset_path")"
+          printf '%s\n' "$runtime_sha256" > "$runtime_sha256_path"
+
+          {
+            printf 'runtime_sha256=%s\n' "$runtime_sha256"
+            printf 'runtime_size_bytes=%s\n' "$runtime_size_bytes"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.plan.outputs.artifact_bundle_name }}
+          path: |
+            artifacts/release/*.zip
+            artifacts/release/*.json
+            artifacts/release/*.sha256
+          if-no-files-found: error
+
+      - name: Append build summary
+        run: |
+          {
+            echo '### Tavern Android runtime image'
+            echo
+            echo '- Runtime RID: ${{ steps.plan.outputs.runtime_rid }}'
+            echo '- Release tag: ${{ steps.plan.outputs.release_tag }}'
+            echo '- Runtime asset: ${{ steps.plan.outputs.runtime_asset_name }}'
+            echo '- SHA256: ${{ steps.package.outputs.runtime_sha256 }}'
+            echo '- Size bytes: ${{ steps.package.outputs.runtime_size_bytes }}'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download runtime release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact_bundle_name }}
+          path: artifacts/release
+
+      - name: Ensure GitHub Release exists
+        run: |
+          set -euo pipefail
+
+          release_tag='${{ needs.build.outputs.release_tag }}'
+          release_title='${{ needs.build.outputs.release_title }}'
+          release_notes_file="$(mktemp)"
+
+          {
+            echo '## Tavern Android runtime image'
+            echo
+            echo '- Runtime RID: ${{ needs.build.outputs.runtime_rid }}'
+            echo '- Runtime asset: ${{ needs.build.outputs.runtime_asset_name }}'
+            echo '- SHA256: ${{ needs.build.outputs.runtime_sha256 }}'
+            echo '- Size bytes: ${{ needs.build.outputs.runtime_size_bytes }}'
+            echo '- Source commit: ${{ github.sha }}'
+            echo '- Workflow: tavern-runtime-image-release'
+          } > "$release_notes_file"
+
+          if ! gh release view "$release_tag" --repo '${{ github.repository }}' > /dev/null 2>&1; then
+            gh release create "$release_tag" \
+              --repo '${{ github.repository }}' \
+              --target '${{ github.sha }}' \
+              --title "$release_title" \
+              --notes-file "$release_notes_file"
+          fi
+
+          gh release edit "$release_tag" \
+            --repo '${{ github.repository }}' \
+            --title "$release_title" \
+            --notes-file "$release_notes_file" > /dev/null
+
+      - name: Upload release assets
+        run: |
+          set -euo pipefail
+
+          gh release upload '${{ needs.build.outputs.release_tag }}' \
+            artifacts/release/* \
+            --repo '${{ github.repository }}' \
+            --clobber
+
+      - name: Trigger APK release rebuild
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+
+          gh workflow run tavern-upstream-apk.yml \
+            --repo '${{ github.repository }}' \
+            -f build_type=release \
+            -f force_rebuild=true \
+            -f publish_release=true

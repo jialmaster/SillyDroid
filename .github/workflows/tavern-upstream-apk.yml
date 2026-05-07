@@ -12,6 +12,10 @@ on:
       - gradlew
       - gradlew.bat
       - scripts/**
+      - '!android-tavern/app/src/main/assets/bootstrap/scripts/**'
+      - '!scripts/android-build-common.sh'
+      - '!scripts/build-tavern-android-runtime-image.sh'
+      - '!scripts/sync-android-rootfs.sh'
   workflow_dispatch:
     inputs:
       tavern_tag:
@@ -59,6 +63,7 @@ jobs:
       build_type: ${{ steps.plan.outputs.build_type }}
       force_rebuild: ${{ steps.plan.outputs.force_rebuild }}
       publish_release: ${{ steps.plan.outputs.publish_release }}
+      runtime_changed: ${{ steps.plan.outputs.runtime_changed }}
       should_build: ${{ steps.plan.outputs.should_build }}
       release_tag: ${{ steps.plan.outputs.release_tag }}
       release_title: ${{ steps.plan.outputs.release_title }}
@@ -66,6 +71,9 @@ jobs:
       artifact_name: ${{ steps.plan.outputs.artifact_name }}
       version_name: ${{ steps.plan.outputs.version_name }}
       version_code: ${{ steps.plan.outputs.version_code }}
+      runtime_release_tag: ${{ steps.plan.outputs.runtime_release_tag }}
+      runtime_asset_name: ${{ steps.plan.outputs.runtime_asset_name }}
+      runtime_metadata_name: ${{ steps.plan.outputs.runtime_metadata_name }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -112,6 +120,23 @@ jobs:
               ;;
           esac
 
+          runtime_changed='false'
+          if [ '${{ github.event_name }}' = 'push' ]; then
+            compare_base='${{ github.event.before }}'
+            compare_head='${{ github.sha }}'
+            changed_files=''
+
+            if [ -n "$compare_base" ] && [ "$compare_base" != '0000000000000000000000000000000000000000' ]; then
+              changed_files="$(gh api "/repos/${{ github.repository }}/compare/$compare_base...$compare_head" --jq '.files[].filename')"
+            else
+              changed_files="$(gh api "/repos/${{ github.repository }}/commits/$compare_head" --jq '.files[].filename')"
+            fi
+
+            if printf '%s\n' "$changed_files" | grep -E '^(scripts/(android-build-common\.sh|build-tavern-android-runtime-image\.sh|sync-android-rootfs\.sh)|android-tavern/app/src/main/assets/bootstrap/scripts/)' > /dev/null 2>&1; then
+              runtime_changed='true'
+            fi
+          fi
+
           # 定时任务默认直接跟踪上游最新 GitHub Release；手动触发时允许显式指定任意 tag 重打。
           if [ -z "$tavern_tag" ]; then
             tavern_tag="$(gh api "/repos/$UPSTREAM_REPO/releases/latest" --jq '.tag_name')"
@@ -133,7 +158,9 @@ jobs:
           fi
 
           should_build='true'
-          if [ "$publish_release" = 'true' ] && [ "$force_rebuild" != 'true' ]; then
+          if [ "$runtime_changed" = 'true' ]; then
+            should_build='false'
+          elif [ "$publish_release" = 'true' ] && [ "$force_rebuild" != 'true' ]; then
             if gh release view "$release_tag" --repo '${{ github.repository }}' > /dev/null 2>&1; then
               if gh api "/repos/${{ github.repository }}/releases/tags/$release_tag" --jq '.assets[].name' 2>/dev/null | grep -Fx "${artifact_name}.apk" > /dev/null 2>&1; then
                 should_build='false'
@@ -144,6 +171,9 @@ jobs:
           version_name="$normalized_tag"
           # Android versionCode 需要是正整数；这里直接用当前 UTC epoch 秒，保证每次构建单调递增。
           version_code="$(date -u +%s)"
+          runtime_release_tag='tavern-runtime-linux-arm64'
+          runtime_asset_name='tavern-android-runtime-linux-arm64.zip'
+          runtime_metadata_name='tavern-android-runtime-linux-arm64.metadata.json'
 
           {
             printf 'tavern_tag=%s\n' "$normalized_tag"
@@ -151,6 +181,7 @@ jobs:
             printf 'build_type=%s\n' "$build_type"
             printf 'force_rebuild=%s\n' "$force_rebuild"
             printf 'publish_release=%s\n' "$publish_release"
+            printf 'runtime_changed=%s\n' "$runtime_changed"
             printf 'should_build=%s\n' "$should_build"
             printf 'release_tag=%s\n' "$release_tag"
             printf 'release_title=%s\n' "$release_title"
@@ -158,6 +189,9 @@ jobs:
             printf 'artifact_name=%s\n' "$artifact_name"
             printf 'version_name=%s\n' "$version_name"
             printf 'version_code=%s\n' "$version_code"
+            printf 'runtime_release_tag=%s\n' "$runtime_release_tag"
+            printf 'runtime_asset_name=%s\n' "$runtime_asset_name"
+            printf 'runtime_metadata_name=%s\n' "$runtime_metadata_name"
           } >> "$GITHUB_OUTPUT"
 
       - name: Append skip summary
@@ -167,7 +201,12 @@ jobs:
             echo '### Tavern upstream APK'
             echo
             echo '- Status: skipped'
-            echo '- Reason: 当前仓库已存在同 upstream tag 与 build type 的 APK release 资产'
+            if [ '${{ steps.plan.outputs.runtime_changed }}' = 'true' ]; then
+              echo '- Reason: runtime 环境包源目录已变更，等待 tavern-runtime-image-release 发布最新环境包后再重触发 APK 构建'
+              echo '- Runtime release tag: ${{ steps.plan.outputs.runtime_release_tag }}'
+            else
+              echo '- Reason: 当前仓库已存在同 upstream tag 与 build type 的 APK release 资产'
+            fi
             echo '- Upstream tag: ${{ steps.plan.outputs.tavern_tag }}'
             echo '- Build type: ${{ steps.plan.outputs.build_type }}'
             echo '- Release tag: ${{ steps.plan.outputs.release_tag }}'
@@ -263,6 +302,41 @@ jobs:
           echo 'release 构建缺少签名配置；请配置 GitHub Actions secrets，或将 android-tavern/app/signing/release.keystore 与 android-tavern/app/signing/release-signing.properties 提交进仓库。' >&2
           exit 1
 
+      - name: Download latest runtime image release asset
+        id: runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          runtime_asset_dir="$RUNNER_TEMP/runtime-image"
+          runtime_image_path="$runtime_asset_dir/${{ needs.resolve.outputs.runtime_asset_name }}"
+          runtime_metadata_path="$runtime_asset_dir/${{ needs.resolve.outputs.runtime_metadata_name }}"
+
+          mkdir -p "$runtime_asset_dir"
+
+          gh release download '${{ needs.resolve.outputs.runtime_release_tag }}' \
+            --repo '${{ github.repository }}' \
+            --dir "$runtime_asset_dir" \
+            --pattern '${{ needs.resolve.outputs.runtime_asset_name }}' \
+            --pattern '${{ needs.resolve.outputs.runtime_metadata_name }}' \
+            --clobber
+
+          if [ ! -f "$runtime_image_path" ]; then
+            echo "缺少 runtime image release 资产：$runtime_image_path" >&2
+            exit 1
+          fi
+
+          if [ ! -f "$runtime_metadata_path" ]; then
+            echo "缺少 runtime image metadata：$runtime_metadata_path" >&2
+            exit 1
+          fi
+
+          {
+            printf 'runtime_image_path=%s\n' "$runtime_image_path"
+            printf 'runtime_metadata_path=%s\n' "$runtime_metadata_path"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build Tavern APK
         id: package
         run: |
@@ -282,6 +356,7 @@ jobs:
           bash ./scripts/build-tavern-android-apk.sh \
             --runtime-rid linux-arm64 \
             --build-type '${{ needs.resolve.outputs.build_type }}' \
+            --runtime-image '${{ steps.runtime.outputs.runtime_image_path }}' \
             --tag '${{ needs.resolve.outputs.tavern_tag }}'
 
           source_apk_path="$GITHUB_WORKSPACE/artifacts/validation/android-tavern/app-${{ needs.resolve.outputs.build_type }}.apk"
@@ -321,6 +396,8 @@ jobs:
             echo '- Upstream tag: ${{ needs.resolve.outputs.tavern_tag }}'
             echo '- Build type: ${{ needs.resolve.outputs.build_type }}'
             echo '- Signing source: ${{ steps.signing.outputs.signing_source || 'none' }}'
+            echo '- Runtime release tag: ${{ needs.resolve.outputs.runtime_release_tag }}'
+            echo '- Runtime asset: ${{ needs.resolve.outputs.runtime_asset_name }}'
             echo '- Release asset: ${{ steps.package.outputs.release_asset_name }}'
             echo '- SHA256: ${{ steps.package.outputs.apk_sha256 }}'
             echo '- Size bytes: ${{ steps.package.outputs.apk_size_bytes }}'
@@ -356,6 +433,8 @@ jobs:
             echo '- Upstream repo: SillyTavern/SillyTavern'
             echo '- Upstream tag: ${{ needs.resolve.outputs.tavern_tag }}'
             echo '- Build type: ${{ needs.resolve.outputs.build_type }}'
+            echo '- Runtime release tag: ${{ needs.resolve.outputs.runtime_release_tag }}'
+            echo '- Runtime asset: ${{ needs.resolve.outputs.runtime_asset_name }}'
             echo '- APK asset: ${{ needs.build.outputs.release_asset_name }}'
             echo '- SHA256: ${{ needs.build.outputs.apk_sha256 }}'
             echo '- Size bytes: ${{ needs.build.outputs.apk_size_bytes }}'
