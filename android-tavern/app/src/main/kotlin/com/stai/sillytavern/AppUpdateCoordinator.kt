@@ -83,7 +83,7 @@ internal class AppUpdateCoordinator(
     fun onStart() {
         registerDownloadReceiver()
         activity.lifecycleScope.launch {
-            syncDownloadState(showErrors = false, openInstallerIfReady = true)
+            syncDownloadState(showErrors = false, openInstallerIfReady = false)
             if (!hasCheckedForUpdates) {
                 hasCheckedForUpdates = true
                 checkForUpdates(silent = true)
@@ -91,11 +91,7 @@ internal class AppUpdateCoordinator(
         }
     }
 
-    fun onResume() {
-        activity.lifecycleScope.launch {
-            maybeOpenVerifiedDownload()
-        }
-    }
+    fun onResume() = Unit
 
     fun onStop() {
         unregisterDownloadReceiver()
@@ -272,15 +268,6 @@ internal class AppUpdateCoordinator(
         }
     }
 
-    private suspend fun maybeOpenVerifiedDownload() {
-        val currentDownload = stateStore.downloadState ?: return
-        if (!currentDownload.verifiedReadyToInstall) {
-            return
-        }
-
-        openVerifiedDownload(currentDownload)
-    }
-
     private suspend fun verifyAndMaybeOpenDownload(
         downloadState: AppUpdateStateStore.DownloadState,
         openInstallerIfReady: Boolean,
@@ -397,8 +384,8 @@ internal class AppUpdateCoordinator(
     private fun renderState() {
         val currentDownload = stateStore.downloadState
         val availableRelease = stateStore.availableRelease
-        updateButtonContainer.isVisible = currentDownload != null || availableRelease != null
-        updateBadgeView.isVisible = currentDownload == null && availableRelease != null
+        updateButtonContainer.isVisible = false
+        updateBadgeView.isVisible = false
         updateButton.isEnabled = true
         updateButton.contentDescription = when {
             currentDownload?.verifiedReadyToInstall == true -> activity.getString(R.string.bootstrap_update_open)

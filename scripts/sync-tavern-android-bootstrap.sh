@@ -109,6 +109,23 @@ stai_assert_path_exists "$resolved_source_root/package.json" "SillyTavern 源码
     else
         npm install --omit=dev --no-fund
     fi
+
+    # 上游 1.18.0 的 package-lock 在当前构建环境里可能遗漏 command-exists，
+    # 但扩展安装会直接 import src/git/client.js，缺这个依赖会在 clone 前直接崩掉。
+    command_exists_version="$(node -p "const pkg = require('./package.json'); (pkg.dependencies && pkg.dependencies['command-exists']) || ''")"
+    if [[ -z "$command_exists_version" ]]; then
+        echo '无法解析运行依赖 command-exists 的版本声明。' >&2
+        exit 1
+    fi
+
+    if [[ ! -d node_modules/command-exists ]]; then
+        npm install --omit=dev --no-fund --no-save "command-exists@${command_exists_version}"
+    fi
+
+    if [[ ! -d node_modules/command-exists ]]; then
+        echo '缺少运行依赖 command-exists，扩展安装功能将不可用。' >&2
+        exit 1
+    fi
 )
 
 cp -R "$resolved_source_root/." "$payload_root/"

@@ -1505,8 +1505,6 @@ class MainActivity : AppCompatActivity() {
         } else {
             bootstrapProgressLabel.text = getString(R.string.bootstrap_progress_indeterminate)
         }
-        bootstrapSettingsButton.isVisible = true
-        bootstrapSettingsButton.isEnabled = !isOpeningBootstrapSettings
 
         if (state.isReady) {
             showWebView(state.localUrl)
