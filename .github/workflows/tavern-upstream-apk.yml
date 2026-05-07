@@ -59,6 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tavern_tag: ${{ steps.plan.outputs.tavern_tag }}
+      host_version: ${{ steps.plan.outputs.host_version }}
       safe_tag: ${{ steps.plan.outputs.safe_tag }}
       build_type: ${{ steps.plan.outputs.build_type }}
       force_rebuild: ${{ steps.plan.outputs.force_rebuild }}
@@ -77,6 +78,12 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Checkout version metadata
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            android-tavern/gradle.properties
+
       - name: Resolve upstream release and build plan
         id: plan
         env:
@@ -148,10 +155,17 @@ jobs:
           fi
 
           normalized_tag="${tavern_tag#refs/tags/}"
+          host_version="$(sed -n 's/^staiAndroidHostVersion=//p' android-tavern/gradle.properties | head -n 1 | tr -d '\r')"
+          if [ -z "$host_version" ]; then
+            echo '无法解析 Android 宿主版本号；请检查 android-tavern/gradle.properties 中的 staiAndroidHostVersion。' >&2
+            exit 1
+          fi
+
+          safe_host_version="$(printf '%s' "$host_version" | sed 's#[^0-9A-Za-z._-]#-#g')"
           safe_tag="$(printf '%s' "$normalized_tag" | sed 's#[^0-9A-Za-z._-]#-#g')"
-          artifact_name="sillytavern-android-${safe_tag}-${build_type}"
-          release_tag="sillytavern-${safe_tag}-${build_type}"
-          release_title="SillyTavern ${normalized_tag} Android ${build_type}"
+          artifact_name="stai-sillytavern-android-v${safe_host_version}-${safe_tag}-${build_type}"
+          release_tag="stai-sillytavern-v${safe_host_version}-${safe_tag}-${build_type}"
+          release_title="ST.AI SillyTavern Android v${host_version} / Tavern ${normalized_tag} ${build_type}"
           release_prerelease='true'
           if [ "$build_type" = 'release' ]; then
             release_prerelease='false'
@@ -168,7 +182,7 @@ jobs:
             fi
           fi
 
-          version_name="$normalized_tag"
+          version_name="${host_version}+tavern.${normalized_tag}"
           # Android versionCode 需要是正整数；这里直接用当前 UTC epoch 秒，保证每次构建单调递增。
           version_code="$(date -u +%s)"
           runtime_release_tag='tavern-runtime-linux-arm64'
@@ -177,6 +191,7 @@ jobs:
 
           {
             printf 'tavern_tag=%s\n' "$normalized_tag"
+            printf 'host_version=%s\n' "$host_version"
             printf 'safe_tag=%s\n' "$safe_tag"
             printf 'build_type=%s\n' "$build_type"
             printf 'force_rebuild=%s\n' "$force_rebuild"
@@ -207,6 +222,7 @@ jobs:
             else
               echo '- Reason: 当前仓库已存在同 upstream tag 与 build type 的 APK release 资产'
             fi
+            echo '- Host version: ${{ steps.plan.outputs.host_version }}'
             echo '- Upstream tag: ${{ steps.plan.outputs.tavern_tag }}'
             echo '- Build type: ${{ steps.plan.outputs.build_type }}'
             echo '- Release tag: ${{ steps.plan.outputs.release_tag }}'
@@ -343,6 +359,8 @@ jobs:
           set -euo pipefail
 
           export STAI_TAVERN_ANDROID_BUILD_ROOT="$RUNNER_TEMP/stai-tavern-android-build"
+          export STAI_ANDROID_HOST_VERSION='${{ needs.resolve.outputs.host_version }}'
+          export STAI_ANDROID_UPSTREAM_VERSION='${{ needs.resolve.outputs.tavern_tag }}'
           export STAI_ANDROID_VERSION_NAME='${{ needs.resolve.outputs.version_name }}'
           export STAI_ANDROID_VERSION_CODE='${{ needs.resolve.outputs.version_code }}'
 
@@ -353,6 +371,7 @@ jobs:
             export STAI_ANDROID_RELEASE_KEY_PASSWORD='${{ steps.signing.outputs.key_password }}'
           fi
 
+          echo "Host version: ${{ needs.resolve.outputs.host_version }}"
           bash ./scripts/build-tavern-android-apk.sh \
             --runtime-rid linux-arm64 \
             --build-type '${{ needs.resolve.outputs.build_type }}' \
@@ -364,6 +383,7 @@ jobs:
           release_asset_name='${{ needs.resolve.outputs.artifact_name }}.apk'
           release_asset_path="$release_asset_dir/$release_asset_name"
           release_sha256_path="$release_asset_path.sha256"
+          release_metadata_path="$release_asset_dir/${{ needs.resolve.outputs.artifact_name }}.update.json"
 
           mkdir -p "$release_asset_dir"
           cp "$source_apk_path" "$release_asset_path"
@@ -371,6 +391,20 @@ jobs:
           apk_sha256="$(sha256sum "$release_asset_path" | awk '{print $1}')"
           apk_size_bytes="$(stat -c '%s' "$release_asset_path")"
           printf '%s\n' "$apk_sha256" > "$release_sha256_path"
+
+          cat > "$release_metadata_path" <<EOF
+          {
+            "github_repository": "${{ github.repository }}",
+            "release_tag": "${{ needs.resolve.outputs.release_tag }}",
+            "host_version": "${{ needs.resolve.outputs.host_version }}",
+            "upstream_version": "${{ needs.resolve.outputs.tavern_tag }}",
+            "build_type": "${{ needs.resolve.outputs.build_type }}",
+            "version_name": "${{ needs.resolve.outputs.version_name }}",
+            "apk_asset_name": "$release_asset_name",
+            "apk_sha256": "$apk_sha256",
+            "apk_size_bytes": $apk_size_bytes
+          }
+          EOF
 
           {
             printf 'release_asset_name=%s\n' "$release_asset_name"
@@ -385,6 +419,7 @@ jobs:
           path: |
             artifacts/release/*.apk
             artifacts/release/*.sha256
+            artifacts/release/*.update.json
           if-no-files-found: error
 
       - name: Append build summary
@@ -401,6 +436,7 @@ jobs:
             echo '- Release asset: ${{ steps.package.outputs.release_asset_name }}'
             echo '- SHA256: ${{ steps.package.outputs.apk_sha256 }}'
             echo '- Size bytes: ${{ steps.package.outputs.apk_size_bytes }}'
+            echo '- Update metadata: ${{ needs.resolve.outputs.artifact_name }}.update.json'
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish:
@@ -430,6 +466,7 @@ jobs:
           {
             echo '## SillyTavern Android APK'
             echo
+            echo '- Host version: ${{ needs.resolve.outputs.host_version }}'
             echo '- Upstream repo: SillyTavern/SillyTavern'
             echo '- Upstream tag: ${{ needs.resolve.outputs.tavern_tag }}'
             echo '- Build type: ${{ needs.resolve.outputs.build_type }}'

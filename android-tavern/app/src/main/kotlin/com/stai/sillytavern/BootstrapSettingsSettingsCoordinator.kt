@@ -36,6 +36,15 @@ internal class BootstrapSettingsSettingsCoordinator(
         applyLoadedConfig(loadedConfig, resetSnapshot = false)
     }
 
+    fun replaceLoadedConfiguration(loadedConfig: LoadedTavernConfig, infoMessage: String? = null) {
+        applyLoadedConfig(loadedConfig, resetSnapshot = true)
+        when {
+            !infoMessage.isNullOrBlank() -> screenController.showBanner(infoMessage)
+            !loadedConfig.warningMessage.isNullOrBlank() -> screenController.showBanner(loadedConfig.warningMessage)
+            else -> screenController.showBanner(null)
+        }
+    }
+
     fun saveAndStart() {
         clearBlockingFeedback()
         val updatedRoot = configRepository.copyRoot(currentRoot)

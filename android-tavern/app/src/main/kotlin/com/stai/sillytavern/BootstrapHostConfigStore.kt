@@ -3,9 +3,17 @@ package com.stai.sillytavern
 import android.content.Context
 
 internal class BootstrapHostConfigStore(context: Context) {
+    data class FloatingLogBubblePosition(
+        val horizontalFraction: Float,
+        val verticalFraction: Float
+    )
+
     companion object {
         private const val preferencesName = "bootstrap-host-config"
         private const val servicePortKey = "service-port"
+        private const val floatingLogBubbleEnabledKey = "floating-log-bubble-enabled"
+        private const val floatingLogBubbleXKey = "floating-log-bubble-x"
+        private const val floatingLogBubbleYKey = "floating-log-bubble-y"
     }
 
     private val appContext = context.applicationContext
@@ -19,7 +27,42 @@ internal class BootstrapHostConfigStore(context: Context) {
                 .apply()
         }
 
+    var floatingLogBubbleEnabled: Boolean
+        get() = preferences.getBoolean(floatingLogBubbleEnabledKey, false)
+        set(value) {
+            preferences.edit()
+                .putBoolean(floatingLogBubbleEnabledKey, value)
+                .apply()
+        }
+
+    var floatingLogBubblePosition: FloatingLogBubblePosition?
+        get() {
+            if (!preferences.contains(floatingLogBubbleXKey) || !preferences.contains(floatingLogBubbleYKey)) {
+                return null
+            }
+
+            return FloatingLogBubblePosition(
+                horizontalFraction = sanitizeFraction(preferences.getFloat(floatingLogBubbleXKey, 1f)),
+                verticalFraction = sanitizeFraction(preferences.getFloat(floatingLogBubbleYKey, 1f))
+            )
+        }
+        set(value) {
+            preferences.edit().apply {
+                if (value == null) {
+                    remove(floatingLogBubbleXKey)
+                    remove(floatingLogBubbleYKey)
+                } else {
+                    putFloat(floatingLogBubbleXKey, sanitizeFraction(value.horizontalFraction))
+                    putFloat(floatingLogBubbleYKey, sanitizeFraction(value.verticalFraction))
+                }
+            }.apply()
+        }
+
     private fun sanitizeServicePort(value: Int): Int {
         return value.takeIf { it in 1..65535 } ?: BootConfig.defaultServicePort
+    }
+
+    private fun sanitizeFraction(value: Float): Float {
+        return value.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 1f
     }
 }

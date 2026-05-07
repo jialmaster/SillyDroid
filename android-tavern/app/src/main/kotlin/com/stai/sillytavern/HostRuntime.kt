@@ -42,6 +42,7 @@ internal object BootConfig {
 
 internal enum class StartupPhase {
     IDLE,
+    PAUSING,
     CONFIGURING,
     EXTRACTING,
     VALIDATING,
@@ -52,11 +53,26 @@ internal enum class StartupPhase {
     ERROR
 }
 
+private val StartupPhase.defaultProgressPercent: Int
+    get() = when (this) {
+        StartupPhase.IDLE -> 0
+        StartupPhase.PAUSING -> 0
+        StartupPhase.CONFIGURING -> 0
+        StartupPhase.EXTRACTING -> 8
+        StartupPhase.VALIDATING -> 84
+        StartupPhase.STARTING_SERVER -> 94
+        StartupPhase.WAITING_READY -> 96
+        StartupPhase.READY -> 100
+        StartupPhase.BLOCKED -> 0
+        StartupPhase.ERROR -> 0
+    }
+
 internal data class StartupState(
     val phase: StartupPhase = StartupPhase.IDLE,
     val message: String = "正在准备 SillyTavern Android 宿主环境。",
     val details: String = "",
-    val localUrl: String = BootConfig.localServiceUrl
+    val localUrl: String = BootConfig.localServiceUrl,
+    val progressPercent: Int = phase.defaultProgressPercent
 ) {
     val isReady: Boolean
         get() = phase == StartupPhase.READY
@@ -125,11 +141,24 @@ internal data class HostPaths(
 }
 
 internal class AssetExtractor(private val context: Context) {
-    fun extractBootstrap(paths: HostPaths) {
+    fun extractBootstrap(
+        paths: HostPaths,
+        onProgress: (message: String, details: String, progressPercent: Int) -> Unit = { _, _, _ -> }
+    ) {
+        onProgress(
+            "正在准备宿主工作目录。",
+            "正在创建 bootstrap、data 和日志目录。",
+            5
+        )
         paths.ensureWorkingDirectories()
         val skippedAssetRoots = mutableSetOf(
             "${BootConfig.bootstrapAssetRoot}/rootfs",
             "${BootConfig.bootstrapAssetRoot}/server"
+        )
+        onProgress(
+            "正在检查 Linux rootfs 资产。",
+            "正在比较当前设备上的 rootfs manifest。",
+            10
         )
         val rootfsDirectoryRefreshed = refreshAssetDirectoryIfNeeded(
             manifestAssetPath = "${BootConfig.bootstrapAssetRoot}/rootfs/rootfs-manifest.json",
@@ -143,10 +172,28 @@ internal class AssetExtractor(private val context: Context) {
             )
         )
         if (rootfsDirectoryRefreshed) {
+            onProgress(
+                "正在解包 Linux rootfs。",
+                "首次启动时这里通常最慢，请稍等。",
+                18
+            )
+            var lastRootfsProgress = 18
             extractArchiveAsset(
                 assetPath = "${BootConfig.bootstrapAssetRoot}/rootfs/rootfs-fs.zip",
                 targetDirectory = File(paths.rootfsDir, "fs"),
-                shouldSetExecutable = { true }
+                shouldSetExecutable = { true },
+                onProgress = { processedEntries, totalEntries ->
+                    val nextProgress = (18 + ((processedEntries.toDouble() / totalEntries.toDouble()) * 18.0).toInt())
+                        .coerceIn(lastRootfsProgress, 36)
+                    if (nextProgress > lastRootfsProgress || processedEntries == totalEntries) {
+                        lastRootfsProgress = nextProgress
+                        onProgress(
+                            "正在解包 Linux rootfs。",
+                            "已处理 $processedEntries/$totalEntries 个 rootfs 条目。",
+                            nextProgress
+                        )
+                    }
+                }
             )
             copyFile(
                 AssetCopySpec(
@@ -154,8 +201,24 @@ internal class AssetExtractor(private val context: Context) {
                     targetPath = File(paths.rootfsDir, "rootfs-manifest.json")
                 )
             )
+            onProgress(
+                "Linux rootfs 已准备完成。",
+                "rootfs manifest 已同步完成。",
+                40
+            )
+        } else {
+            onProgress(
+                "Linux rootfs 已是最新。",
+                "跳过 rootfs 解包。",
+                40
+            )
         }
 
+        onProgress(
+            "正在检查 Tavern server 资产。",
+            "正在比较当前设备上的 Tavern payload manifest。",
+            45
+        )
         val serverDirectoryRefreshed = refreshAssetDirectoryIfNeeded(
             manifestAssetPath = "${BootConfig.bootstrapAssetRoot}/server/bootstrap-manifest.json",
             installedManifestFile = File(paths.serverDir, "bootstrap-manifest.json"),
@@ -172,6 +235,12 @@ internal class AssetExtractor(private val context: Context) {
             )
         )
         if (serverDirectoryRefreshed) {
+            onProgress(
+                "正在解包 Tavern server 与 Node runtime。",
+                "首次启动时这里会继续占用一些时间。",
+                48
+            )
+            var lastServerProgress = 48
             extractArchiveAsset(
                 assetPath = "${BootConfig.bootstrapAssetRoot}/server/server-payload.zip",
                 targetDirectory = paths.serverDir,
@@ -180,6 +249,18 @@ internal class AssetExtractor(private val context: Context) {
                     relativePath.endsWith(".sh", ignoreCase = true) ||
                         relativePath == "tavern-entrypoint.sh" ||
                         relativePath == "node/bin/node"
+                },
+                onProgress = { processedEntries, totalEntries ->
+                    val nextProgress = (48 + ((processedEntries.toDouble() / totalEntries.toDouble()) * 20.0).toInt())
+                        .coerceIn(lastServerProgress, 68)
+                    if (nextProgress > lastServerProgress || processedEntries == totalEntries) {
+                        lastServerProgress = nextProgress
+                        onProgress(
+                            "正在解包 Tavern server 与 Node runtime。",
+                            "已处理 $processedEntries/$totalEntries 个 Tavern 条目。",
+                            nextProgress
+                        )
+                    }
                 }
             )
             copyFile(
@@ -188,9 +269,30 @@ internal class AssetExtractor(private val context: Context) {
                     targetPath = File(paths.serverDir, "bootstrap-manifest.json")
                 )
             )
+            onProgress(
+                "Tavern server 资产已准备完成。",
+                "server payload manifest 已同步完成。",
+                72
+            )
+        } else {
+            onProgress(
+                "Tavern server 资产已是最新。",
+                "跳过 Tavern payload 解包。",
+                72
+            )
         }
 
+        onProgress(
+            "正在同步启动脚本。",
+            "正在写入 bootstrap 脚本与宿主资源目录。",
+            76
+        )
         copyNode(AssetCopySpec(BootConfig.bootstrapAssetRoot, paths.bootstrapRoot), skippedAssetRoots)
+        onProgress(
+            "正在刷新 Linux 宿主目录。",
+            "正在准备 usr、tmp 与运行时依赖目录。",
+            80
+        )
         refreshHostPrefixDirectory(paths, rootfsDirectoryRefreshed)
     }
 
@@ -242,7 +344,8 @@ internal class AssetExtractor(private val context: Context) {
     private fun extractArchiveAsset(
         assetPath: String,
         targetDirectory: File,
-        shouldSetExecutable: (String) -> Boolean
+        shouldSetExecutable: (String) -> Boolean,
+        onProgress: (processedEntries: Int, totalEntries: Int) -> Unit = { _, _ -> }
     ) {
         if (targetDirectory.exists()) {
             targetDirectory.deleteRecursively()
@@ -251,6 +354,8 @@ internal class AssetExtractor(private val context: Context) {
 
         val canonicalTargetDirectory = targetDirectory.canonicalFile
         val canonicalTargetPrefix = canonicalTargetDirectory.path + File.separator
+        val totalEntries = countArchiveEntries(assetPath)
+        var processedEntries = 0
 
         context.assets.open(assetPath).use { input ->
             ZipInputStream(input.buffered()).use { zipInput ->
@@ -280,10 +385,30 @@ internal class AssetExtractor(private val context: Context) {
                         }
                     }
 
+                    processedEntries += 1
+                    onProgress(processedEntries, totalEntries)
+
                     zipInput.closeEntry()
                 }
             }
         }
+    }
+
+    private fun countArchiveEntries(assetPath: String): Int {
+        var totalEntries = 0
+        context.assets.open(assetPath).use { input ->
+            ZipInputStream(input.buffered()).use { zipInput ->
+                while (true) {
+                    val entry = zipInput.nextEntry ?: break
+                    val relativePath = entry.name.removePrefix("./").trimStart('/')
+                    if (relativePath.isNotBlank()) {
+                        totalEntries += 1
+                    }
+                    zipInput.closeEntry()
+                }
+            }
+        }
+        return totalEntries.coerceAtLeast(1)
     }
 
     private fun copyNode(spec: AssetCopySpec, skippedAssetRoots: Set<String>) {
@@ -449,6 +574,10 @@ internal class ManagedProcess(
 
     fun waitFor(): Int {
         return process.waitFor()
+    }
+
+    fun waitFor(timeout: Long, unit: TimeUnit): Boolean {
+        return process.waitFor(timeout, unit)
     }
 
     fun stop() {
@@ -622,7 +751,7 @@ internal class RootfsRuntimeProvisioner(
     private val launcher: LinuxRuntimeLauncher,
     private val paths: HostPaths
 ) {
-    fun ensure() {
+    fun ensure(onHeartbeat: (elapsedSeconds: Int) -> Unit = {}) {
         val request = LaunchRequest(
             name = "rootfs-runtime",
             scriptFile = File(paths.scriptsDir, "ensure-rootfs-runtime.sh"),
@@ -630,6 +759,11 @@ internal class RootfsRuntimeProvisioner(
             environment = emptyMap()
         )
         val process = launcher.start(request)
+        var elapsedSeconds = 0
+        while (!process.waitFor(1, TimeUnit.SECONDS)) {
+            elapsedSeconds += 1
+            onHeartbeat(elapsedSeconds)
+        }
         val exitCode = process.waitFor()
         if (exitCode != 0) {
             throw IllegalStateException("Linux 离线运行时校验失败，请查看 android-tavern/logs/rootfs-runtime.log。")
@@ -657,8 +791,9 @@ internal class ServerController(
 }
 
 internal object HealthProbe {
-    suspend fun awaitReady(targetUrl: String): Boolean {
-        repeat(BootConfig.readinessProbeAttempts) {
+    suspend fun awaitReady(targetUrl: String, onAttempt: (attempt: Int, totalAttempts: Int) -> Unit = { _, _ -> }): Boolean {
+        repeat(BootConfig.readinessProbeAttempts) { attempt ->
+            onAttempt(attempt + 1, BootConfig.readinessProbeAttempts)
             if (checkOnce(targetUrl)) {
                 return true
             }

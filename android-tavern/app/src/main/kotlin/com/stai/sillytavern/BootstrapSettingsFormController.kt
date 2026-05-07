@@ -44,6 +44,13 @@ internal class BootstrapSettingsFormController(
     private val onFieldEdited: (String?) -> Unit,
     private val onFormChanged: () -> Unit
 ) {
+    private data class SearchBinding(
+        val path: String,
+        val searchText: String,
+        val targetView: View,
+        val applyMatchedState: (Boolean) -> Unit
+    )
+
     private data class SectionBinding(
         val cardView: MaterialCardView,
         val dividerView: View,
@@ -110,15 +117,18 @@ internal class BootstrapSettingsFormController(
     }
 
     private val fieldBindings = linkedMapOf<String, FieldBinding>()
+    private val fieldSearchBindings = linkedMapOf<String, SearchBinding>()
     private val sectionBindings = mutableListOf<SectionBinding>()
     private val quickFieldPaths = linkedSetOf<String>()
     private var currentRoot = linkedMapOf<String, Any?>()
+    private var currentSearchQuery = ""
 
     fun render(root: LinkedHashMap<String, Any?>) {
         currentRoot = configRepository.copyRoot(root)
         quickFieldContainer.removeAllViews()
         sectionContainer.removeAllViews()
         fieldBindings.clear()
+        fieldSearchBindings.clear()
         sectionBindings.clear()
         quickFieldPaths.clear()
 
@@ -144,6 +154,46 @@ internal class BootstrapSettingsFormController(
             sectionContainer.addView(sectionBinding.cardView)
         }
         updateFieldVisibility()
+        applySearchQuery(currentSearchQuery, scrollToFirstMatch = false)
+    }
+
+    fun applySearchQuery(query: String, scrollToFirstMatch: Boolean = true): Boolean {
+        currentSearchQuery = query.trim()
+        val normalizedQuery = currentSearchQuery.lowercase()
+        if (normalizedQuery.isBlank()) {
+            fieldSearchBindings.values.forEach { binding ->
+                binding.applyMatchedState(false)
+            }
+            return true
+        }
+
+        val matchedPaths = linkedSetOf<String>()
+        for ((path, binding) in fieldSearchBindings) {
+            val isVisible = fieldBindings[path]?.containerView?.isVisible == true
+            val matched = isVisible && binding.searchText.contains(normalizedQuery)
+            binding.applyMatchedState(matched)
+            if (matched) {
+                matchedPaths += path
+            }
+        }
+
+        for (sectionBinding in sectionBindings) {
+            if (sectionBinding.fieldPaths.any(matchedPaths::contains)) {
+                sectionBinding.expanded = true
+            }
+            val hasVisibleFields = sectionBinding.fieldPaths.any { path ->
+                fieldBindings[path]?.containerView?.isVisible == true
+            }
+            syncSectionExpansion(sectionBinding, hasVisibleFields)
+        }
+
+        if (scrollToFirstMatch) {
+            matchedPaths.firstOrNull()?.let { firstMatchPath ->
+                fieldSearchBindings[firstMatchPath]?.targetView?.let(::ensureViewVisible)
+            }
+        }
+
+        return matchedPaths.isNotEmpty()
     }
 
     fun collectTypedValues(resolveTypedFieldValue: (TavernConfigFieldSpec, Any?) -> Any): LinkedHashMap<String, Any?> {
@@ -340,6 +390,18 @@ internal class BootstrapSettingsFormController(
                     }
                 }
                 fieldBindings[field.path] = SwitchBinding(field.path, card, switch)
+                registerSearchBinding(
+                    field = field,
+                    targetView = card,
+                    applyMatchedState = { matched ->
+                        card.strokeWidth = if (matched) dp(2) else 0
+                        card.strokeColor = if (matched) {
+                            resolveThemeColor(MaterialR.attr.colorPrimary)
+                        } else {
+                            resolveThemeColor(MaterialR.attr.colorOutlineVariant)
+                        }
+                    }
+                )
                 switch.setOnCheckedChangeListener { _, _ ->
                     onFieldEdited(null)
                     updateFieldVisibility()
@@ -410,6 +472,22 @@ internal class BootstrapSettingsFormController(
                 inputLayout.addView(editText)
                 fieldContainer.addView(inputLayout)
                 fieldBindings[field.path] = TextBinding(field.path, fieldContainer, inputLayout, editText)
+                registerSearchBinding(
+                    field = field,
+                    targetView = fieldContainer,
+                    applyMatchedState = { matched ->
+                        fieldContainer.background = if (matched) {
+                            GradientDrawable().apply {
+                                shape = GradientDrawable.RECTANGLE
+                                cornerRadius = dpFloat(16)
+                                setColor(resolveThemeColor(MaterialR.attr.colorSurface))
+                                setStroke(dp(2), resolveThemeColor(MaterialR.attr.colorPrimary))
+                            }
+                        } else {
+                            null
+                        }
+                    }
+                )
                 editText.doAfterTextChanged {
                     onFieldEdited(field.path)
                     onFormChanged()
@@ -552,6 +630,9 @@ internal class BootstrapSettingsFormController(
             }
             syncSectionExpansion(sectionBinding, sectionHasVisibleField)
         }
+        if (currentSearchQuery.isNotBlank()) {
+            applySearchQuery(currentSearchQuery, scrollToFirstMatch = false)
+        }
     }
 
     private fun syncSectionExpansion(sectionBinding: SectionBinding, hasVisibleFields: Boolean, animate: Boolean = false) {
@@ -635,6 +716,21 @@ internal class BootstrapSettingsFormController(
 
     private fun shouldRenderField(path: String): Boolean {
         return !path.startsWith("browserLaunch.")
+    }
+
+    private fun registerSearchBinding(
+        field: TavernConfigFieldSpec,
+        targetView: View,
+        applyMatchedState: (Boolean) -> Unit
+    ) {
+        fieldSearchBindings[field.path] = SearchBinding(
+            path = field.path,
+            searchText = listOf(field.path, field.title, field.summary)
+                .joinToString(separator = "\n")
+                .lowercase(),
+            targetView = targetView,
+            applyMatchedState = applyMatchedState
+        )
     }
 
     private fun resolveThemeColor(@AttrRes attrRes: Int, fallback: Int = 0): Int {

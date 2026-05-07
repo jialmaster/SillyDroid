@@ -7,21 +7,28 @@ import android.app.DownloadManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ActivityNotFoundException
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Message
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
+import android.view.animation.OvershootInterpolator
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
@@ -29,6 +36,7 @@ import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.widget.NestedScrollView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -48,12 +56,21 @@ import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import kotlin.math.absoluteValue
+import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
+    private enum class FloatingLogsBubbleDockSide {
+        LEFT,
+        RIGHT
+    }
+
     private data class BrowserDownloadRequest(
         val url: String,
         val userAgent: String,
@@ -94,15 +111,37 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bootstrapOverlay: View
     private lateinit var bootstrapStatus: TextView
     private lateinit var bootstrapRetry: Button
+    private lateinit var bootstrapUpdateButtonContainer: View
+    private lateinit var bootstrapUpdateButton: ImageButton
+    private lateinit var bootstrapUpdateBadge: View
     private lateinit var bootstrapSettingsButton: ImageButton
     private lateinit var bootstrapProgress: ProgressBar
+    private lateinit var bootstrapProgressLabel: TextView
+    private lateinit var floatingLogsBubble: TextView
+    private lateinit var floatingLogsPanel: View
+    private lateinit var floatingLogsMeta: TextView
+    private lateinit var floatingLogsEmpty: TextView
+    private lateinit var floatingLogsContent: TextView
+    private lateinit var floatingLogsScroll: NestedScrollView
+    private lateinit var floatingLogsCloseButton: ImageButton
     private lateinit var backPressCallback: OnBackPressedCallback
     private var webSessionScriptHandler: ScriptHandler? = null
     private var loadedUrl = ""
     private var hasRestoredWebViewState = false
     private var skipNextWebViewStateRestore = false
     private var isOpeningBootstrapSettings = false
+    private var pendingResumeAfterSettings = false
     private var pendingFileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private var floatingLogsRefreshJob: Job? = null
+    private var lastFloatingLogSnapshot: HostLogSnapshot? = null
+    private var floatingLogsBubbleDockSide = FloatingLogsBubbleDockSide.RIGHT
+    private val floatingLogsBubbleTouchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop }
+    private val floatingLogsPanelGapPx by lazy { 12f * resources.displayMetrics.density }
+    private val floatingLogsBubbleHiddenWidthPx by lazy { floatingLogsBubble.width / 2f }
+    private val floatingLogsBubbleRevealInterpolator = OvershootInterpolator(0.9f)
+    private val floatingLogsBubbleDockInterpolator = OvershootInterpolator(0.55f)
+    private val hostConfigStore by lazy { BootstrapHostConfigStore(this) }
+    private lateinit var appUpdateCoordinator: AppUpdateCoordinator
     private val webSessionStoragePreferences by lazy {
         getSharedPreferences(webSessionStoragePreferencesName, MODE_PRIVATE)
     }
@@ -117,6 +156,7 @@ class MainActivity : AppCompatActivity() {
     private val bootstrapSettingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         isOpeningBootstrapSettings = false
         if (result.resultCode == Activity.RESULT_OK && BootstrapSettingsActivity.shouldStartBootstrap(result.data)) {
+            pendingResumeAfterSettings = false
             skipNextWebViewStateRestore = true
             hasRestoredWebViewState = false
             loadedUrl = ""
@@ -124,8 +164,19 @@ class MainActivity : AppCompatActivity() {
             return@registerForActivityResult
         }
 
-        if (StartupRuntimeStore.state.value.phase == StartupPhase.CONFIGURING) {
-            startBootstrap(true)
+        when (StartupRuntimeStore.state.value.phase) {
+            StartupPhase.CONFIGURING -> {
+                pendingResumeAfterSettings = false
+                startBootstrap(true)
+            }
+
+            StartupPhase.PAUSING -> {
+                pendingResumeAfterSettings = true
+            }
+
+            else -> {
+                pendingResumeAfterSettings = false
+            }
         }
     }
 
@@ -134,7 +185,17 @@ class MainActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
         bindViews()
+        appUpdateCoordinator = AppUpdateCoordinator(
+            activity = this,
+            updateButtonContainer = bootstrapUpdateButtonContainer,
+            updateButton = bootstrapUpdateButton,
+            updateBadgeView = bootstrapUpdateBadge,
+            downloadManager = downloadManager
+        )
+        appUpdateCoordinator.initialize()
         applySystemBarInsets()
+        configureFloatingLogsUi()
+        refreshFloatingLogsVisibility()
         ensureSystemNotificationChannel()
         requestNotificationPermissionIfNeeded()
         configureWebView()
@@ -144,6 +205,26 @@ class MainActivity : AppCompatActivity() {
         bootstrapRetry.setOnClickListener { startBootstrap(true) }
         bootstrapSettingsButton.setOnClickListener { openBootstrapSettings() }
         startBootstrap(false)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        appUpdateCoordinator.onStart()
+        if (floatingLogsPanel.isVisible) {
+            startFloatingLogsRefreshLoop()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        appUpdateCoordinator.onResume()
+        refreshFloatingLogsVisibility()
+    }
+
+    override fun onStop() {
+        appUpdateCoordinator.onStop()
+        stopFloatingLogsRefreshLoop()
+        super.onStop()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -166,6 +247,8 @@ class MainActivity : AppCompatActivity() {
         webSessionScriptHandler = null
         pendingFileChooserCallback?.onReceiveValue(null)
         pendingFileChooserCallback = null
+        appUpdateCoordinator.onDestroy()
+        stopFloatingLogsRefreshLoop()
         skipNextWebViewStateRestore = false
         super.onDestroy()
     }
@@ -191,8 +274,347 @@ class MainActivity : AppCompatActivity() {
         bootstrapOverlay = findViewById(R.id.bootstrapOverlay)
         bootstrapStatus = findViewById(R.id.bootstrapStatus)
         bootstrapRetry = findViewById(R.id.bootstrapRetry)
+        bootstrapUpdateButtonContainer = findViewById(R.id.bootstrapUpdateButtonContainer)
+        bootstrapUpdateButton = findViewById(R.id.bootstrapUpdateButton)
+        bootstrapUpdateBadge = findViewById(R.id.bootstrapUpdateBadge)
         bootstrapSettingsButton = findViewById(R.id.bootstrapSettingsButton)
         bootstrapProgress = findViewById(R.id.bootstrapProgress)
+        bootstrapProgressLabel = findViewById(R.id.bootstrapProgressLabel)
+        floatingLogsBubble = findViewById(R.id.floatingLogsBubble)
+        floatingLogsPanel = findViewById(R.id.floatingLogsPanel)
+        floatingLogsMeta = findViewById(R.id.floatingLogsMeta)
+        floatingLogsEmpty = findViewById(R.id.floatingLogsEmpty)
+        floatingLogsContent = findViewById(R.id.floatingLogsContent)
+        floatingLogsScroll = findViewById(R.id.floatingLogsScroll)
+        floatingLogsCloseButton = findViewById(R.id.floatingLogsCloseButton)
+    }
+
+    private fun configureFloatingLogsUi() {
+        floatingLogsBubble.setOnTouchListener(object : View.OnTouchListener {
+            private var downRawX = 0f
+            private var downRawY = 0f
+            private var downViewX = 0f
+            private var downViewY = 0f
+            private var dragging = false
+
+            override fun onTouch(view: View, event: MotionEvent): Boolean {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        floatingLogsBubble.animate().cancel()
+                        downRawX = event.rawX
+                        downRawY = event.rawY
+                        downViewX = view.x
+                        downViewY = view.y
+                        dragging = false
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+                        return true
+                    }
+
+                    MotionEvent.ACTION_MOVE -> {
+                        val deltaX = event.rawX - downRawX
+                        val deltaY = event.rawY - downRawY
+                        if (!dragging && (abs(deltaX) > floatingLogsBubbleTouchSlop || abs(deltaY) > floatingLogsBubbleTouchSlop)) {
+                            dragging = true
+                        }
+                        if (dragging) {
+                            moveFloatingLogsBubbleTo(downViewX + deltaX, downViewY + deltaY)
+                            if (floatingLogsPanel.isVisible) {
+                                repositionFloatingLogsPanel()
+                            }
+                        }
+                        return true
+                    }
+
+                    MotionEvent.ACTION_UP -> {
+                        view.parent?.requestDisallowInterceptTouchEvent(false)
+                        if (!dragging) {
+                            view.performClick()
+                        } else {
+                            floatingLogsBubbleDockSide = resolveFloatingLogsBubbleDockSide(view.x + view.width / 2f)
+                            persistFloatingLogsBubblePosition()
+                            alignFloatingLogsBubbleToDockState(animated = true)
+                        }
+                        return true
+                    }
+
+                    MotionEvent.ACTION_CANCEL -> {
+                        view.parent?.requestDisallowInterceptTouchEvent(false)
+                        if (dragging) {
+                            floatingLogsBubbleDockSide = resolveFloatingLogsBubbleDockSide(view.x + view.width / 2f)
+                            persistFloatingLogsBubblePosition()
+                            alignFloatingLogsBubbleToDockState(animated = true)
+                        }
+                        return true
+                    }
+                }
+                return false
+            }
+        })
+        floatingLogsBubble.setOnClickListener {
+            if (floatingLogsPanel.isVisible) {
+                setFloatingLogsPanelVisible(false)
+            } else {
+                revealFloatingLogsBubbleAndOpenPanel()
+            }
+        }
+        floatingLogsCloseButton.setOnClickListener {
+            setFloatingLogsPanelVisible(false)
+        }
+    }
+
+    private fun refreshFloatingLogsVisibility() {
+        val enabled = hostConfigStore.floatingLogBubbleEnabled
+        floatingLogsBubble.isVisible = enabled
+        if (!enabled) {
+            setFloatingLogsPanelVisible(false)
+            return
+        }
+
+        floatingLogsBubble.post {
+            restoreFloatingLogsBubblePosition()
+            if (floatingLogsPanel.isVisible) {
+                repositionFloatingLogsPanel()
+            }
+        }
+    }
+
+    private fun setFloatingLogsPanelVisible(visible: Boolean) {
+        val shouldShow = visible && hostConfigStore.floatingLogBubbleEnabled
+        if (shouldShow) {
+            revealFloatingLogsBubble(animated = true) {
+                floatingLogsPanel.isVisible = true
+                repositionFloatingLogsPanel()
+                startFloatingLogsRefreshLoop()
+            }
+        } else {
+            floatingLogsPanel.isVisible = false
+            stopFloatingLogsRefreshLoop()
+            dockFloatingLogsBubble(animated = true)
+        }
+    }
+
+    private fun revealFloatingLogsBubbleAndOpenPanel() {
+        setFloatingLogsPanelVisible(true)
+    }
+
+    private fun moveFloatingLogsBubbleTo(targetX: Float, targetY: Float) {
+        if (contentRoot.width <= 0 || contentRoot.height <= 0 || floatingLogsBubble.width <= 0 || floatingLogsBubble.height <= 0) {
+            return
+        }
+
+        val minX = contentRoot.paddingLeft.toFloat()
+        val maxX = (contentRoot.width - contentRoot.paddingRight - floatingLogsBubble.width).toFloat().coerceAtLeast(minX)
+        val minY = contentRoot.paddingTop.toFloat()
+        val maxY = (contentRoot.height - contentRoot.paddingBottom - floatingLogsBubble.height).toFloat().coerceAtLeast(minY)
+
+        floatingLogsBubble.x = targetX.coerceIn(minX, maxX)
+        floatingLogsBubble.y = targetY.coerceIn(minY, maxY)
+    }
+
+    private fun alignFloatingLogsBubbleToDockState(animated: Boolean) {
+        if (floatingLogsPanel.isVisible) {
+            revealFloatingLogsBubble(animated) {
+                repositionFloatingLogsPanel()
+            }
+        } else {
+            dockFloatingLogsBubble(animated)
+        }
+    }
+
+    private fun dockFloatingLogsBubble(animated: Boolean) {
+        animateFloatingLogsBubbleX(
+            targetX = resolveDockedBubbleX(floatingLogsBubbleDockSide),
+            animated = animated,
+            durationMs = 220L,
+            interpolator = floatingLogsBubbleDockInterpolator,
+            endAction = null
+        )
+    }
+
+    private fun revealFloatingLogsBubble(animated: Boolean, onEnd: (() -> Unit)? = null) {
+        animateFloatingLogsBubbleX(
+            targetX = resolveExposedBubbleX(floatingLogsBubbleDockSide),
+            animated = animated,
+            durationMs = 240L,
+            interpolator = floatingLogsBubbleRevealInterpolator,
+            endAction = onEnd
+        )
+    }
+
+    private fun animateFloatingLogsBubbleX(
+        targetX: Float,
+        animated: Boolean,
+        durationMs: Long,
+        interpolator: OvershootInterpolator,
+        endAction: (() -> Unit)?
+    ) {
+        if (floatingLogsBubble.width <= 0 || contentRoot.width <= 0) {
+            floatingLogsBubble.x = targetX
+            endAction?.invoke()
+            return
+        }
+
+        floatingLogsBubble.animate().cancel()
+        if (!animated || abs(floatingLogsBubble.x - targetX) < 1f) {
+            floatingLogsBubble.x = targetX
+            endAction?.invoke()
+            return
+        }
+
+        floatingLogsBubble.animate()
+            .x(targetX)
+            .setDuration(durationMs)
+            .setInterpolator(interpolator)
+            .withEndAction {
+                endAction?.invoke()
+            }
+            .start()
+    }
+
+    private fun resolveDockedBubbleX(side: FloatingLogsBubbleDockSide): Float {
+        val minX = contentRoot.paddingLeft.toFloat()
+        val maxX = (contentRoot.width - contentRoot.paddingRight - floatingLogsBubble.width).toFloat().coerceAtLeast(minX)
+        return when (side) {
+            FloatingLogsBubbleDockSide.LEFT -> minX - floatingLogsBubbleHiddenWidthPx
+            FloatingLogsBubbleDockSide.RIGHT -> maxX + floatingLogsBubbleHiddenWidthPx
+        }
+    }
+
+    private fun resolveExposedBubbleX(side: FloatingLogsBubbleDockSide): Float {
+        val minX = contentRoot.paddingLeft.toFloat()
+        val maxX = (contentRoot.width - contentRoot.paddingRight - floatingLogsBubble.width).toFloat().coerceAtLeast(minX)
+        return when (side) {
+            FloatingLogsBubbleDockSide.LEFT -> minX
+            FloatingLogsBubbleDockSide.RIGHT -> maxX
+        }
+    }
+
+    private fun resolveFloatingLogsBubbleDockSide(bubbleCenterX: Float): FloatingLogsBubbleDockSide {
+        val contentCenterX = contentRoot.width / 2f
+        return if (bubbleCenterX <= contentCenterX) {
+            FloatingLogsBubbleDockSide.LEFT
+        } else {
+            FloatingLogsBubbleDockSide.RIGHT
+        }
+    }
+
+    private fun restoreFloatingLogsBubblePosition() {
+        val savedPosition = hostConfigStore.floatingLogBubblePosition
+        if (contentRoot.width <= 0 || contentRoot.height <= 0 || floatingLogsBubble.width <= 0 || floatingLogsBubble.height <= 0) {
+            return
+        }
+
+        floatingLogsBubbleDockSide = when {
+            savedPosition == null -> floatingLogsBubbleDockSide
+            savedPosition.horizontalFraction < 0.5f -> FloatingLogsBubbleDockSide.LEFT
+            else -> FloatingLogsBubbleDockSide.RIGHT
+        }
+
+        val minX = contentRoot.paddingLeft.toFloat()
+        val minY = contentRoot.paddingTop.toFloat()
+        val maxY = (contentRoot.height - contentRoot.paddingBottom - floatingLogsBubble.height).toFloat().coerceAtLeast(minY)
+        val rangeY = (maxY - minY).coerceAtLeast(0f)
+        val targetY = if (savedPosition == null) {
+            floatingLogsBubble.y.coerceIn(minY, maxY)
+        } else {
+            minY + rangeY * savedPosition.verticalFraction
+        }
+
+        moveFloatingLogsBubbleTo(
+            targetX = resolveExposedBubbleX(floatingLogsBubbleDockSide),
+            targetY = targetY
+        )
+        alignFloatingLogsBubbleToDockState(animated = false)
+    }
+
+    private fun persistFloatingLogsBubblePosition() {
+        if (contentRoot.width <= 0 || contentRoot.height <= 0 || floatingLogsBubble.width <= 0 || floatingLogsBubble.height <= 0) {
+            return
+        }
+
+        val minY = contentRoot.paddingTop.toFloat()
+        val maxY = (contentRoot.height - contentRoot.paddingBottom - floatingLogsBubble.height).toFloat().coerceAtLeast(minY)
+        val rangeY = maxY - minY
+
+        hostConfigStore.floatingLogBubblePosition = BootstrapHostConfigStore.FloatingLogBubblePosition(
+            horizontalFraction = if (floatingLogsBubbleDockSide == FloatingLogsBubbleDockSide.LEFT) 0f else 1f,
+            verticalFraction = if (rangeY <= 0f) 1f else ((floatingLogsBubble.y - minY) / rangeY).coerceIn(0f, 1f)
+        )
+    }
+
+    private fun repositionFloatingLogsPanel() {
+        floatingLogsPanel.post {
+            if (!floatingLogsPanel.isVisible || contentRoot.width <= 0 || contentRoot.height <= 0) {
+                return@post
+            }
+            if (floatingLogsBubble.width <= 0 || floatingLogsBubble.height <= 0) {
+                return@post
+            }
+            if (floatingLogsPanel.width <= 0 || floatingLogsPanel.height <= 0) {
+                return@post
+            }
+
+            val minX = contentRoot.paddingLeft.toFloat()
+            val maxX = (contentRoot.width - contentRoot.paddingRight - floatingLogsPanel.width).toFloat().coerceAtLeast(minX)
+            val minY = contentRoot.paddingTop.toFloat()
+            val maxY = (contentRoot.height - contentRoot.paddingBottom - floatingLogsPanel.height).toFloat().coerceAtLeast(minY)
+
+            val preferredX = floatingLogsBubble.x + (floatingLogsBubble.width - floatingLogsPanel.width) / 2f
+            val preferredAboveY = floatingLogsBubble.y - floatingLogsPanel.height - floatingLogsPanelGapPx
+            val preferredBelowY = floatingLogsBubble.y + floatingLogsBubble.height + floatingLogsPanelGapPx
+            val resolvedY = when {
+                preferredAboveY >= minY -> preferredAboveY
+                preferredBelowY <= maxY -> preferredBelowY
+                else -> maxY
+            }
+
+            floatingLogsPanel.x = preferredX.coerceIn(minX, maxX)
+            floatingLogsPanel.y = resolvedY.coerceIn(minY, maxY)
+        }
+    }
+
+    private fun startFloatingLogsRefreshLoop() {
+        if (floatingLogsRefreshJob?.isActive == true) {
+            return
+        }
+
+        floatingLogsRefreshJob = lifecycleScope.launch {
+            while (isActive && floatingLogsPanel.isVisible) {
+                renderFloatingLatestLog()
+                delay(1000)
+            }
+        }
+    }
+
+    private fun stopFloatingLogsRefreshLoop() {
+        floatingLogsRefreshJob?.cancel()
+        floatingLogsRefreshJob = null
+    }
+
+    private suspend fun renderFloatingLatestLog() {
+        val snapshot = withContext(Dispatchers.IO) {
+            HostLogReader.readLatestSnapshot(this@MainActivity, maxChars = 200_000)
+        }
+        if (snapshot == lastFloatingLogSnapshot) {
+            return
+        }
+
+        lastFloatingLogSnapshot = snapshot
+        floatingLogsEmpty.isVisible = snapshot == null
+        floatingLogsMeta.isVisible = snapshot != null
+        floatingLogsContent.isVisible = snapshot != null
+
+        if (snapshot == null) {
+            floatingLogsMeta.text = ""
+            floatingLogsContent.text = ""
+            return
+        }
+
+        floatingLogsMeta.text = getString(R.string.bootstrap_settings_logs_meta, snapshot.fileName, snapshot.updatedAt)
+        floatingLogsContent.text = snapshot.content.ifBlank { getString(R.string.bootstrap_settings_logs_empty_content) }
+        floatingLogsScroll.post {
+            floatingLogsScroll.fullScroll(View.FOCUS_DOWN)
+        }
     }
 
     private fun applySystemBarInsets() {
@@ -211,6 +633,14 @@ class MainActivity : AppCompatActivity() {
                 initialRightPadding + systemBarsInsets.right,
                 initialBottomPadding + systemBarsInsets.bottom
             )
+            if (floatingLogsBubble.isVisible) {
+                view.post {
+                    restoreFloatingLogsBubblePosition()
+                    if (floatingLogsPanel.isVisible) {
+                        repositionFloatingLogsPanel()
+                    }
+                }
+            }
             insets
         }
         ViewCompat.requestApplyInsets(contentRoot)
@@ -221,6 +651,8 @@ class MainActivity : AppCompatActivity() {
         webView.settings.domStorageEnabled = true
         webView.settings.allowFileAccess = false
         webView.settings.allowContentAccess = true
+        webView.settings.setSupportMultipleWindows(true)
+        webView.settings.javaScriptCanOpenWindowsAutomatically = true
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // 退到后台时不要把 WebView renderer 主动降成 waived，尽量降低返回前台后整页被系统重载、前端重新初始化的概率。
             webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, false)
@@ -231,6 +663,23 @@ class MainActivity : AppCompatActivity() {
         // 浏览器通知统一走宿主桥，避免 Android WebView 里再退回不可用的 Notification API。
         webView.addJavascriptInterface(SystemNotificationBridge(), systemNotificationBridgeName)
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val targetUri = request?.url ?: return false
+                if (request.isForMainFrame && shouldOpenExternally(targetUri)) {
+                    return openExternalBrowser(targetUri)
+                }
+                return false
+            }
+
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                val targetUri = url?.let(Uri::parse) ?: return false
+                return if (shouldOpenExternally(targetUri)) {
+                    openExternalBrowser(targetUri)
+                } else {
+                    false
+                }
+            }
+
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 // 冷启动后主动把 WebView 新写入的 cookie 落盘，避免后台回收前只保存在内存里。
@@ -252,6 +701,44 @@ class MainActivity : AppCompatActivity() {
             )
         }
         webView.webChromeClient = object : WebChromeClient() {
+            override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
+                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                val proxyWebView = WebView(this@MainActivity)
+                var handled = false
+
+                fun forwardToBrowser(targetUrl: String?) {
+                    if (handled || targetUrl.isNullOrBlank() || targetUrl == "about:blank") {
+                        return
+                    }
+
+                    handled = true
+                    openExternalBrowser(Uri.parse(targetUrl))
+                    proxyWebView.stopLoading()
+                    proxyWebView.destroy()
+                }
+
+                proxyWebView.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                        forwardToBrowser(request?.url?.toString())
+                        return true
+                    }
+
+                    override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                        forwardToBrowser(url)
+                        return true
+                    }
+
+                    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                        super.onPageStarted(view, url, favicon)
+                        forwardToBrowser(url)
+                    }
+                }
+
+                transport.webView = proxyWebView
+                resultMsg.sendToTarget()
+                return true
+            }
+
             override fun onShowFileChooser(
                 webView: WebView?,
                 filePathCallback: ValueCallback<Array<Uri>>?,
@@ -956,6 +1443,10 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 StartupRuntimeStore.state.collect { state ->
+                    if (pendingResumeAfterSettings && state.phase == StartupPhase.CONFIGURING) {
+                        pendingResumeAfterSettings = false
+                        startBootstrap(true)
+                    }
                     renderBootstrapState(state)
                 }
             }
@@ -981,8 +1472,22 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.bootstrap_retry)
         }
         bootstrapProgress.isVisible = !state.canRetry && state.phase != StartupPhase.CONFIGURING
-        bootstrapSettingsButton.isVisible = !state.isReady
-        bootstrapSettingsButton.isEnabled = !state.isReady && !isOpeningBootstrapSettings
+        bootstrapProgressLabel.isVisible = bootstrapProgress.isVisible
+        bootstrapProgress.max = 100
+        val progressPercent = state.progressPercent.coerceIn(0, 100)
+        bootstrapProgress.isIndeterminate = progressPercent <= 0
+        if (!bootstrapProgress.isIndeterminate) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                bootstrapProgress.setProgress(progressPercent, true)
+            } else {
+                bootstrapProgress.progress = progressPercent
+            }
+            bootstrapProgressLabel.text = getString(R.string.bootstrap_progress_label, progressPercent)
+        } else {
+            bootstrapProgressLabel.text = getString(R.string.bootstrap_progress_indeterminate)
+        }
+        bootstrapSettingsButton.isVisible = true
+        bootstrapSettingsButton.isEnabled = !isOpeningBootstrapSettings
 
         if (state.isReady) {
             showWebView(state.localUrl)
@@ -1021,7 +1526,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         isOpeningBootstrapSettings = true
+        pendingResumeAfterSettings = false
         bootstrapSettingsButton.isEnabled = false
+        val localUrl = BootConfig.localServiceUrl(this)
+        StartupRuntimeStore.update(
+            StartupState(
+                phase = StartupPhase.PAUSING,
+                message = "正在暂停本地 Tavern 服务。",
+                details = "正在进入设置页并等待本地服务停止。",
+                localUrl = localUrl,
+                progressPercent = 0
+            )
+        )
+        startService(StartupCoordinatorService.createStopForSettingsIntent(this))
         bootstrapSettingsLauncher.launch(BootstrapSettingsActivity.createIntent(this))
     }
 
@@ -1044,6 +1561,51 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildInitialWebViewUrl(baseUrl: String): String {
         return "${baseUrl.trim().trimEnd('/')}/"
+    }
+
+    private fun shouldOpenExternally(targetUri: Uri): Boolean {
+        return !isLocalTavernUri(targetUri)
+    }
+
+    private fun isLocalTavernUri(targetUri: Uri): Boolean {
+        val localUri = Uri.parse(BootConfig.localServiceUrl(this))
+        val targetScheme = targetUri.scheme.orEmpty()
+        if (!targetScheme.equals(localUri.scheme.orEmpty(), ignoreCase = true)) {
+            return false
+        }
+
+        val targetHost = targetUri.host.orEmpty()
+        val localHost = localUri.host.orEmpty()
+        if (!targetHost.equals(localHost, ignoreCase = true)) {
+            return false
+        }
+
+        return normalizedPort(targetUri) == normalizedPort(localUri)
+    }
+
+    private fun normalizedPort(uri: Uri): Int {
+        if (uri.port != -1) {
+            return uri.port
+        }
+
+        return when (uri.scheme?.lowercase()) {
+            "https" -> 443
+            else -> 80
+        }
+    }
+
+    private fun openExternalBrowser(targetUri: Uri): Boolean {
+        return try {
+            startActivity(
+                Intent(Intent.ACTION_VIEW, targetUri).apply {
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                }
+            )
+            true
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, R.string.browser_open_external_failed, Toast.LENGTH_SHORT).show()
+            true
+        }
     }
 
     private fun resolveFileChooserUris(resultCode: Int, data: Intent?): Array<Uri>? {

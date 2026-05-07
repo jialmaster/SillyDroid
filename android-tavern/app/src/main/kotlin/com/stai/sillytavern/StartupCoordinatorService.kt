@@ -132,29 +132,101 @@ class StartupCoordinatorService : Service() {
                     StartupState(
                         phase = StartupPhase.READY,
                         message = "已连接到现有本地 Tavern 服务，正在打开 WebView。",
-                        localUrl = localUrl
+                        localUrl = localUrl,
+                        progressPercent = 100
                     )
                 )
                 return
             }
 
-            updateState(StartupState(StartupPhase.EXTRACTING, "正在解包 Tavern bootstrap 资产。"))
-            AssetExtractor(applicationContext).extractBootstrap(paths)
+            updateState(
+                StartupState(
+                    phase = StartupPhase.EXTRACTING,
+                    message = "正在准备 Tavern bootstrap 资产。",
+                    details = "首次启动时需要解包离线 rootfs、Node runtime 和 Tavern 资源。",
+                    localUrl = localUrl,
+                    progressPercent = 5
+                )
+            )
+            AssetExtractor(applicationContext).extractBootstrap(paths) { message, details, progressPercent ->
+                updateState(
+                    StartupState(
+                        phase = StartupPhase.EXTRACTING,
+                        message = message,
+                        details = details,
+                        localUrl = localUrl,
+                        progressPercent = progressPercent
+                    )
+                )
+            }
 
-            updateState(StartupState(StartupPhase.VALIDATING, "正在校验 Tavern runtime 与启动脚本。"))
+            updateState(
+                StartupState(
+                    phase = StartupPhase.VALIDATING,
+                    message = "正在校验 Tavern runtime 与启动脚本。",
+                    details = "正在检查 bootstrap 目录结构与 DNS 配置。",
+                    localUrl = localUrl,
+                    progressPercent = 84
+                )
+            )
             BootstrapLayoutVerifier(paths).verify()
             AndroidDnsConfigWriter(applicationContext).write(paths)
 
             val launcher = LinuxRuntimeLauncher(paths)
-            updateState(StartupState(StartupPhase.VALIDATING, "正在校验离线 Linux 运行时。"))
-            RootfsRuntimeProvisioner(launcher, paths).ensure()
+            updateState(
+                StartupState(
+                    phase = StartupPhase.VALIDATING,
+                    message = "正在初始化离线 Linux 运行时。",
+                    details = "首次启动时这里可能需要几十秒，请稍等。",
+                    localUrl = localUrl,
+                    progressPercent = 88
+                )
+            )
+            RootfsRuntimeProvisioner(launcher, paths).ensure { elapsedSeconds ->
+                updateState(
+                    StartupState(
+                        phase = StartupPhase.VALIDATING,
+                        message = "正在初始化离线 Linux 运行时。",
+                        details = "正在执行 rootfs 校验脚本，已耗时 ${elapsedSeconds} 秒。",
+                        localUrl = localUrl,
+                        progressPercent = 88
+                    )
+                )
+            }
 
-            updateState(StartupState(StartupPhase.STARTING_SERVER, "正在拉起 SillyTavern。"))
+            updateState(
+                StartupState(
+                    phase = StartupPhase.STARTING_SERVER,
+                    message = "正在拉起 SillyTavern。",
+                    details = "正在启动本地 Node 服务进程。",
+                    localUrl = localUrl,
+                    progressPercent = 94
+                )
+            )
             stopManagedProcesses()
             serverProcess = ServerController(launcher, paths, servicePort).start()
 
-            updateState(StartupState(StartupPhase.WAITING_READY, "正在等待本地 Tavern 服务就绪。"))
-            if (!HealthProbe.awaitReady(readinessUrl)) {
+            updateState(
+                StartupState(
+                    phase = StartupPhase.WAITING_READY,
+                    message = "正在等待本地 Tavern 服务就绪。",
+                    details = "正在探测本地 HTTP 服务响应。",
+                    localUrl = localUrl,
+                    progressPercent = 96
+                )
+            )
+            if (!HealthProbe.awaitReady(readinessUrl) { attempt, totalAttempts ->
+                    val progressPercent = (96 + ((attempt.toDouble() / totalAttempts.toDouble()) * 3.0).toInt()).coerceIn(96, 99)
+                    updateState(
+                        StartupState(
+                            phase = StartupPhase.WAITING_READY,
+                            message = "正在等待本地 Tavern 服务就绪。",
+                            details = "健康检查 $attempt/$totalAttempts，已耗时 ${attempt} 秒。",
+                            localUrl = localUrl,
+                            progressPercent = progressPercent
+                        )
+                    )
+                }) {
                 throw BootstrapException("本地 Tavern 服务在等待窗口内未就绪。")
             }
 
@@ -162,7 +234,8 @@ class StartupCoordinatorService : Service() {
                 StartupState(
                     phase = StartupPhase.READY,
                     message = "本地 Tavern 服务已就绪，正在打开 WebView。",
-                    localUrl = localUrl
+                    localUrl = localUrl,
+                    progressPercent = 100
                 )
             )
             startServerMonitor()
@@ -194,13 +267,23 @@ class StartupCoordinatorService : Service() {
     private suspend fun interruptForSettings() {
         bootstrapJob?.cancel(CancellationException("Interrupted for bootstrap settings."))
         bootstrapJob = null
+        updateState(
+            StartupState(
+                phase = StartupPhase.PAUSING,
+                message = "正在暂停本地 Tavern 服务。",
+                details = "正在停止本地服务进程，完成后会进入设置状态。",
+                localUrl = BootConfig.localServiceUrl(applicationContext),
+                progressPercent = 0
+            )
+        )
         stopManagedProcesses()
         withContext(Dispatchers.Main.immediate) {
             updateState(
                 StartupState(
                     phase = StartupPhase.CONFIGURING,
                     message = "已暂停启动，请调整 Tavern 配置。",
-                    localUrl = BootConfig.localServiceUrl(applicationContext)
+                    localUrl = BootConfig.localServiceUrl(applicationContext),
+                    progressPercent = 0
                 )
             )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -336,7 +419,8 @@ class StartupCoordinatorService : Service() {
                 StartupState(
                     phase = StartupPhase.ERROR,
                     message = "本地 Tavern 服务已退出。",
-                    details = details
+                    details = details,
+                    progressPercent = 0
                 )
             )
         }

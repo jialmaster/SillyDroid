@@ -12,12 +12,16 @@ import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.core.widget.NestedScrollView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.DynamicColors
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.tabs.TabLayout
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -42,8 +46,21 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var scrollView: NestedScrollView
     private lateinit var actionBarView: View
     private lateinit var loadingIndicator: LinearProgressIndicator
+    private lateinit var searchLayout: TextInputLayout
+    private lateinit var searchInput: TextInputEditText
     private lateinit var dataPanelView: View
     private lateinit var quickFieldContainer: LinearLayout
+    private lateinit var floatingLogsSwitch: MaterialSwitch
+    private lateinit var extensionsPanelView: View
+    private lateinit var extensionsListContainer: LinearLayout
+    private lateinit var extensionsEmptyView: TextView
+    private lateinit var extensionsInstallButton: MaterialButton
+    private lateinit var extensionsReloadButton: MaterialButton
+    private lateinit var logsPanelView: View
+    private lateinit var logsMetaView: TextView
+    private lateinit var logsEmptyView: TextView
+    private lateinit var logsContentView: TextView
+    private lateinit var logsReloadButton: MaterialButton
     private lateinit var settingsPanelView: View
     private lateinit var sectionContainer: LinearLayout
     private lateinit var configPathView: TextView
@@ -51,6 +68,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var restoreDefaultsButton: ImageButton
     private lateinit var importButton: MaterialButton
     private lateinit var exportButton: MaterialButton
+    private lateinit var clearDataButton: MaterialButton
     private lateinit var saveStartButton: MaterialButton
 
     private val configRepository by lazy { TavernConfigRepository(this) }
@@ -60,6 +78,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var formController: BootstrapSettingsFormController
     private lateinit var settingsCoordinator: BootstrapSettingsSettingsCoordinator
     private lateinit var dataCoordinator: BootstrapSettingsDataCoordinator
+    private lateinit var extensionsCoordinator: BootstrapSettingsExtensionsCoordinator
+    private lateinit var logsCoordinator: BootstrapSettingsLogsCoordinator
 
     private val exportArchiveLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { targetUri ->
         if (targetUri != null) {
@@ -85,6 +105,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         bindViews()
         initializeControllers()
         screenController.initialize()
+        extensionsCoordinator.initialize()
+        logsCoordinator.initialize()
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = getString(R.string.bootstrap_settings_title)
@@ -100,6 +122,10 @@ class BootstrapSettingsActivity : AppCompatActivity() {
                 dataCoordinator.restoreDefaults()
             }
         }
+        floatingLogsSwitch.isChecked = hostConfigStore.floatingLogBubbleEnabled
+        floatingLogsSwitch.setOnCheckedChangeListener { _, isChecked ->
+            hostConfigStore.floatingLogBubbleEnabled = isChecked
+        }
         importButton.setOnClickListener {
             importArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
         }
@@ -107,15 +133,33 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
             exportArchiveLauncher.launch(getString(R.string.bootstrap_settings_export_name, timestamp))
         }
+        clearDataButton.setOnClickListener {
+            screenController.confirmClearData {
+                dataCoordinator.clearDataAndRestart {
+                    setResult(Activity.RESULT_OK, Intent().putExtra(resultShouldStartKey, true))
+                    finish()
+                }
+            }
+        }
         saveStartButton.setOnClickListener {
             settingsCoordinator.saveAndStart()
         }
+        searchInput.doAfterTextChanged { text ->
+            val query = text?.toString().orEmpty()
+            val hasMatch = formController.applySearchQuery(query)
+            searchLayout.error = if (query.isNotBlank() && !hasMatch) {
+                getString(R.string.bootstrap_settings_search_no_result)
+            } else {
+                null
+            }
+        }
 
         screenController.setBusy(true)
-        window.decorView.post {
+        val currentPhase = StartupRuntimeStore.state.value.phase
+        if (currentPhase != StartupPhase.PAUSING && currentPhase != StartupPhase.CONFIGURING) {
             startService(StartupCoordinatorService.createStopForSettingsIntent(this))
-            settingsCoordinator.loadConfiguration()
         }
+        settingsCoordinator.loadConfiguration()
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -135,8 +179,21 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         scrollView = findViewById(R.id.bootstrapSettingsScrollView)
         actionBarView = findViewById(R.id.bootstrapSettingsActionBar)
         loadingIndicator = findViewById(R.id.bootstrapSettingsLoading)
+        searchLayout = findViewById(R.id.bootstrapSettingsSearchLayout)
+        searchInput = findViewById(R.id.bootstrapSettingsSearchInput)
         dataPanelView = findViewById(R.id.bootstrapSettingsDataPanel)
         quickFieldContainer = findViewById(R.id.bootstrapSettingsQuickFieldContainer)
+        floatingLogsSwitch = findViewById(R.id.bootstrapSettingsFloatingLogsSwitch)
+        extensionsPanelView = findViewById(R.id.bootstrapSettingsExtensionsPanel)
+        extensionsListContainer = findViewById(R.id.bootstrapSettingsExtensionsListContainer)
+        extensionsEmptyView = findViewById(R.id.bootstrapSettingsExtensionsEmpty)
+        extensionsInstallButton = findViewById(R.id.bootstrapSettingsExtensionsInstallButton)
+        extensionsReloadButton = findViewById(R.id.bootstrapSettingsExtensionsReloadButton)
+        logsPanelView = findViewById(R.id.bootstrapSettingsLogsPanel)
+        logsMetaView = findViewById(R.id.bootstrapSettingsLogsMeta)
+        logsEmptyView = findViewById(R.id.bootstrapSettingsLogsEmpty)
+        logsContentView = findViewById(R.id.bootstrapSettingsLogsContent)
+        logsReloadButton = findViewById(R.id.bootstrapSettingsLogsReloadButton)
         settingsPanelView = findViewById(R.id.bootstrapSettingsSettingsPanel)
         sectionContainer = findViewById(R.id.bootstrapSettingsSectionContainer)
         configPathView = findViewById(R.id.bootstrapSettingsConfigPath)
@@ -144,6 +201,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         restoreDefaultsButton = findViewById(R.id.bootstrapSettingsRestoreDefaultsButton)
         importButton = findViewById(R.id.bootstrapSettingsImportButton)
         exportButton = findViewById(R.id.bootstrapSettingsExportButton)
+        clearDataButton = findViewById(R.id.bootstrapSettingsClearDataButton)
         saveStartButton = findViewById(R.id.bootstrapSettingsSaveButton)
     }
 
@@ -156,14 +214,26 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             actionBarView = actionBarView,
             tabLayout = tabLayout,
             dataPanelView = dataPanelView,
+            extensionsPanelView = extensionsPanelView,
+            logsPanelView = logsPanelView,
             settingsPanelView = settingsPanelView,
             configPathView = configPathView,
             warningView = warningView,
             loadingIndicator = loadingIndicator,
+            searchLayout = searchLayout,
+            floatingLogsSwitch = floatingLogsSwitch,
             restoreDefaultsButton = restoreDefaultsButton,
             importButton = importButton,
             exportButton = exportButton,
-            saveStartButton = saveStartButton
+            clearDataButton = clearDataButton,
+            saveStartButton = saveStartButton,
+            onTabChanged = { index ->
+                if (this::extensionsCoordinator.isInitialized && index == 1) {
+                    extensionsCoordinator.reloadExtensions()
+                } else if (this::logsCoordinator.isInitialized && index == 2) {
+                    logsCoordinator.reloadLatestLog()
+                }
+            }
         )
         formController = BootstrapSettingsFormController(
             activity = this,
@@ -191,11 +261,31 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             hostConfigStore = hostConfigStore,
             setBusy = screenController::setBusy,
             applyDraft = settingsCoordinator::applyDraftConfiguration,
-            reloadConfiguration = settingsCoordinator::loadConfiguration,
+            replaceLoadedConfiguration = settingsCoordinator::replaceLoadedConfiguration,
             showDataError = settingsCoordinator::showValidationMessage,
             showBanner = { message -> screenController.showBanner(message) },
             showMessage = screenController::showMessage,
             updateDirtyState = settingsCoordinator::refreshDirtyState
+        )
+        extensionsCoordinator = BootstrapSettingsExtensionsCoordinator(
+            activity = this,
+            listContainer = extensionsListContainer,
+            emptyView = extensionsEmptyView,
+            installButton = extensionsInstallButton,
+            reloadButton = extensionsReloadButton,
+            setBusy = screenController::setBusy,
+            showError = settingsCoordinator::showValidationMessage,
+            showBanner = { message -> screenController.showBanner(message) },
+            showMessage = screenController::showMessage
+        )
+        logsCoordinator = BootstrapSettingsLogsCoordinator(
+            activity = this,
+            metaView = logsMetaView,
+            emptyView = logsEmptyView,
+            contentView = logsContentView,
+            reloadButton = logsReloadButton,
+            setBusy = screenController::setBusy,
+            showError = settingsCoordinator::showValidationMessage
         )
     }
 }

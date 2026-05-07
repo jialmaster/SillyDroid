@@ -74,6 +74,8 @@ bash ./scripts/build-tavern-android-apk.sh \
 - 当前链路只支持 `linux-arm64`。
 - `android-tavern/app/src/main/assets/bootstrap/rootfs`、`android-tavern/app/src/main/assets/bootstrap/server` 与 `android-tavern/app/src/main/jniLibs/arm64-v8a` 中的运行时生成物不入库，由脚本在打包时写入。
 - release APK 仍然要求提供正式签名；未签名产物会直接失败。
+- `android-tavern/gradle.properties` 里的 `staiAndroidHostVersion` 是 Android 宿主自己的版本号，不等同于上游 SillyTavern tag。
+- APK 默认版本名格式为 `宿主版本+tavern.上游tag`，例如 `1.0.0+tavern.1.18.0`。
 
 ## GitHub Actions
 
@@ -118,7 +120,7 @@ Actions 里打 `release` APK 优先读取下面四个 Secrets：
 
 ### 自动发布的 Release 规则
 
-- Release tag 格式：`sillytavern-<上游tag>-<build_type>`
-- APK 资产名格式：`sillytavern-android-<上游tag>-<build_type>.apk`
+- Release tag 格式：`stai-sillytavern-v<宿主版本>-<上游tag>-<build_type>`
+- APK 资产名格式：`stai-sillytavern-android-v<宿主版本>-<上游tag>-<build_type>.apk`
 
 工作流只监控上游 GitHub Release tag，不会跟踪上游每一次普通提交。

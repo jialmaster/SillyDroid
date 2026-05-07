@@ -17,7 +17,9 @@ import androidx.core.widget.NestedScrollView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.google.android.material.textfield.TextInputLayout
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.R as MaterialR
 
@@ -29,14 +31,20 @@ internal class BootstrapSettingsScreenController(
     private val actionBarView: android.view.View,
     private val tabLayout: TabLayout,
     private val dataPanelView: android.view.View,
+    private val extensionsPanelView: android.view.View,
+    private val logsPanelView: android.view.View,
     private val settingsPanelView: android.view.View,
     private val configPathView: TextView,
     private val warningView: TextView,
     private val loadingIndicator: LinearProgressIndicator,
+    private val searchLayout: TextInputLayout,
+    private val floatingLogsSwitch: MaterialSwitch,
     private val restoreDefaultsButton: ImageButton,
     private val importButton: MaterialButton,
     private val exportButton: MaterialButton,
-    private val saveStartButton: MaterialButton
+    private val clearDataButton: MaterialButton,
+    private val saveStartButton: MaterialButton,
+    private val onTabChanged: (Int) -> Unit = {}
 ) {
     private var selectedTabIndex = 0
     private var bannerIsError = false
@@ -52,9 +60,12 @@ internal class BootstrapSettingsScreenController(
 
     fun setBusy(busy: Boolean) {
         loadingIndicator.isVisible = busy
+        searchLayout.isEnabled = !busy
+        floatingLogsSwitch.isEnabled = !busy
         restoreDefaultsButton.isEnabled = !busy
         importButton.isEnabled = !busy
         exportButton.isEnabled = !busy
+        clearDataButton.isEnabled = !busy
         saveStartButton.isEnabled = !busy
     }
 
@@ -67,7 +78,7 @@ internal class BootstrapSettingsScreenController(
     }
 
     fun focusValidationTab(isQuickField: Boolean) {
-        tabLayout.getTabAt(if (isQuickField) 0 else 1)?.select()
+        tabLayout.getTabAt(if (isQuickField) 0 else 3)?.select()
     }
 
     fun showBanner(message: String?, isError: Boolean = false) {
@@ -148,9 +159,22 @@ internal class BootstrapSettingsScreenController(
             .show()
     }
 
+    fun confirmClearData(onConfirm: () -> Unit) {
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.bootstrap_settings_clear_data_confirm_title)
+            .setMessage(R.string.bootstrap_settings_clear_data_confirm_message)
+            .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
+            .setPositiveButton(R.string.bootstrap_settings_clear_data_confirm_action) { _, _ ->
+                onConfirm()
+            }
+            .show()
+    }
+
     private fun setupTabs() {
         if (tabLayout.tabCount == 0) {
             tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_data))
+            tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_extensions))
+            tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_logs))
             tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_settings))
         }
 
@@ -175,7 +199,11 @@ internal class BootstrapSettingsScreenController(
     private fun switchTab(index: Int) {
         selectedTabIndex = index
         dataPanelView.isVisible = index == 0
-        settingsPanelView.isVisible = index == 1
+        extensionsPanelView.isVisible = index == 1
+        logsPanelView.isVisible = index == 2
+        settingsPanelView.isVisible = index == 3
+        searchLayout.isVisible = index == 3
+        onTabChanged(index)
         scrollView.post {
             scrollView.scrollTo(0, 0)
         }

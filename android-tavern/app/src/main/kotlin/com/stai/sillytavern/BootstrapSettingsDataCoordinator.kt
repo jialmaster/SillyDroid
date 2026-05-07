@@ -3,6 +3,7 @@ package com.stai.sillytavern
 import android.net.Uri
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -16,7 +17,7 @@ internal class BootstrapSettingsDataCoordinator(
     private val hostConfigStore: BootstrapHostConfigStore,
     private val setBusy: (Boolean) -> Unit,
     private val applyDraft: (LoadedTavernConfig) -> Unit,
-    private val reloadConfiguration: (String?) -> Unit,
+    private val replaceLoadedConfiguration: (LoadedTavernConfig, String?) -> Unit,
     private val showDataError: (String) -> Unit,
     private val showBanner: (String) -> Unit,
     private val showMessage: (String) -> Unit,
@@ -67,16 +68,40 @@ internal class BootstrapSettingsDataCoordinator(
                 runCatching {
                     stopServiceForImport()
                     val importResult = archiveManager.importDataArchive(sourceUri)
-                    val importedPort = configRepository.readConfiguredPort(configRepository.loadConfig().root)
-                    importResult to importedPort
+                    val loadedConfig = configRepository.loadConfig()
+                    val importedPort = configRepository.readConfiguredPort(loadedConfig.root)
+                    Triple(importResult, importedPort, loadedConfig)
                 }
             }
             setBusy(false)
 
-            result.onSuccess { (importResult, importedPort) ->
-                reloadConfiguration(buildImportMessage(preview, importResult, previousPort, importedPort))
+            result.onSuccess { (importResult, importedPort, loadedConfig) ->
+                replaceLoadedConfiguration(
+                    loadedConfig,
+                    buildImportMessage(preview, importResult, previousPort, importedPort)
+                )
             }.onFailure { exception ->
                 showDataError(exception.message ?: activity.getString(R.string.bootstrap_settings_import_failed))
+            }
+        }
+    }
+
+    fun clearDataAndRestart(onRestart: () -> Unit) {
+        activity.lifecycleScope.launch {
+            setBusy(true)
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    stopServiceForImport()
+                    clearManagedData()
+                    hostConfigStore.servicePort = BootConfig.defaultServicePort
+                }
+            }
+            setBusy(false)
+
+            result.onSuccess {
+                onRestart()
+            }.onFailure { exception ->
+                showDataError(exception.message ?: activity.getString(R.string.bootstrap_settings_clear_data_failed))
             }
         }
     }
@@ -147,6 +172,14 @@ internal class BootstrapSettingsDataCoordinator(
 
         if (stoppedState == null) {
             throw BootstrapException(activity.getString(R.string.bootstrap_settings_import_stop_timeout))
+        }
+    }
+
+    private fun clearManagedData() {
+        val paths = HostPaths.from(activity)
+        paths.ensureWorkingDirectories()
+        for (directoryName in TavernConfigRepository.managedTopLevelDirectories) {
+            File(paths.serverDataDir, directoryName).deleteRecursively()
         }
     }
 }

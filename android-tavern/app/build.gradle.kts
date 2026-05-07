@@ -69,8 +69,53 @@ fun resolveAndroidVersionCode(rawValue: String): Int {
         ?: throw GradleException("STAI_ANDROID_VERSION_CODE 必须是正整数：$rawValue")
 }
 
+fun resolveAndroidHostVersion(): String {
+    val envValue = System.getenv("STAI_ANDROID_HOST_VERSION").orEmpty().trim()
+    if (envValue.isNotBlank()) {
+        return envValue
+    }
+
+    return providers.gradleProperty("staiAndroidHostVersion").orNull?.trim().orEmpty().ifBlank { "0.1.0" }
+}
+
+fun resolveAndroidVersionName(
+    rawValue: String,
+    hostVersion: String,
+    upstreamVersion: String
+): String {
+    if (rawValue.isNotBlank()) {
+        return rawValue
+    }
+
+    return if (upstreamVersion.isBlank()) {
+        hostVersion
+    } else {
+        "$hostVersion+tavern.$upstreamVersion"
+    }
+}
+
+fun quoteBuildConfigString(value: String): String {
+    return buildString {
+        append('"')
+        value.forEach { character ->
+            when (character) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                else -> append(character)
+            }
+        }
+        append('"')
+    }
+}
+
 val androidVersionCode = resolveAndroidVersionCode(System.getenv("STAI_ANDROID_VERSION_CODE").orEmpty().trim())
-val androidVersionName = System.getenv("STAI_ANDROID_VERSION_NAME").orEmpty().trim().ifBlank { "0.1.0" }
+val androidHostVersion = resolveAndroidHostVersion()
+val androidUpstreamVersion = System.getenv("STAI_ANDROID_UPSTREAM_VERSION").orEmpty().trim()
+val androidVersionName = resolveAndroidVersionName(
+    rawValue = System.getenv("STAI_ANDROID_VERSION_NAME").orEmpty().trim(),
+    hostVersion = androidHostVersion,
+    upstreamVersion = androidUpstreamVersion
+)
 
 android {
     namespace = "com.stai.sillytavern"
@@ -113,6 +158,8 @@ android {
         targetSdk = 36
         versionCode = androidVersionCode
         versionName = androidVersionName
+        buildConfigField("String", "STAI_HOST_VERSION", quoteBuildConfigString(androidHostVersion))
+        buildConfigField("String", "STAI_GITHUB_REPOSITORY", quoteBuildConfigString("jialmaster/ST.AI.SillyTavern.Android"))
     }
 
     buildTypes {
