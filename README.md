@@ -1,5 +1,9 @@
 # ST.AI SillyTavern Android
 
+[![tavern-runtime-image-release](https://github.com/jialmaster/ST.AI.SillyTavern.Android/actions/workflows/tavern-runtime-image-release.yml/badge.svg?branch=master)](https://github.com/jialmaster/ST.AI.SillyTavern.Android/actions/workflows/tavern-runtime-image-release.yml)
+[![tavern-upstream-apk](https://github.com/jialmaster/ST.AI.SillyTavern.Android/actions/workflows/tavern-upstream-apk.yml/badge.svg?branch=master)](https://github.com/jialmaster/ST.AI.SillyTavern.Android/actions/workflows/tavern-upstream-apk.yml)
+[![latest release](https://img.shields.io/github/v/release/jialmaster/ST.AI.SillyTavern.Android?display_name=tag)](https://github.com/jialmaster/ST.AI.SillyTavern.Android/releases/latest)
+
 这个仓库只保留 SillyTavern Android 宿主与打包链。
 
 ## 包含内容
