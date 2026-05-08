@@ -1,6 +1,7 @@
 package com.stai.sillytavern
 
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
@@ -66,6 +67,10 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var logsExportButton: MaterialButton
     private lateinit var logsReloadButton: MaterialButton
     private lateinit var settingsPanelView: View
+    private lateinit var aboutPanelView: View
+    private lateinit var aboutVersionView: TextView
+    private lateinit var aboutUpdateStatusView: TextView
+    private lateinit var aboutUpdateButton: MaterialButton
     private lateinit var sectionContainer: LinearLayout
     private lateinit var configPathView: TextView
     private lateinit var warningView: TextView
@@ -78,12 +83,14 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private val configRepository by lazy { TavernConfigRepository(this) }
     private val archiveManager by lazy { TavernDataArchiveManager(this) }
     private val hostConfigStore by lazy { BootstrapHostConfigStore(this) }
+    private val downloadManager by lazy { getSystemService(DownloadManager::class.java) }
     private lateinit var screenController: BootstrapSettingsScreenController
     private lateinit var formController: BootstrapSettingsFormController
     private lateinit var settingsCoordinator: BootstrapSettingsSettingsCoordinator
     private lateinit var dataCoordinator: BootstrapSettingsDataCoordinator
     private lateinit var extensionsCoordinator: BootstrapSettingsExtensionsCoordinator
     private lateinit var logsCoordinator: BootstrapSettingsLogsCoordinator
+    private lateinit var appUpdateCoordinator: AppUpdateCoordinator
 
     private val exportArchiveLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { targetUri ->
         if (targetUri != null) {
@@ -120,6 +127,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         screenController.initialize()
         extensionsCoordinator.initialize()
         logsCoordinator.initialize()
+        appUpdateCoordinator.initialize()
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = getString(R.string.bootstrap_settings_title)
@@ -175,6 +183,21 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         settingsCoordinator.loadConfiguration()
     }
 
+    override fun onStart() {
+        super.onStart()
+        appUpdateCoordinator.onStart()
+    }
+
+    override fun onStop() {
+        appUpdateCoordinator.onStop()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        appUpdateCoordinator.onDestroy()
+        super.onDestroy()
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         if (item.itemId == android.R.id.home) {
             settingsCoordinator.attemptFinish()
@@ -211,6 +234,10 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         logsExportButton = findViewById(R.id.bootstrapSettingsLogsExportButton)
         logsReloadButton = findViewById(R.id.bootstrapSettingsLogsReloadButton)
         settingsPanelView = findViewById(R.id.bootstrapSettingsSettingsPanel)
+        aboutPanelView = findViewById(R.id.bootstrapSettingsAboutPanel)
+        aboutVersionView = findViewById(R.id.bootstrapSettingsAboutVersion)
+        aboutUpdateStatusView = findViewById(R.id.bootstrapSettingsAboutUpdateStatus)
+        aboutUpdateButton = findViewById(R.id.bootstrapSettingsAboutUpdateButton)
         sectionContainer = findViewById(R.id.bootstrapSettingsSectionContainer)
         configPathView = findViewById(R.id.bootstrapSettingsConfigPath)
         warningView = findViewById(R.id.bootstrapSettingsWarning)
@@ -233,6 +260,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             extensionsPanelView = extensionsPanelView,
             logsPanelView = logsPanelView,
             settingsPanelView = settingsPanelView,
+            aboutPanelView = aboutPanelView,
             configPathView = configPathView,
             warningView = warningView,
             loadingIndicator = loadingIndicator,
@@ -250,6 +278,15 @@ class BootstrapSettingsActivity : AppCompatActivity() {
                     logsCoordinator.reloadLatestLog()
                 }
             }
+        )
+        appUpdateCoordinator = AppUpdateCoordinator(
+            activity = this,
+            downloadManager = downloadManager,
+            aboutUi = AppUpdateCoordinator.AboutUi(
+                versionView = aboutVersionView,
+                statusView = aboutUpdateStatusView,
+                actionButton = aboutUpdateButton
+            )
         )
         formController = BootstrapSettingsFormController(
             activity = this,

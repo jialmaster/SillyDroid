@@ -36,11 +36,28 @@
     <string name="bootstrap_settings_tab_settings">设置</string>
     <string name="bootstrap_settings_tab_extensions">扩展</string>
     <string name="bootstrap_settings_tab_logs">日志</string>
+    <string name="bootstrap_settings_tab_about">关于</string>
     <string name="bootstrap_settings_data_summary">导入、导出和恢复默认放在这里。导入会自动识别官方用户备份 ZIP 和宿主全量数据 ZIP。</string>
     <string name="bootstrap_settings_host_options_title">宿主界面</string>
     <string name="bootstrap_settings_host_floating_logs_title">显示日志悬浮球</string>
     <string name="bootstrap_settings_host_floating_logs_summary">在主界面右下角显示悬浮球，点击后可实时查看最新酒馆日志。该开关立即生效，不需要重新保存配置。</string>
     <string name="bootstrap_settings_settings_summary">端口和服务配置集中在这里，按分组折叠显示。</string>
+    <string name="bootstrap_settings_about_summary">这里集中显示当前宿主说明、版本信息和应用更新入口，主界面不再单独保留更新按钮。</string>
+    <string name="bootstrap_settings_about_info_title">应用信息</string>
+    <string name="bootstrap_settings_about_info_body">SillyTavern Android 宿主负责在本机启动 Tavern 服务、管理扩展和执行完整数据迁移。关于页只展示宿主信息与更新状态，不会改动当前 Tavern 配置。</string>
+    <string name="bootstrap_settings_about_version_title">版本信息</string>
+    <string name="bootstrap_settings_about_version_value">应用版本：%1$s
+宿主版本：%2$s
+构建类型：%3$s</string>
+    <string name="bootstrap_settings_about_update_title">应用更新</string>
+    <string name="bootstrap_settings_about_update_status_idle">当前已是最新版本，可手动再次检查。</string>
+    <string name="bootstrap_settings_about_update_status_available">发现新版本：%1$s</string>
+    <string name="bootstrap_settings_about_update_status_downloading">正在下载更新：%1$s</string>
+    <string name="bootstrap_settings_about_update_status_ready">更新已下载完成：%1$s</string>
+    <string name="bootstrap_settings_about_update_action_check">检查更新</string>
+    <string name="bootstrap_settings_about_update_action_download">下载更新</string>
+    <string name="bootstrap_settings_about_update_action_install">安装更新</string>
+    <string name="bootstrap_settings_about_update_action_downloading">下载中</string>
     <string name="bootstrap_settings_extensions_summary">这里列出当前宿主 extensions 目录中的第三方扩展。每个扩展按目录读取 manifest.json，可直接删除或按 manifest.homePage 重新拉取。</string>
     <string name="bootstrap_settings_logs_summary">显示 android-tavern/logs 目录下最新更新的日志文件，方便快速判断酒馆是否真正启动、报错或卡住。</string>
     <string name="bootstrap_settings_extensions_reload">重新扫描</string>
@@ -155,4 +172,5 @@
     <string name="app_update_sha_failed">更新包校验失败，已删除损坏文件。</string>
     <string name="app_update_install_prepare_failed">更新包已下载，但无法打开安装器。</string>
     <string name="app_update_install_permission_required">请允许当前应用安装更新包后重试。</string>
+    <string name="app_update_no_updates">当前已是最新版本。</string>
 </resources>

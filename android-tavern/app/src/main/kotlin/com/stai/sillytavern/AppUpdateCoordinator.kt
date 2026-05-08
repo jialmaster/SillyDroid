@@ -10,12 +10,14 @@ import android.os.Environment
 import android.provider.Settings
 import android.view.View
 import android.widget.ImageButton
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -31,11 +33,22 @@ import java.util.Locale
 
 internal class AppUpdateCoordinator(
     private val activity: AppCompatActivity,
-    private val updateButtonContainer: View,
-    private val updateButton: ImageButton,
-    private val updateBadgeView: View,
-    private val downloadManager: DownloadManager
+    private val downloadManager: DownloadManager,
+    private val overlayUi: OverlayUi? = null,
+    private val aboutUi: AboutUi? = null
 ) {
+    internal data class OverlayUi(
+        val container: View,
+        val button: ImageButton,
+        val badgeView: View
+    )
+
+    internal data class AboutUi(
+        val versionView: TextView,
+        val statusView: TextView,
+        val actionButton: MaterialButton
+    )
+
     private data class DownloadRecord(
         val status: Int,
         val reason: Int,
@@ -72,9 +85,14 @@ internal class AppUpdateCoordinator(
 
     fun initialize() {
         clearInstalledVersionState()
-        updateButton.setOnClickListener {
+        overlayUi?.button?.setOnClickListener {
             activity.lifecycleScope.launch {
-                handleUpdateButtonClick()
+                handleUpdateAction()
+            }
+        }
+        aboutUi?.actionButton?.setOnClickListener {
+            activity.lifecycleScope.launch {
+                handleUpdateAction()
             }
         }
         renderState()
@@ -102,7 +120,7 @@ internal class AppUpdateCoordinator(
         syncJob = null
     }
 
-    private suspend fun handleUpdateButtonClick() {
+    private suspend fun handleUpdateAction() {
         val currentDownload = stateStore.downloadState
         if (currentDownload != null) {
             when (queryDownloadRecord(currentDownload.downloadId)?.status) {
@@ -125,7 +143,12 @@ internal class AppUpdateCoordinator(
         val availableRelease = stateStore.availableRelease ?: run {
             checkForUpdates(silent = false)
             stateStore.availableRelease
-        } ?: return
+        }
+
+        if (availableRelease == null) {
+            showMessage(R.string.app_update_no_updates)
+            return
+        }
 
         startDownload(availableRelease)
     }
@@ -384,14 +407,65 @@ internal class AppUpdateCoordinator(
     private fun renderState() {
         val currentDownload = stateStore.downloadState
         val availableRelease = stateStore.availableRelease
-        updateButtonContainer.isVisible = false
-        updateBadgeView.isVisible = false
-        updateButton.isEnabled = true
-        updateButton.contentDescription = when {
+        overlayUi?.container?.isVisible = false
+        overlayUi?.badgeView?.isVisible = false
+        overlayUi?.button?.isEnabled = true
+        overlayUi?.button?.contentDescription = when {
             currentDownload?.verifiedReadyToInstall == true -> activity.getString(R.string.bootstrap_update_open)
             currentDownload != null -> activity.getString(R.string.app_update_download_running)
             availableRelease != null -> activity.getString(R.string.bootstrap_update_open)
             else -> activity.getString(R.string.bootstrap_update_open)
+        }
+
+        aboutUi?.let { ui ->
+            ui.versionView.text = activity.getString(
+                R.string.bootstrap_settings_about_version_value,
+                resolveCurrentVersionName(),
+                BuildConfig.STAI_HOST_VERSION,
+                BuildConfig.BUILD_TYPE.uppercase(Locale.US)
+            )
+
+            val statusText: String
+            val actionText: String
+            val actionEnabled: Boolean
+            when {
+                currentDownload?.verifiedReadyToInstall == true -> {
+                    statusText = activity.getString(
+                        R.string.bootstrap_settings_about_update_status_ready,
+                        currentDownload.versionName
+                    )
+                    actionText = activity.getString(R.string.bootstrap_settings_about_update_action_install)
+                    actionEnabled = true
+                }
+
+                currentDownload != null -> {
+                    statusText = activity.getString(
+                        R.string.bootstrap_settings_about_update_status_downloading,
+                        currentDownload.versionName
+                    )
+                    actionText = activity.getString(R.string.bootstrap_settings_about_update_action_downloading)
+                    actionEnabled = false
+                }
+
+                availableRelease != null -> {
+                    statusText = activity.getString(
+                        R.string.bootstrap_settings_about_update_status_available,
+                        availableRelease.versionName
+                    )
+                    actionText = activity.getString(R.string.bootstrap_settings_about_update_action_download)
+                    actionEnabled = true
+                }
+
+                else -> {
+                    statusText = activity.getString(R.string.bootstrap_settings_about_update_status_idle)
+                    actionText = activity.getString(R.string.bootstrap_settings_about_update_action_check)
+                    actionEnabled = true
+                }
+            }
+
+            ui.statusView.text = statusText
+            ui.actionButton.text = actionText
+            ui.actionButton.isEnabled = actionEnabled
         }
     }
 

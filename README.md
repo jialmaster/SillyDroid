@@ -1,5 +1,10 @@
 # ST.AI SillyTavern Android
 
+[![APK Action](https://img.shields.io/github/actions/workflow/status/jialmaster/ST.AI.SillyTavern.Android/tavern-upstream-apk.yml?label=APK%20Action)](https://github.com/jialmaster/ST.AI.SillyTavern.Android/actions/workflows/tavern-upstream-apk.yml)
+[![Runtime Action](https://img.shields.io/github/actions/workflow/status/jialmaster/ST.AI.SillyTavern.Android/tavern-runtime-image-release.yml?label=Runtime%20Action)](https://github.com/jialmaster/ST.AI.SillyTavern.Android/actions/workflows/tavern-runtime-image-release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/jialmaster/ST.AI.SillyTavern.Android?display_name=tag&label=Latest%20Version)](https://github.com/jialmaster/ST.AI.SillyTavern.Android/releases/latest)
+[![Release Time](https://img.shields.io/github/release-date/jialmaster/ST.AI.SillyTavern.Android?label=Release%20Time)](https://github.com/jialmaster/ST.AI.SillyTavern.Android/releases/latest)
+
 这个仓库维护 ST.AI 的 SillyTavern Android 宿主、离线运行时打包链，以及基于指定 SillyTavern tag 的 APK 构建与发布流程。
 
 上游 SillyTavern 源码不会长期作为主工程保存在仓库里；构建时会同步指定 tag，生成宿主使用的 server payload。

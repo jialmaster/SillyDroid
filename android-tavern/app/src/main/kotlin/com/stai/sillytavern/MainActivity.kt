@@ -170,10 +170,12 @@ class MainActivity : AppCompatActivity() {
         bindViews()
         appUpdateCoordinator = AppUpdateCoordinator(
             activity = this,
-            updateButtonContainer = bootstrapUpdateButtonContainer,
-            updateButton = bootstrapUpdateButton,
-            updateBadgeView = bootstrapUpdateBadge,
-            downloadManager = downloadManager
+            downloadManager = downloadManager,
+            overlayUi = AppUpdateCoordinator.OverlayUi(
+                container = bootstrapUpdateButtonContainer,
+                button = bootstrapUpdateButton,
+                badgeView = bootstrapUpdateBadge
+            )
         )
         appUpdateCoordinator.initialize()
         applySystemBarInsets()

@@ -34,6 +34,7 @@ internal class BootstrapSettingsScreenController(
     private val extensionsPanelView: android.view.View,
     private val logsPanelView: android.view.View,
     private val settingsPanelView: android.view.View,
+    private val aboutPanelView: android.view.View,
     private val configPathView: TextView,
     private val warningView: TextView,
     private val loadingIndicator: LinearProgressIndicator,
@@ -176,6 +177,7 @@ internal class BootstrapSettingsScreenController(
             tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_extensions))
             tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_logs))
             tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_settings))
+            tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_about))
         }
 
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
@@ -202,6 +204,7 @@ internal class BootstrapSettingsScreenController(
         extensionsPanelView.isVisible = index == 1
         logsPanelView.isVisible = index == 2
         settingsPanelView.isVisible = index == 3
+        aboutPanelView.isVisible = index == 4
         searchLayout.isVisible = index == 3
         onTabChanged(index)
         scrollView.post {
