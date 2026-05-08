@@ -88,6 +88,7 @@ jobs:
           fetch-depth: 0
           sparse-checkout: |
             android-tavern/gradle.properties
+            scripts/read-stai-build-config.py
             stai-build-config.json
 
       - name: Resolve upstream release and build plan
@@ -105,42 +106,7 @@ jobs:
             local key_path="$1"
             local default_value="$2"
 
-            python3 - "stai-build-config.json" "$key_path" "$default_value" <<'PY'
-            import json
-            import sys
-            from pathlib import Path
-
-            config_path = Path(sys.argv[1])
-            key_path = sys.argv[2]
-            default_value = sys.argv[3]
-
-            if not config_path.is_file():
-              print(default_value)
-              raise SystemExit(0)
-
-            try:
-              data = json.loads(config_path.read_text(encoding="utf-8"))
-            except Exception:
-              print(default_value)
-              raise SystemExit(0)
-
-            current = data
-            for part in key_path.split('.'):
-              if isinstance(current, dict) and part in current:
-                current = current[part]
-              else:
-                current = default_value
-                break
-
-            if current is None:
-              current = default_value
-            elif isinstance(current, bool):
-              current = 'true' if current else 'false'
-            elif not isinstance(current, (str, int, float)):
-              current = default_value
-
-            print(str(current))
-            PY
+            python3 ./scripts/read-stai-build-config.py stai-build-config.json "$key_path" "$default_value"
           }
 
           config_tavern_tag="$(read_build_config_value 'build.tavernVersion' 'latest')"

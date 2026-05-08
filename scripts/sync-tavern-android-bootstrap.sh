@@ -15,43 +15,12 @@ read_build_config_value() {
     local key_path="$1"
     local default_value="$2"
 
-    if [[ ! -f "$build_config_path" ]] || ! command -v python3 >/dev/null 2>&1; then
+    if ! command -v python3 >/dev/null 2>&1; then
         printf '%s\n' "$default_value"
         return
     fi
 
-    python3 - "$build_config_path" "$key_path" "$default_value" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-config_path = Path(sys.argv[1])
-key_path = sys.argv[2]
-default_value = sys.argv[3]
-
-try:
-    data = json.loads(config_path.read_text(encoding="utf-8"))
-except Exception:
-    print(default_value)
-    raise SystemExit(0)
-
-current = data
-for part in key_path.split('.'):
-    if isinstance(current, dict) and part in current:
-        current = current[part]
-    else:
-        current = default_value
-        break
-
-if current is None:
-    current = default_value
-elif isinstance(current, bool):
-    current = 'true' if current else 'false'
-elif not isinstance(current, (str, int, float)):
-    current = default_value
-
-print(str(current))
-PY
+    python3 "$workspace_root/scripts/read-stai-build-config.py" "$build_config_path" "$key_path" "$default_value"
 }
 
 resolve_latest_tavern_tag() {
