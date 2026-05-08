@@ -140,20 +140,23 @@ internal class AppUpdateCoordinator(
             clearDownloadState(removeDownload = true)
         }
 
+        var checkSucceeded = true
         val availableRelease = stateStore.availableRelease ?: run {
-            checkForUpdates(silent = false)
+            checkSucceeded = checkForUpdates(silent = false)
             stateStore.availableRelease
         }
 
         if (availableRelease == null) {
-            showMessage(R.string.app_update_no_updates)
+            if (checkSucceeded) {
+                showMessage(R.string.app_update_no_updates)
+            }
             return
         }
 
         startDownload(availableRelease)
     }
 
-    private suspend fun checkForUpdates(silent: Boolean) {
+    private suspend fun checkForUpdates(silent: Boolean): Boolean {
         val result = withContext(Dispatchers.IO) {
             runCatching {
                 fetchLatestAvailableRelease()
@@ -175,6 +178,8 @@ internal class AppUpdateCoordinator(
             }
             renderState()
         }
+
+        return result.isSuccess
     }
 
     private suspend fun fetchLatestAvailableRelease(): AppUpdateStateStore.AvailableRelease? {

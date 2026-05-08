@@ -161,6 +161,8 @@ class MainActivity : AppCompatActivity() {
             recreate()
             return@registerForActivityResult
         }
+
+        renderBootstrapState(StartupRuntimeStore.state.value)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

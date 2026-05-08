@@ -3,7 +3,6 @@ set -euo pipefail
 
 ubuntu_base_url='https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz'
 ubuntu_ports_base_url='https://ports.ubuntu.com/ubuntu-ports'
-pgdg_packages_index_url='https://apt.postgresql.org/pub/repos/apt/dists/noble-pgdg/main/binary-arm64/Packages.gz'
 proot_package_url='https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107-70_aarch64.deb'
 proot_source_url='https://github.com/termux/proot/archive/4dba3afbf3a63af89b4d9c1a59bf2bda10f4d10f.zip'
 termux_packages_index_url='https://packages.termux.dev/apt/termux-main/dists/stable/main/binary-aarch64/Packages'
@@ -24,12 +23,9 @@ offline_runtime_packages=(
     libfontconfig1
     libgomp1
     libgssapi-krb5-2
-    postgresql-18
-    postgresql-18-pgvector
 )
 
 apt_repo_names=(
-    pgdg
     ubuntu-security-main
     ubuntu-updates-main
     ubuntu-main
@@ -39,7 +35,6 @@ apt_repo_names=(
 )
 
 apt_repo_urls=(
-    "$pgdg_packages_index_url"
     "$ubuntu_ports_base_url/dists/noble-security/main/binary-arm64/Packages.gz"
     "$ubuntu_ports_base_url/dists/noble-updates/main/binary-arm64/Packages.gz"
     "$ubuntu_ports_base_url/dists/noble/main/binary-arm64/Packages.gz"
@@ -49,7 +44,6 @@ apt_repo_urls=(
 )
 
 apt_repo_bases=(
-    'https://apt.postgresql.org/pub/repos/apt'
     "$ubuntu_ports_base_url"
     "$ubuntu_ports_base_url"
     "$ubuntu_ports_base_url"
@@ -779,7 +773,6 @@ manifest_path="$resolved_target_root/rootfs-manifest.json"
     printf '{\n'
     printf '  "ubuntuBaseUrl": "%s",\n' "$(json_escape "$ubuntu_base_url")"
     printf '  "ubuntuPortsBaseUrl": "%s",\n' "$(json_escape "$ubuntu_ports_base_url")"
-    printf '  "pgdgPackagesIndexUrl": "%s",\n' "$(json_escape "$pgdg_packages_index_url")"
     printf '  "prootPackageUrl": "%s",\n' "$(json_escape "$proot_package_url")"
     printf '  "prootSourceUrl": "%s",\n' "$(json_escape "$proot_source_url")"
     printf '  "prootPatchSignature": "%s",\n' "$(json_escape "$proot_patch_signature")"
