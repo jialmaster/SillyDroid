@@ -1,4 +1,4 @@
-package com.stai.sillytavern
+package com.jm.sillydroid
 
 import android.net.Uri
 import android.widget.TextView

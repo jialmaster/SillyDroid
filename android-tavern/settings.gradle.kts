@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "SillyTavernAndroidHost"
+rootProject.name = "SillyDroid"
 include(":app")

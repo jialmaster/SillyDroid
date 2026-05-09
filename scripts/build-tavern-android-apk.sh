@@ -15,7 +15,7 @@ runtime_image_path=''
 server_package_path=''
 tavern_tag=''
 dependency_packs_override=''
-default_android_build_root="${STAI_TAVERN_ANDROID_BUILD_ROOT:-${STAI_ANDROID_BUILD_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/stai-tavern-android-build}}"
+default_android_build_root="${SILLYDROID_TAVERN_ANDROID_BUILD_ROOT:-${SILLYDROID_ANDROID_BUILD_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/sillydroid-tavern-android-build}}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workspace_root="$(cd "$script_dir/.." && pwd)"
@@ -23,7 +23,7 @@ workspace_android_root="$workspace_root/android-tavern"
 android_root="$(realpath -m "$default_android_build_root/android-project/android-tavern")"
 sync_server_script="$workspace_root/scripts/sync-tavern-android-bootstrap.sh"
 dependency_pack_script="$workspace_root/scripts/build-tavern-dependency-packs.sh"
-build_config_path="$workspace_root/stai-build-config.json"
+build_config_path="$workspace_root/sillydroid-build-config.json"
 rootfs_manifest_path="$workspace_android_root/app/src/main/assets/bootstrap/rootfs/rootfs-manifest.json"
 
 read_build_config_value() {
@@ -35,7 +35,7 @@ read_build_config_value() {
         return
     fi
 
-    python3 "$workspace_root/scripts/read-stai-build-config.py" "$build_config_path" "$key_path" "$default_value"
+    python3 "$workspace_root/scripts/read-sillydroid-build-config.py" "$build_config_path" "$key_path" "$default_value"
 }
 
 source_android_build_common() {
@@ -60,7 +60,7 @@ Usage: build-tavern-android-apk.sh [--runtime-image <path>] [--server-package <p
 - 若不传 --server-package，则默认读取 artifacts/releases/server-source/<rid>/<tag>/server-source.zip，并从 artifacts/releases/dependency-packs/<rid> 组合出最终 server payload。
 - build.includeDependencyPacks 若显式配置为空数组，则跳过 dependency packs，直接依赖 rootfs 提供运行时。
 - 若显式传 --server-package，则直接把该归档写入 Android 工程，不再读取 dependency packs 目录。
-- 若不传 --build-type，则优先读取仓库根目录 stai-build-config.json 的 build.buildType。
+- 若不传 --build-type，则优先读取仓库根目录 sillydroid-build-config.json 的 build.buildType。
 - 缺少前置物料时会直接报错，并提示对应上一阶段命令；不会隐式触发下载或构建。
 EOF
 }
@@ -360,9 +360,9 @@ prepare_staged_android_project() {
         "$staged_root/app/src/main/jniLibs/arm64-v8a"
 
     if [[ -f "$build_config_path" ]]; then
-        cp -f "$build_config_path" "$staged_root/stai-build-config.json"
+        cp -f "$build_config_path" "$staged_root/sillydroid-build-config.json"
     else
-        rm -f "$staged_root/stai-build-config.json"
+        rm -f "$staged_root/sillydroid-build-config.json"
     fi
 }
 
@@ -458,24 +458,24 @@ compose_server_payload_from_components() {
     local archive_file
     local -a dependency_pack_names=()
 
-    stai_assert_path_exists "$server_source_path" "缺少 server source 产物：$server_source_path"
-    stai_require_command unzip
-    stai_ensure_java_home
+    sillydroid_assert_path_exists "$server_source_path" "缺少 server source 产物：$server_source_path"
+    sillydroid_require_command unzip
+    sillydroid_ensure_java_home
 
     rm -rf "$compose_root"
     mkdir -p "$compose_root"
 
     mapfile -t dependency_pack_names < <(resolve_dependency_pack_list)
     if [[ "${#dependency_pack_names[@]}" -gt 0 ]]; then
-        stai_assert_path_exists "$dependency_root" "缺少 dependency packs 目录：$dependency_root"
+        sillydroid_assert_path_exists "$dependency_root" "缺少 dependency packs 目录：$dependency_root"
     fi
 
     if [[ "${#dependency_pack_names[@]}" -eq 0 ]]; then
         if [[ "$rootfs_provides_node_pack" != '1' ]]; then
-            stai_fail '当前 server 启动依赖 node 运行时，请在 includeDependencyPacks 中包含 node。'
+            sillydroid_fail '当前 server 启动依赖 node 运行时，请在 includeDependencyPacks 中包含 node。'
         fi
 
-        stai_progress_stage 1 4 '未选择 dependency packs；将仅使用 rootfs 运行时。'
+        sillydroid_progress_stage 1 4 '未选择 dependency packs；将仅使用 rootfs 运行时。'
         : > "$selected_list_path"
         cat > "$env_file_path" <<'EOF'
 #!/bin/sh
@@ -495,10 +495,10 @@ EOF
 EOF
     else
         if ! command -v python3 >/dev/null 2>&1; then
-            stai_fail "组合 dependency packs 需要 python3 用于 manifest 校验。"
+            sillydroid_fail "组合 dependency packs 需要 python3 用于 manifest 校验。"
         fi
 
-        stai_progress_stage 1 4 "开始校验 dependency manifests 并组合 server payload：${dependency_pack_names[*]}"
+        sillydroid_progress_stage 1 4 "开始校验 dependency manifests 并组合 server payload：${dependency_pack_names[*]}"
         python3 - "$dependency_root" "$selected_list_path" "$env_file_path" "$post_extract_hook_path" "$selection_manifest_path" "$rootfs_provides_node_pack" "${dependency_pack_names[@]}" <<'PY'
 import json
 import pathlib
@@ -630,17 +630,17 @@ selection_manifest_path.write_text(
 PY
     fi
 
-    stai_progress_stage 2 4 "开始解包 server source"
-    stai_extract_archive_with_progress "$server_source_path" "$compose_root" 'server-source'
+    sillydroid_progress_stage 2 4 "开始解包 server source"
+    sillydroid_extract_archive_with_progress "$server_source_path" "$compose_root" 'server-source'
     while IFS= read -r archive_file; do
         [[ -z "$archive_file" ]] && continue
-        stai_log "导入 dependency pack：$archive_file"
-        stai_extract_archive_with_progress "$dependency_root/$archive_file" "$compose_root" "$archive_file"
+        sillydroid_log "导入 dependency pack：$archive_file"
+        sillydroid_extract_archive_with_progress "$dependency_root/$archive_file" "$compose_root" "$archive_file"
     done < "$selected_list_path"
 
 mkdir -p "$(dirname "$output_package_path")"
 rm -f "$output_package_path"
-    stai_progress_stage 3 4 "开始归档组合后的 server payload"
+    sillydroid_progress_stage 3 4 "开始归档组合后的 server payload"
 "$JAVA_HOME/bin/jar" --create --file "$output_package_path" --no-manifest -C "$compose_root" .
     output_archive_size_bytes="$(stat -c '%s' "$output_package_path")"
 
@@ -676,7 +676,7 @@ with open(manifest_path, "w", encoding="utf-8") as handle:
 PY
     fi
 
-    stai_progress_stage 4 4 "server payload 组合完成"
+    sillydroid_progress_stage 4 4 "server payload 组合完成"
 }
 
 if [[ -z "$build_type" || "$build_type" == 'auto' ]]; then
@@ -734,17 +734,17 @@ if [[ -z "$server_package_path" ]]; then
     dependency_packs_root="$workspace_root/artifacts/releases/dependency-packs/$runtime_rid"
 
     if ! generated_server_source_satisfy_request "$generated_server_root"; then
-        stai_fail "缺少可复用的 Tavern server source：$generated_server_root。请先运行 $(server_source_prepare_hint)，或显式传 --server-package。"
+        sillydroid_fail "缺少可复用的 Tavern server source：$generated_server_root。请先运行 $(server_source_prepare_hint)，或显式传 --server-package。"
     fi
-    stai_log "复用已存在的 Tavern server source：$generated_server_root"
+    sillydroid_log "复用已存在的 Tavern server source：$generated_server_root"
 
     if ! dependency_packs_satisfy_request "$dependency_packs_root"; then
-        stai_fail "缺少可复用的 dependency packs：$dependency_packs_root。请先运行 $(dependency_packs_prepare_hint)，或显式传 --server-package。"
+        sillydroid_fail "缺少可复用的 dependency packs：$dependency_packs_root。请先运行 $(dependency_packs_prepare_hint)，或显式传 --server-package。"
     fi
-    stai_log "复用已存在的 dependency packs：$dependency_packs_root"
+    sillydroid_log "复用已存在的 dependency packs：$dependency_packs_root"
 
     composed_server_package_path="$(realpath -m "$default_android_build_root/server-compose-output/$runtime_rid/$tavern_tag/server-payload.zip")"
-    stai_progress_stage 1 3 "开始组合 Tavern server payload"
+    sillydroid_progress_stage 1 3 "开始组合 Tavern server payload"
     compose_server_payload_from_components "$generated_server_root" "$dependency_packs_root" "$composed_server_package_path"
     server_package_path="$composed_server_package_path"
 fi
@@ -757,23 +757,23 @@ apply_runtime_image() {
     local rootfs_root="$bootstrap_root/rootfs"
     local jni_lib_root="$project_root/app/src/main/jniLibs/arm64-v8a"
 
-    stai_assert_path_exists "$image_path" "缺少 Android runtime image：$image_path"
-    stai_require_command unzip
+    sillydroid_assert_path_exists "$image_path" "缺少 Android runtime image：$image_path"
+    sillydroid_require_command unzip
 
-    stai_log "开始应用 Tavern runtime image 到 Android 工程：$image_path"
+    sillydroid_log "开始应用 Tavern runtime image 到 Android 工程：$image_path"
     rm -rf "$extract_root" "$rootfs_root"
     mkdir -p "$extract_root" "$bootstrap_root" "$jni_lib_root"
-    stai_extract_archive_with_progress "$image_path" "$extract_root" 'runtime-image'
+    sillydroid_extract_archive_with_progress "$image_path" "$extract_root" 'runtime-image'
 
-    stai_assert_path_exists "$extract_root/assets/bootstrap/rootfs/rootfs-fs.zip" "runtime image 缺少 rootfs 资产：$image_path"
-    stai_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libproot.so" "runtime image 缺少 jniLibs 资产：$image_path"
+    sillydroid_assert_path_exists "$extract_root/assets/bootstrap/rootfs/rootfs-fs.zip" "runtime image 缺少 rootfs 资产：$image_path"
+    sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libproot.so" "runtime image 缺少 jniLibs 资产：$image_path"
 
     cp -R "$extract_root/assets/bootstrap/rootfs" "$bootstrap_root/"
 
     rm -f "$jni_lib_root"/libproot.so "$jni_lib_root"/libproot-loader.so "$jni_lib_root"/libproot-loader32.so "$jni_lib_root"/libtalloc_2.so
     cp -R "$extract_root/jniLibs/arm64-v8a/." "$jni_lib_root/"
 
-    stai_log "已应用 Tavern runtime image：$image_path"
+    sillydroid_log "已应用 Tavern runtime image：$image_path"
 }
 
 apply_server_package() {
@@ -787,7 +787,7 @@ apply_server_package() {
     local archive_size_bytes='0'
     local synced_at_utc="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-    stai_assert_path_exists "$package_path" "缺少 Tavern server 底包：$package_path"
+    sillydroid_assert_path_exists "$package_path" "缺少 Tavern server 底包：$package_path"
 
     if [[ -f "$source_manifest_path" ]] && command -v python3 >/dev/null 2>&1; then
         archive_file_name="$(python3 - "$source_manifest_path" <<'PY'
@@ -802,7 +802,7 @@ PY
     fi
     archive_path="$server_root/$archive_file_name"
 
-    stai_log "开始应用 Tavern server payload 到 Android 工程：$package_path"
+    sillydroid_log "开始应用 Tavern server payload 到 Android 工程：$package_path"
     mkdir -p "$server_root"
 
     # 服务器 assets 目录只能保留当前生效的一个 payload zip，旧归档残留会被一并打进 APK。
@@ -825,41 +825,41 @@ PY
 EOF
     fi
 
-    stai_log "已应用 Tavern server 底包：$package_path"
+    sillydroid_log "已应用 Tavern server 底包：$package_path"
 }
 
-android_sdk_root="$(stai_resolve_linux_android_sdk_root)"
-stai_ensure_linux_android_sdk "$android_sdk_root"
+android_sdk_root="$(sillydroid_resolve_linux_android_sdk_root)"
+sillydroid_ensure_linux_android_sdk "$android_sdk_root"
 prepare_staged_android_project "$workspace_android_root" "$android_root"
-stai_write_android_local_properties "$android_root" "$android_sdk_root"
-stai_ensure_java_home
+sillydroid_write_android_local_properties "$android_root" "$android_sdk_root"
+sillydroid_ensure_java_home
 
 gradle_task=":app:assemble${build_type^}"
 android_build_root="$(realpath -m "$default_android_build_root")"
 apk_output_dir="$android_build_root/app/outputs/apk/$build_type"
 apk_path="$apk_output_dir/app-$build_type.apk"
-apksigner_path="$android_sdk_root/build-tools/$STAI_ANDROID_BUILD_TOOLS_VERSION/apksigner"
+apksigner_path="$android_sdk_root/build-tools/$SILLYDROID_ANDROID_BUILD_TOOLS_VERSION/apksigner"
 workspace_apk_root="$workspace_root/artifacts/releases/android-apk"
 workspace_apk_path="$workspace_apk_root/app-$build_type.apk"
 
-export STAI_TAVERN_ANDROID_BUILD_ROOT="$android_build_root"
+export SILLYDROID_TAVERN_ANDROID_BUILD_ROOT="$android_build_root"
 mkdir -p "$workspace_apk_root"
 
 if [[ ! -f "$runtime_image_path" ]]; then
-    stai_fail "缺少可复用的 Tavern runtime image：$runtime_image_path。请先运行 $(runtime_image_prepare_hint)，或显式传 --runtime-image。"
+    sillydroid_fail "缺少可复用的 Tavern runtime image：$runtime_image_path。请先运行 $(runtime_image_prepare_hint)，或显式传 --runtime-image。"
 fi
-stai_log "复用 Tavern runtime image：$runtime_image_path"
+sillydroid_log "复用 Tavern runtime image：$runtime_image_path"
 
-stai_progress_stage 2 3 "开始把 runtime image 和 server payload 写入缓存 Android 工程"
+sillydroid_progress_stage 2 3 "开始把 runtime image 和 server payload 写入缓存 Android 工程"
 apply_runtime_image "$runtime_image_path" "$android_root"
 apply_server_package "$server_package_path" "$android_root"
 
-stai_progress_stage 3 3 "开始执行 Gradle 任务：$gradle_task"
+sillydroid_progress_stage 3 3 "开始执行 Gradle 任务：$gradle_task"
 (
     cd "$android_root"
     bash "$workspace_root/gradlew" --no-daemon --console=plain -p "$android_root" "$gradle_task"
 )
-stai_log "Gradle 任务完成：$gradle_task"
+sillydroid_log "Gradle 任务完成：$gradle_task"
 
 if [[ ! -f "$apk_path" ]]; then
     mapfile -t apk_candidates < <(find "$apk_output_dir" -maxdepth 1 -type f -name '*.apk' | sort)
@@ -868,7 +868,7 @@ if [[ ! -f "$apk_path" ]]; then
             apk_path="${apk_candidates[0]}"
             ;;
         0)
-            stai_warn "Tavern APK 构建完成但未找到产物：$apk_path"
+            sillydroid_warn "Tavern APK 构建完成但未找到产物：$apk_path"
             exit 1
             ;;
         *)
@@ -879,16 +879,16 @@ if [[ ! -f "$apk_path" ]]; then
     esac
 fi
 
-stai_assert_path_exists "$apk_path" "Tavern APK 构建完成但未找到产物：$apk_path"
+sillydroid_assert_path_exists "$apk_path" "Tavern APK 构建完成但未找到产物：$apk_path"
 
 if [[ "$build_type" == 'release' ]]; then
     if [[ "$(basename "$apk_path")" == *-unsigned.apk ]]; then
-        stai_fail "release APK 仍为 unsigned：$(basename "$apk_path")。请提供正式签名参数。"
+        sillydroid_fail "release APK 仍为 unsigned：$(basename "$apk_path")。请提供正式签名参数。"
     fi
 
-    stai_assert_path_exists "$apksigner_path" "缺少 apksigner：$apksigner_path"
+    sillydroid_assert_path_exists "$apksigner_path" "缺少 apksigner：$apksigner_path"
     "$apksigner_path" verify "$apk_path"
-    stai_log "已验证 Tavern release APK 签名：$apk_path"
+    sillydroid_log "已验证 Tavern release APK 签名：$apk_path"
 fi
 
 cp "$apk_path" "$workspace_apk_path"

@@ -151,10 +151,10 @@ bash "$workspace_root/scripts/sync-tavern-android-bootstrap.sh" \
     --target-root "$server_dir"
 
 printf '\n==> stage 4/4 apk\n'
-export STAI_ANDROID_HOST_VERSION="$host_version"
-export STAI_ANDROID_UPSTREAM_VERSION="$tavern_tag"
-export STAI_ANDROID_VERSION_NAME="$version_name"
-export STAI_ANDROID_VERSION_CODE="$version_code"
+export SILLYDROID_ANDROID_HOST_VERSION="$host_version"
+export SILLYDROID_ANDROID_UPSTREAM_VERSION="$tavern_tag"
+export SILLYDROID_ANDROID_VERSION_NAME="$version_name"
+export SILLYDROID_ANDROID_VERSION_CODE="$version_code"
 
 bash "$workspace_root/scripts/build-tavern-android-apk.sh" \
     --runtime-rid "$runtime_rid" \

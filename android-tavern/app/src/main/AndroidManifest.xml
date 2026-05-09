@@ -15,13 +15,13 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SillyTavernAndroidHost"
+        android:theme="@style/Theme.SillyDroid"
         android:usesCleartextTraffic="true">
 
         <activity
             android:name=".BootstrapSettingsActivity"
             android:exported="false"
-            android:theme="@style/Theme.SillyTavernAndroidHost.Settings"
+            android:theme="@style/Theme.SillyDroid.Settings"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
@@ -41,7 +41,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Runs the embedded offline Linux runtime bootstrap for the local SillyTavern web service." />
+                android:value="Runs the embedded offline Linux runtime bootstrap for the local Tavern web service hosted by SillyDroid." />
         </service>
 
         <provider
@@ -56,3 +56,4 @@
     </application>
 
 </manifest>
+

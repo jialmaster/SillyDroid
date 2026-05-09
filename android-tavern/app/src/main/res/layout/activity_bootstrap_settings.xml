@@ -17,28 +17,28 @@
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/bootstrapSettingsToolbar"
             android:layout_width="match_parent"
-            android:layout_height="@dimen/stai_toolbar_height"
+            android:layout_height="@dimen/sillydroid_toolbar_height"
             android:background="@android:color/transparent"
             android:contentInsetStartWithNavigation="0dp"
-            android:minHeight="@dimen/stai_toolbar_height"
+            android:minHeight="@dimen/sillydroid_toolbar_height"
             android:paddingStart="0dp"
-            android:paddingEnd="@dimen/stai_space_xs"
+            android:paddingEnd="@dimen/sillydroid_space_xs"
             android:titleTextColor="?attr/colorOnSurface"
             app:navigationIconTint="?attr/colorOnSurface"
-            app:titleTextAppearance="@style/TextAppearance.SillyTavern.SettingsToolbarTitle">
+            app:titleTextAppearance="@style/TextAppearance.SillyDroid.SettingsToolbarTitle">
 
             <TextView
                 android:id="@+id/bootstrapSettingsToolbarTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:layout_gravity="start|center_vertical"
-                android:layout_marginStart="@dimen/stai_space_sm"
+                android:layout_marginStart="@dimen/sillydroid_space_sm"
                 android:ellipsize="end"
                 android:gravity="center_vertical"
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:text="@string/bootstrap_settings_title"
-                android:textAppearance="@style/TextAppearance.SillyTavern.SettingsToolbarTitle"
+                android:textAppearance="@style/TextAppearance.SillyDroid.SettingsToolbarTitle"
                 android:textColor="?attr/colorOnSurface" />
         </com.google.android.material.appbar.MaterialToolbar>
 
@@ -46,23 +46,23 @@
             android:id="@+id/bootstrapSettingsWarning"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/stai_space_md"
-            android:layout_marginTop="@dimen/stai_space_xxxs"
-            android:layout_marginEnd="@dimen/stai_space_md"
-            android:paddingLeft="@dimen/stai_space_md"
-            android:paddingTop="@dimen/stai_space_sm"
-            android:paddingRight="@dimen/stai_space_md"
-            android:paddingBottom="@dimen/stai_space_sm"
+            android:layout_marginStart="@dimen/sillydroid_space_md"
+            android:layout_marginTop="@dimen/sillydroid_space_xxxs"
+            android:layout_marginEnd="@dimen/sillydroid_space_md"
+            android:paddingLeft="@dimen/sillydroid_space_md"
+            android:paddingTop="@dimen/sillydroid_space_sm"
+            android:paddingRight="@dimen/sillydroid_space_md"
+            android:paddingBottom="@dimen/sillydroid_space_sm"
             android:textSize="10sp"
             android:visibility="gone" />
 
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/bootstrapSettingsTabs"
             android:layout_width="match_parent"
-            android:layout_height="@dimen/stai_tab_height"
-            android:layout_marginStart="@dimen/stai_space_md"
-            android:layout_marginTop="@dimen/stai_space_xxxs"
-            android:layout_marginEnd="@dimen/stai_space_md"
+            android:layout_height="@dimen/sillydroid_tab_height"
+            android:layout_marginStart="@dimen/sillydroid_space_md"
+            android:layout_marginTop="@dimen/sillydroid_space_xxxs"
+            android:layout_marginEnd="@dimen/sillydroid_space_md"
             android:layout_marginBottom="0dp"
             app:tabGravity="fill"
             app:tabIndicatorFullWidth="false"
@@ -73,39 +73,39 @@
             app:tabPaddingEnd="0dp"
             app:tabPaddingStart="0dp"
             app:tabPaddingTop="0dp"
-            app:tabTextAppearance="@style/TextAppearance.SillyTavern.SettingsTab" />
+            app:tabTextAppearance="@style/TextAppearance.SillyDroid.SettingsTab" />
 
         <com.google.android.material.progressindicator.LinearProgressIndicator
             android:id="@+id/bootstrapSettingsLoading"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/stai_space_md"
-            android:layout_marginTop="@dimen/stai_space_xxxs"
-            android:layout_marginEnd="@dimen/stai_space_md"
+            android:layout_marginStart="@dimen/sillydroid_space_md"
+            android:layout_marginTop="@dimen/sillydroid_space_xxxs"
+            android:layout_marginEnd="@dimen/sillydroid_space_md"
             android:indeterminate="true"
             android:visibility="gone" />
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/bootstrapSettingsSearchLayout"
-            style="@style/Widget.SillyTavern.SettingsTextInputLayout.OutlinedBox"
+            style="@style/Widget.SillyDroid.SettingsTextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/stai_space_md"
-            android:layout_marginTop="@dimen/stai_space_sm"
-            android:layout_marginEnd="@dimen/stai_space_md"
+            android:layout_marginStart="@dimen/sillydroid_space_md"
+            android:layout_marginTop="@dimen/sillydroid_space_sm"
+            android:layout_marginEnd="@dimen/sillydroid_space_md"
             android:visibility="gone"
             app:endIconMode="clear_text"
             android:hint="@string/bootstrap_settings_search_hint">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/bootstrapSettingsSearchInput"
-                style="@style/Widget.SillyTavern.SettingsTextInputEditText"
+                style="@style/Widget.SillyDroid.SettingsTextInputEditText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:imeOptions="actionSearch"
                 android:inputType="text"
                 android:maxLines="1"
-                android:minHeight="@dimen/stai_input_min_height" />
+                android:minHeight="@dimen/sillydroid_input_min_height" />
         </com.google.android.material.textfield.TextInputLayout>
     </LinearLayout>
 
@@ -117,17 +117,17 @@
         android:clipToPadding="false"
         android:fadeScrollbars="false"
         android:fillViewport="true">
-        android:scrollbarSize="@dimen/stai_scrollbar_size"
+        android:scrollbarSize="@dimen/sillydroid_scrollbar_size"
         android:scrollbars="vertical">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingStart="@dimen/stai_space_md"
-            android:paddingTop="@dimen/stai_space_sm"
-            android:paddingEnd="@dimen/stai_space_md"
-            android:paddingBottom="@dimen/stai_space_lg">
+            android:paddingStart="@dimen/sillydroid_space_md"
+            android:paddingTop="@dimen/sillydroid_space_sm"
+            android:paddingEnd="@dimen/sillydroid_space_md"
+            android:paddingBottom="@dimen/sillydroid_space_lg">
 
             <LinearLayout
                 android:id="@+id/bootstrapSettingsDataPanel"
@@ -195,7 +195,7 @@
                                     android:orientation="vertical">
 
                                     <TextView
-                                        style="@style/TextAppearance.SillyTavern.SettingsCardTitle"
+                                        style="@style/TextAppearance.SillyDroid.SettingsCardTitle"
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
                                         android:text="@string/bootstrap_settings_host_floating_logs_title"
@@ -203,7 +203,7 @@
                                         android:textStyle="bold" />
 
                                     <TextView
-                                        style="@style/TextAppearance.SillyTavern.SettingsBody"
+                                        style="@style/TextAppearance.SillyDroid.SettingsBody"
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="3dp"
@@ -266,21 +266,21 @@
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/bootstrapSettingsImportButton"
-                                style="@style/Widget.SillyTavern.SettingsButton.Outlined"
+                                style="@style/Widget.SillyDroid.SettingsButton.Outlined"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_marginEnd="4dp"
                                 android:layout_weight="1"
-                                android:minHeight="@dimen/stai_control_min_height"
+                                android:minHeight="@dimen/sillydroid_control_min_height"
                                 android:text="@string/bootstrap_settings_import" />
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/bootstrapSettingsExportButton"
-                                style="@style/Widget.SillyTavern.SettingsButton.Outlined"
+                                style="@style/Widget.SillyDroid.SettingsButton.Outlined"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:minHeight="@dimen/stai_control_min_height"
+                                android:minHeight="@dimen/sillydroid_control_min_height"
                                 android:text="@string/bootstrap_settings_export" />
                         </LinearLayout>
 
@@ -295,11 +295,11 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/bootstrapSettingsClearDataButton"
-                            style="@style/Widget.SillyTavern.SettingsButton.Outlined"
+                            style="@style/Widget.SillyDroid.SettingsButton.Outlined"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="6dp"
-                            android:minHeight="@dimen/stai_control_min_height"
+                            android:minHeight="@dimen/sillydroid_control_min_height"
                             android:text="@string/bootstrap_settings_clear_data"
                             android:textColor="?attr/colorError"
                             app:strokeColor="?attr/colorError" />
@@ -394,7 +394,7 @@
                             android:orientation="horizontal">
 
                             <TextView
-                                style="@style/TextAppearance.SillyTavern.SettingsSectionTitle"
+                                style="@style/TextAppearance.SillyDroid.SettingsSectionTitle"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
@@ -404,27 +404,27 @@
 
                             <ImageButton
                                 android:id="@+id/bootstrapSettingsExtensionsInstallButton"
-                                android:layout_width="@dimen/stai_settings_dense_icon_button_size"
-                                android:layout_height="@dimen/stai_settings_dense_icon_button_size"
+                                android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
+                                android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
                                 android:layout_marginEnd="4dp"
                                 android:background="?attr/selectableItemBackgroundBorderless"
                                 android:contentDescription="@string/bootstrap_settings_extensions_install"
                                 android:minWidth="0dp"
                                 android:minHeight="0dp"
-                                android:padding="@dimen/stai_settings_dense_icon_button_padding"
+                                android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
                                 android:scaleType="centerInside"
                                 android:src="@drawable/ic_add"
                                 android:tint="?attr/colorPrimary" />
 
                             <ImageButton
                                 android:id="@+id/bootstrapSettingsExtensionsReloadButton"
-                                android:layout_width="@dimen/stai_settings_dense_icon_button_size"
-                                android:layout_height="@dimen/stai_settings_dense_icon_button_size"
+                                android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
+                                android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
                                 android:background="?attr/selectableItemBackgroundBorderless"
                                 android:contentDescription="@string/bootstrap_settings_extensions_reload"
                                 android:minWidth="0dp"
                                 android:minHeight="0dp"
-                                android:padding="@dimen/stai_settings_dense_icon_button_padding"
+                                android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
                                 android:scaleType="centerInside"
                                 android:src="@drawable/ic_restore_defaults"
                                 android:tint="?attr/colorOnSurfaceVariant" />
@@ -526,28 +526,28 @@
 
                                 <com.google.android.material.button.MaterialButton
                                     android:id="@+id/bootstrapSettingsLogsSelectButton"
-                                    style="@style/Widget.SillyTavern.SettingsButton.Outlined"
+                                    style="@style/Widget.SillyDroid.SettingsButton.Outlined"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_marginEnd="6dp"
-                                    android:minHeight="@dimen/stai_control_min_height"
+                                    android:minHeight="@dimen/sillydroid_control_min_height"
                                     android:text="@string/bootstrap_settings_logs_select" />
 
                                 <com.google.android.material.button.MaterialButton
                                     android:id="@+id/bootstrapSettingsLogsExportButton"
-                                    style="@style/Widget.SillyTavern.SettingsButton.Outlined"
+                                    style="@style/Widget.SillyDroid.SettingsButton.Outlined"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_marginEnd="6dp"
-                                    android:minHeight="@dimen/stai_control_min_height"
+                                    android:minHeight="@dimen/sillydroid_control_min_height"
                                     android:text="@string/bootstrap_settings_logs_export" />
 
                                 <com.google.android.material.button.MaterialButton
                                     android:id="@+id/bootstrapSettingsLogsReloadButton"
-                                    style="@style/Widget.SillyTavern.SettingsButton.Outlined"
+                                    style="@style/Widget.SillyDroid.SettingsButton.Outlined"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:minHeight="@dimen/stai_control_min_height"
+                                    android:minHeight="@dimen/sillydroid_control_min_height"
                                     android:text="@string/bootstrap_settings_logs_reload" />
                             </LinearLayout>
                         </LinearLayout>
@@ -616,7 +616,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
-                    android:minHeight="@dimen/stai_control_min_height"
+                    android:minHeight="@dimen/sillydroid_control_min_height"
                     android:orientation="horizontal">
 
                     <TextView
@@ -630,14 +630,14 @@
 
                     <ImageButton
                         android:id="@+id/bootstrapSettingsRestoreDefaultsButton"
-                        android:layout_width="@dimen/stai_settings_dense_icon_button_size"
-                        android:layout_height="@dimen/stai_settings_dense_icon_button_size"
+                        android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
+                        android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
                         android:layout_gravity="center_vertical"
                         android:background="?attr/selectableItemBackgroundBorderless"
                         android:contentDescription="@string/bootstrap_settings_restore_defaults"
                         android:minWidth="0dp"
                         android:minHeight="0dp"
-                        android:padding="@dimen/stai_settings_dense_icon_button_padding"
+                        android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
                         android:scaleType="centerInside"
                         android:src="@drawable/ic_restore_defaults"
                         android:tint="?attr/colorOnSurfaceVariant" />
@@ -778,11 +778,11 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/bootstrapSettingsAboutUpdateButton"
-                            style="@style/Widget.SillyTavern.SettingsButton.Outlined"
+                            style="@style/Widget.SillyDroid.SettingsButton.Outlined"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
-                            android:minHeight="@dimen/stai_control_min_height"
+                            android:minHeight="@dimen/sillydroid_control_min_height"
                             android:text="@string/bootstrap_settings_about_update_action_check" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -797,17 +797,17 @@
         android:background="?attr/colorSurface"
         android:elevation="8dp"
         android:orientation="vertical"
-        android:paddingStart="@dimen/stai_space_md"
-        android:paddingTop="@dimen/stai_space_sm"
-        android:paddingEnd="@dimen/stai_space_md"
-        android:paddingBottom="@dimen/stai_space_md">
+        android:paddingStart="@dimen/sillydroid_space_md"
+        android:paddingTop="@dimen/sillydroid_space_sm"
+        android:paddingEnd="@dimen/sillydroid_space_md"
+        android:paddingBottom="@dimen/sillydroid_space_md">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/bootstrapSettingsSaveButton"
-            style="@style/Widget.SillyTavern.SettingsButton"
+            style="@style/Widget.SillyDroid.SettingsButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="@dimen/stai_control_min_height"
+            android:minHeight="@dimen/sillydroid_control_min_height"
             android:text="@string/bootstrap_settings_save_start" />
     </LinearLayout>
 

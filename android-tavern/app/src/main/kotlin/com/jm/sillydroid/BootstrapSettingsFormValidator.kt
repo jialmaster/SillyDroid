@@ -1,4 +1,4 @@
-package com.stai.sillytavern
+package com.jm.sillydroid
 
 internal object BootstrapSettingsFormValidator {
     fun coerceFieldValue(field: TavernConfigFieldSpec, rawValue: Any?): Any {

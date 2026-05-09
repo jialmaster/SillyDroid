@@ -17,7 +17,7 @@ upstream_repo='SillyTavern/SillyTavern'
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workspace_root="$(cd "$script_dir/.." && pwd)"
-build_config_path="$workspace_root/stai-build-config.json"
+build_config_path="$workspace_root/sillydroid-build-config.json"
 gradle_properties_path="$workspace_root/android-tavern/gradle.properties"
 
 usage() {
@@ -65,7 +65,7 @@ read_build_config_value() {
         return
     fi
 
-    python3 "$workspace_root/scripts/read-stai-build-config.py" "$build_config_path" "$key_path" "$default_value"
+    python3 "$workspace_root/scripts/read-sillydroid-build-config.py" "$build_config_path" "$key_path" "$default_value"
 }
 
 resolve_latest_tavern_tag() {
@@ -82,7 +82,7 @@ import urllib.request
 repo = sys.argv[1]
 request = urllib.request.Request(
     f'https://api.github.com/repos/{repo}/releases/latest',
-    headers={'User-Agent': 'STAI-Android-Build'}
+    headers={'User-Agent': 'SillyDroid-Android-Build'}
 )
 with urllib.request.urlopen(request) as response:
     payload = json.load(response)
@@ -118,7 +118,7 @@ releases = []
 while True:
     request = urllib.request.Request(
         f'https://api.github.com/repos/{repo}/releases?per_page=100&page={page}',
-        headers={'User-Agent': 'STAI-Android-Build'}
+        headers={'User-Agent': 'SillyDroid-Android-Build'}
     )
     try:
         with urllib.request.urlopen(request) as response:
@@ -180,10 +180,10 @@ import urllib.request
 workspace_root, host_version_base, safe_tag, build_type, current_head_sha, repo_slug = sys.argv[1:]
 
 tag_pattern = re.compile(
-    rf"^stai-sillytavern-v{re.escape(host_version_base)}(?:\.(\d+))?-[0-9A-Za-z._-]+-(?:debug|release)$"
+    rf"^sillydroid-v{re.escape(host_version_base)}(?:\.(\d+))?-[0-9A-Za-z._-]+-(?:debug|release)$"
 )
 exact_tag_pattern = re.compile(
-    rf"^stai-sillytavern-v{re.escape(host_version_base)}(?:\.(\d+))?-{re.escape(safe_tag)}-{re.escape(build_type)}$"
+    rf"^sillydroid-v{re.escape(host_version_base)}(?:\.(\d+))?-{re.escape(safe_tag)}-{re.escape(build_type)}$"
 )
 
 
@@ -210,7 +210,7 @@ def extract_counter(tag_name: str):
 matched_any = False
 max_counter = 0
 
-for tag_name in run_git("tag", "--list", f"stai-sillytavern-v{host_version_base}*"):
+for tag_name in run_git("tag", "--list", f"sillydroid-v{host_version_base}*"):
     counter = extract_counter(tag_name)
     if counter is None:
         continue
@@ -222,7 +222,7 @@ for tag_name in run_git(
     "--points-at",
     current_head_sha,
     "--list",
-    f"stai-sillytavern-v{host_version_base}*-{safe_tag}-{build_type}",
+    f"sillydroid-v{host_version_base}*-{safe_tag}-{build_type}",
 ):
     if not exact_tag_pattern.match(tag_name):
         continue
@@ -239,7 +239,7 @@ if repo_slug:
     while True:
         request = urllib.request.Request(
             f"https://api.github.com/repos/{repo_slug}/releases?per_page=100&page={page}",
-            headers={"User-Agent": "STAI-Android-Build"},
+            headers={"User-Agent": "SillyDroid-Android-Build"},
         )
         try:
             with urllib.request.urlopen(request) as response:
@@ -377,7 +377,7 @@ if [[ -n "$compare_base" && "$compare_base" != '00000000000000000000000000000000
         rootfs_changed='true'
     fi
 
-    if printf '%s\n' "$changed_files" | grep -E '^(scripts/(android-build-common\.sh|build-tavern-dependency-packs\.sh)|stai-build-config\.json)' >/dev/null 2>&1; then
+    if printf '%s\n' "$changed_files" | grep -E '^(scripts/(android-build-common\.sh|build-tavern-dependency-packs\.sh)|sillydroid-build-config\.json)' >/dev/null 2>&1; then
         dependency_changed='true'
     fi
 
@@ -385,7 +385,7 @@ if [[ -n "$compare_base" && "$compare_base" != '00000000000000000000000000000000
         server_changed='true'
     fi
 
-    if printf '%s\n' "$changed_files" | grep -E '^(android-tavern/|gradle/|gradlew|gradlew\.bat|scripts/(android-build-common\.sh|build-tavern-android-apk\.sh)|stai-build-config\.json|\.github/workflows/tavern-upstream-apk\.yml)' >/dev/null 2>&1; then
+    if printf '%s\n' "$changed_files" | grep -E '^(android-tavern/|gradle/|gradlew|gradlew\.bat|scripts/(android-build-common\.sh|build-tavern-android-apk\.sh)|sillydroid-build-config\.json|\.github/workflows/sillydroid-upstream-apk\.yml)' >/dev/null 2>&1; then
         apk_changed='true'
     fi
 fi
@@ -404,9 +404,9 @@ server_release_title="Tavern server source ${normalized_tag} linux-arm64 (${host
 server_asset_name='server-source.zip'
 server_manifest_name='server-source-manifest.json'
 
-artifact_name="stai-sillytavern-android-v${host_version}-${safe_tag}-${build_type}"
-release_tag="stai-sillytavern-v${host_version}-${safe_tag}-${build_type}"
-release_title="ST.AI SillyTavern Android v${host_version} / Tavern ${normalized_tag} ${build_type}"
+artifact_name="sillydroid-android-v${host_version}-${safe_tag}-${build_type}"
+release_tag="sillydroid-v${host_version}-${safe_tag}-${build_type}"
+release_title="SillyDroid Android v${host_version} / Tavern ${normalized_tag} ${build_type}"
 release_prerelease='true'
 if [[ "$build_type" == 'release' ]]; then
     release_prerelease='false'

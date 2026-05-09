@@ -17,8 +17,8 @@ include_explicit='0'
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workspace_root="$(cd "$script_dir/.." && pwd)"
 target_root="$workspace_root/artifacts/releases/dependency-packs/$runtime_rid"
-working_root="${STAI_TAVERN_ANDROID_DEPENDENCY_PACKS_WORK_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/stai-tavern-dependency-packs}"
-build_config_path="$workspace_root/stai-build-config.json"
+working_root="${SILLYDROID_TAVERN_ANDROID_DEPENDENCY_PACKS_WORK_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/sillydroid-tavern-dependency-packs}"
+build_config_path="$workspace_root/sillydroid-build-config.json"
 ubuntu_ports_base_url='https://ports.ubuntu.com/ubuntu-ports'
 
 apt_repo_names=(
@@ -57,7 +57,7 @@ read_build_config_value() {
         return
     fi
 
-    python3 "$workspace_root/scripts/read-stai-build-config.py" "$build_config_path" "$key_path" "$default_value"
+    python3 "$workspace_root/scripts/read-sillydroid-build-config.py" "$build_config_path" "$key_path" "$default_value"
 }
 
 source_android_build_common() {
@@ -76,7 +76,7 @@ Usage: build-tavern-dependency-packs.sh [--runtime-rid linux-arm64] [--target-ro
 
 说明：
 - 依赖包输出目录默认为 artifacts/releases/dependency-packs/<rid>。
-- 未传 --include 时，优先读取 stai-build-config.json 的 build.includeDependencyPacks。
+- 未传 --include 时，优先读取 sillydroid-build-config.json 的 build.includeDependencyPacks。
 - 若配置项缺失或格式非法，则回退默认 node,git；若显式配置为空数组，则禁用 dependency packs。
 EOF
 }
@@ -167,10 +167,10 @@ json_escape() {
     printf '%s' "$value"
 }
 
-stai_ensure_java_home
-stai_require_command tar
-stai_require_command find
-stai_require_command unzip
+sillydroid_ensure_java_home
+sillydroid_require_command tar
+sillydroid_require_command find
+sillydroid_require_command unzip
 
 resolved_target_root="$(realpath -m "$target_root")"
 resolved_working_root="$(realpath -m "$working_root")"
@@ -488,21 +488,21 @@ resolve_apt_package_dependencies() {
 
 if pack_is_selected 'node'; then
     node_pack_root="$extract_root/node"
-    node_archive_path="$downloads_root/node-v${STAI_NODE_VERSION}-linux-arm64.tar.xz"
-    node_archive_url="https://nodejs.org/dist/v${STAI_NODE_VERSION}/node-v${STAI_NODE_VERSION}-linux-arm64.tar.xz"
+    node_archive_path="$downloads_root/node-v${SILLYDROID_NODE_VERSION}-linux-arm64.tar.xz"
+    node_archive_url="https://nodejs.org/dist/v${SILLYDROID_NODE_VERSION}/node-v${SILLYDROID_NODE_VERSION}-linux-arm64.tar.xz"
     node_manifest_path="$resolved_target_root/node.manifest.json"
-    node_pack_archive_name="dependency-node-v${STAI_NODE_VERSION}-${runtime_rid}.zip"
+    node_pack_archive_name="dependency-node-v${SILLYDROID_NODE_VERSION}-${runtime_rid}.zip"
     node_pack_archive_path="$resolved_target_root/$node_pack_archive_name"
 
-    stai_progress_stage 1 3 "准备 node dependency pack 下载"
-    stai_download_file_if_missing "$node_archive_url" "$node_archive_path"
+    sillydroid_progress_stage 1 3 "准备 node dependency pack 下载"
+    sillydroid_download_file_if_missing "$node_archive_url" "$node_archive_path"
 
     rm -rf "$node_pack_root"
     mkdir -p "$node_pack_root/node"
-    stai_progress_stage 2 3 "开始解压 node runtime"
-    stai_extract_archive_with_progress "$node_archive_path" "$node_pack_root/node" 'node-runtime' 1
-    stai_assert_path_exists "$node_pack_root/node/bin/node" "Node runtime 解压失败：$node_archive_path"
-    cat > "$node_pack_root/node/stai-post-extract.sh" <<'EOF'
+    sillydroid_progress_stage 2 3 "开始解压 node runtime"
+    sillydroid_extract_archive_with_progress "$node_archive_path" "$node_pack_root/node" 'node-runtime' 1
+    sillydroid_assert_path_exists "$node_pack_root/node/bin/node" "Node runtime 解压失败：$node_archive_path"
+    cat > "$node_pack_root/node/sillydroid-post-extract.sh" <<'EOF'
 #!/bin/sh
 set -eu
 
@@ -514,13 +514,13 @@ fi
 EOF
 
     mapfile -t node_packaged_files < <(find "$node_pack_root" -type f -printf '%P\n' | LC_ALL=C sort)
-    stai_progress_stage 3 3 "开始归档 node dependency pack"
+    sillydroid_progress_stage 3 3 "开始归档 node dependency pack"
     "$JAVA_HOME/bin/jar" --create --file "$node_pack_archive_path" --no-manifest -C "$node_pack_root" .
 
     {
         printf '{\n'
         printf '  "name": "node",\n'
-        printf '  "version": "%s",\n' "$(json_escape "$STAI_NODE_VERSION")"
+        printf '  "version": "%s",\n' "$(json_escape "$SILLYDROID_NODE_VERSION")"
         printf '  "runtimeRid": "%s",\n' "$(json_escape "$runtime_rid")"
         printf '  "archiveFile": "%s",\n' "$(json_escape "$node_pack_archive_name")"
         printf '  "checksum": "",\n'
@@ -530,7 +530,7 @@ EOF
         printf '    "pathPrepend": ["/tavern/server/node/bin"],\n'
         printf '    "variables": {"NODE_HOME": "/tavern/server/node", "TAVERN_NODE_BIN": "/tavern/server/node/bin/node"}\n'
         printf '  },\n'
-        printf '  "postExtractScripts": ["node/stai-post-extract.sh"],\n'
+        printf '  "postExtractScripts": ["node/sillydroid-post-extract.sh"],\n'
         printf '  "files": [\n'
         node_file_count="${#node_packaged_files[@]}"
         for index in "${!node_packaged_files[@]}"; do
@@ -560,15 +560,15 @@ if pack_is_selected 'git'; then
 
     mkdir -p "$apt_indexes_root" "$apt_packages_root"
 
-    stai_log "开始准备 git dependency pack 索引"
-    stai_download_queue_reset
+    sillydroid_log "开始准备 git dependency pack 索引"
+    sillydroid_download_queue_reset
     for ((index = 0; index < ${#apt_repo_names[@]}; index++)); do
         repo_name="${apt_repo_names[$index]}"
         repo_url="${apt_repo_urls[$index]}"
         repo_archive_path="$apt_indexes_root/$repo_name.Packages.gz"
-        stai_queue_download_if_missing "$repo_url" "$repo_archive_path" "apt-index:$repo_name"
+        sillydroid_queue_download_if_missing "$repo_url" "$repo_archive_path" "apt-index:$repo_name"
     done
-    stai_run_download_queue
+    sillydroid_run_download_queue
 
     apt_filename_by_package=()
     apt_depends_by_package=()
@@ -584,23 +584,23 @@ if pack_is_selected 'git'; then
 
     mapfile -t resolved_git_package_names < <(resolve_apt_package_dependencies git)
     if [[ "${#resolved_git_package_names[@]}" -eq 0 ]]; then
-        stai_fail '未能解析 git dependency pack 的 apt 依赖。'
+        sillydroid_fail '未能解析 git dependency pack 的 apt 依赖。'
     fi
 
-    stai_log "开始下载 ${#resolved_git_package_names[@]} 个 git apt 包"
-    stai_download_queue_reset
+    sillydroid_log "开始下载 ${#resolved_git_package_names[@]} 个 git apt 包"
+    sillydroid_download_queue_reset
     for package_name in "${resolved_git_package_names[@]}"; do
         package_path="$apt_packages_root/$(basename "${apt_filename_by_package[$package_name]}")"
         package_url="${apt_repo_by_package[$package_name]}/${apt_filename_by_package[$package_name]}"
-        stai_queue_download_if_missing "$package_url" "$package_path" "apt:$package_name"
+        sillydroid_queue_download_if_missing "$package_url" "$package_path" "apt:$package_name"
     done
-    stai_run_download_queue
+    sillydroid_run_download_queue
 
     rm -rf "$git_pack_root" "$git_extract_root"
     mkdir -p "$git_pack_root/git/bin" "$git_pack_root/git/lib" "$git_pack_root/git/libexec/git-core" "$git_pack_root/git/share/git-core" "$git_extract_root"
 
     declare -A git_data_root_by_package=()
-    stai_log "开始展开 ${#resolved_git_package_names[@]} 个 git apt 包"
+    sillydroid_log "开始展开 ${#resolved_git_package_names[@]} 个 git apt 包"
     for package_name in "${resolved_git_package_names[@]}"; do
         package_path="$apt_packages_root/$(basename "${apt_filename_by_package[$package_name]}")"
         package_extract_root="$git_extract_root/$package_name"
@@ -609,13 +609,13 @@ if pack_is_selected 'git'; then
 
         expand_deb_archive "$package_path" "$package_deb_root"
         package_data_archive_path="$(find "$package_deb_root" -maxdepth 1 -type f -name 'data.tar*' | head -n 1)"
-        stai_assert_path_exists "$package_data_archive_path" "data.tar archive was not found in $package_path"
-        stai_extract_archive_with_progress "$package_data_archive_path" "$package_data_root" "git:$package_name-data"
+        sillydroid_assert_path_exists "$package_data_archive_path" "data.tar archive was not found in $package_path"
+        sillydroid_extract_archive_with_progress "$package_data_archive_path" "$package_data_root" "git:$package_name-data"
         git_data_root_by_package["$package_name"]="$package_data_root"
     done
 
     git_root_data_root="${git_data_root_by_package[git]:-}"
-    stai_assert_path_exists "$git_root_data_root/usr/bin/git" '缺少 git 主二进制：usr/bin/git'
+    sillydroid_assert_path_exists "$git_root_data_root/usr/bin/git" '缺少 git 主二进制：usr/bin/git'
     cp -a "$git_root_data_root/usr/bin/git" "$git_pack_root/git/bin/git"
     chmod 0755 "$git_pack_root/git/bin/git"
 
@@ -633,12 +633,12 @@ if pack_is_selected 'git'; then
         done < <(find "$package_data_root" -type d \( -path '*/lib/aarch64-linux-gnu' -o -path '*/usr/lib/aarch64-linux-gnu' \) | LC_ALL=C sort)
     done
 
-    cat > "$git_pack_root/git/stai-post-extract.sh" <<'EOF'
+    cat > "$git_pack_root/git/sillydroid-post-extract.sh" <<'EOF'
 #!/bin/sh
 set -eu
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
-LINK_MAP_PATH="$SCRIPT_DIR/.stai-dedup-links.tsv"
+LINK_MAP_PATH="$SCRIPT_DIR/.sillydroid-dedup-links.tsv"
 
 if [ -f "$LINK_MAP_PATH" ]; then
     TAB_CHAR="$(printf '\t')"
@@ -676,11 +676,11 @@ EOF
     git_pack_archive_path="$resolved_target_root/$git_pack_archive_name"
 
     mapfile -t git_packaged_files < <(find "$git_pack_root" -type f -printf '%P\n' | LC_ALL=C sort)
-    dedup_report="$(deduplicate_pack_files "$git_pack_root/git" '.stai-dedup-links.tsv')"
+    dedup_report="$(deduplicate_pack_files "$git_pack_root/git" '.sillydroid-dedup-links.tsv')"
     if [[ -n "$dedup_report" ]]; then
-        stai_log "git dependency pack 去重结果：$dedup_report"
+        sillydroid_log "git dependency pack 去重结果：$dedup_report"
     fi
-    stai_log "开始归档 git dependency pack：$git_pack_archive_path"
+    sillydroid_log "开始归档 git dependency pack：$git_pack_archive_path"
     "$JAVA_HOME/bin/jar" --create --file "$git_pack_archive_path" --no-manifest -C "$git_pack_root" .
 
     {
@@ -696,7 +696,7 @@ EOF
         printf '    "pathPrepend": ["/tavern/server/git/bin"],\n'
         printf '    "variables": {"GIT_EXEC_PATH": "/tavern/server/git/libexec/git-core", "GIT_TEMPLATE_DIR": "/tavern/server/git/share/git-core/templates", "LD_LIBRARY_PATH": "/tavern/server/git/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}", "TAVERN_GIT_BIN": "/tavern/server/git/bin/git"}\n'
         printf '  },\n'
-        printf '  "postExtractScripts": ["git/stai-post-extract.sh"],\n'
+        printf '  "postExtractScripts": ["git/sillydroid-post-extract.sh"],\n'
         printf '  "files": [\n'
         git_file_count="${#git_packaged_files[@]}"
         for index in "${!git_packaged_files[@]}"; do
@@ -715,7 +715,7 @@ EOF
 fi
 
 if [[ "${#archive_files[@]}" -eq 0 ]]; then
-    stai_log '当前未选择任何 dependency pack；将只生成空 component-index.json。'
+    sillydroid_log '当前未选择任何 dependency pack；将只生成空 component-index.json。'
 fi
 
 component_index_path="$resolved_target_root/component-index.json"

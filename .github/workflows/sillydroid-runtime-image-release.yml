@@ -80,8 +80,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/stai-android-toolchain
-            ~/.cache/stai-android-rootfs
+            ~/.cache/sillydroid-android-toolchain
+            ~/.cache/sillydroid-android-rootfs
           key: tavern-runtime-image-${{ runner.os }}-${{ steps.plan.outputs.runtime_rid }}-${{ hashFiles('scripts/android-build-common.sh', 'scripts/build-tavern-android-runtime-image.sh', 'scripts/sync-android-rootfs.sh', 'android-tavern/app/src/main/assets/bootstrap/scripts/**') }}
           restore-keys: |
             tavern-runtime-image-${{ runner.os }}-${{ steps.plan.outputs.runtime_rid }}-

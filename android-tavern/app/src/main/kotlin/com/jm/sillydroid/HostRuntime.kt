@@ -1,4 +1,4 @@
-package com.stai.sillytavern
+package com.jm.sillydroid
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -74,7 +74,7 @@ private val StartupPhase.defaultProgressPercent: Int
 
 internal data class StartupState(
     val phase: StartupPhase = StartupPhase.IDLE,
-    val message: String = "正在准备 SillyTavern Android 宿主环境。",
+    val message: String = "正在准备 SillyDroid 宿主环境。",
     val details: String = "",
     val localUrl: String = BootConfig.localServiceUrl,
     val progressPercent: Int = phase.defaultProgressPercent
@@ -543,7 +543,7 @@ internal class AssetExtractor(private val context: Context) {
                 }
 
                 runCatching {
-                    JSONObject(manifestFile.readText()).optString("stai_bundle_category")
+                    JSONObject(manifestFile.readText()).optString("sillydroid_bundle_category")
                 }.getOrNull().equals("host", ignoreCase = true)
             }
             .forEach { sourceDirectory ->
@@ -938,7 +938,7 @@ internal class ServerController(
 ) {
     fun start(): ManagedProcess {
         val request = LaunchRequest(
-            name = "sillytavern-server",
+            name = "sillydroid-server",
             scriptFile = File(paths.scriptsDir, "start-server.sh"),
             workingDirectory = paths.serverDir,
             environment = mapOf(
@@ -983,3 +983,5 @@ internal object HealthProbe {
         }
     }
 }
+
+

@@ -1,4 +1,4 @@
-package com.stai.sillytavern
+package com.jm.sillydroid
 
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
@@ -66,7 +66,7 @@ internal class AppUpdateCoordinator(
         private const val githubApiBaseUrl = "https://api.github.com"
         private const val metadataAssetSuffix = ".update.json"
         private const val apkMimeType = "application/vnd.android.package-archive"
-        private const val userAgent = "STAI-Android-Updater"
+        private const val userAgent = "SillyDroid-Android-Updater"
     }
 
     private val stateStore = AppUpdateStateStore(activity)
@@ -193,7 +193,7 @@ internal class AppUpdateCoordinator(
     }
 
     private suspend fun fetchLatestAvailableRelease(): AppUpdateStateStore.AvailableRelease? {
-        val releases = fetchJsonArray("$githubApiBaseUrl/repos/${BuildConfig.STAI_GITHUB_REPOSITORY}/releases?per_page=12")
+        val releases = fetchJsonArray("$githubApiBaseUrl/repos/${BuildConfig.SILLYDROID_GITHUB_REPOSITORY}/releases?per_page=12")
         val currentVersionName = resolveCurrentVersionName()
 
         for (index in 0 until releases.length()) {
@@ -440,7 +440,7 @@ internal class AppUpdateCoordinator(
                 append("\n")
                 append(activity.getString(R.string.bootstrap_settings_about_version_code, aboutVersionInfo.apkVersionCode))
                 append("\n")
-                append(activity.getString(R.string.bootstrap_settings_about_version_host, BuildConfig.STAI_HOST_VERSION))
+                append(activity.getString(R.string.bootstrap_settings_about_version_host, BuildConfig.SILLYDROID_HOST_VERSION))
                 append("\n")
                 append(activity.getString(R.string.bootstrap_settings_about_version_runtime, aboutVersionInfo.runtimeVersion))
                 append("\n")
@@ -686,7 +686,7 @@ internal class AppUpdateCoordinator(
 
         val tag = manifest.optMeaningfulString("tag")
         val nodeVersion = manifest.optMeaningfulString("nodeVersion")
-        val upstreamVersion = BuildConfig.STAI_UPSTREAM_VERSION.trim().ifBlank {
+        val upstreamVersion = BuildConfig.SILLYDROID_UPSTREAM_VERSION.trim().ifBlank {
             extractFirstGroup(
                 source = resolveCurrentPackageInfo().versionName.orEmpty(),
                 pattern = """\+tavern\.([0-9A-Za-z._-]+)"""

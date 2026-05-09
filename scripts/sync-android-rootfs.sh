@@ -10,11 +10,11 @@ android_ndk_linux_url='https://dl.google.com/android/repository/android-ndk-r27-
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workspace_root="$(cd "$script_dir/.." && pwd)"
-build_config_path="$workspace_root/stai-build-config.json"
+build_config_path="$workspace_root/sillydroid-build-config.json"
 proot_patch_signature="$(sha256sum "$script_dir/sync-android-rootfs.sh" | awk '{print $1}')"
 target_root="$workspace_root/android-tavern/app/src/main/assets/bootstrap/rootfs"
 jni_libs_root="$workspace_root/android-tavern/app/src/main/jniLibs/arm64-v8a"
-runtime_prefix='/data/data/com.stai.sillytavern/files/usr'
+runtime_prefix='/data/data/com.jm.sillydroid/files/usr'
 runtime_loader_dir="$runtime_prefix/libexec/proot"
 termux_guest_runtime_prefix='/data/data/com.termux/files/usr'
 termux_prefix_shell_relative_path='bin/sh'
@@ -203,7 +203,7 @@ download_file_if_missing() {
     local uri="$1"
     local destination_path="$2"
 
-    stai_download_file_if_missing "$uri" "$destination_path"
+    sillydroid_download_file_if_missing "$uri" "$destination_path"
 }
 
 expand_deb_archive() {
@@ -257,7 +257,7 @@ expand_tar_archive() {
     local label="${3:-$(basename "$archive_path") }"
 
     mkdir -p "$destination_root"
-    stai_extract_archive_with_progress "$archive_path" "$destination_root" "$label"
+    sillydroid_extract_archive_with_progress "$archive_path" "$destination_root" "$label"
 }
 
 expand_gzip_file() {
@@ -551,7 +551,7 @@ ensure_linux_ndk_root() {
     mkdir -p "$cached_sdk_root/ndk"
     download_file_if_missing "$android_ndk_linux_url" "$cached_ndk_zip_path"
     rm -rf "$cached_ndk_root"
-    stai_extract_archive_with_progress "$cached_ndk_zip_path" "$cached_sdk_root/ndk" 'android-ndk'
+    sillydroid_extract_archive_with_progress "$cached_ndk_zip_path" "$cached_sdk_root/ndk" 'android-ndk'
     assert_path_exists "$cached_ndk_root/toolchains/llvm/prebuilt/linux-x86_64" "Unable to provision Linux Android NDK from $android_ndk_linux_url"
     realpath "$cached_ndk_root"
 }
@@ -858,7 +858,7 @@ sync_host_runtime_jni_libs() {
 
     mkdir -p "$destination_root"
     rm -f "$destination_root/libproot.so" "$destination_root/libproot-loader.so" "$destination_root/libproot-loader32.so" "$destination_root/libtalloc_2.so"
-    stai_require_command perl
+    sillydroid_require_command perl
 
     # Android 只会把 lib*.so 当成 native lib 收进 APK；这里把 libtalloc.so.2 映射成等长的 libtalloc_2.so，
     # 再同步改写 libproot.so 的 NEEDED，确保包管理器能把宿主依赖一起放进 lib/arm64-v8a。
@@ -876,7 +876,7 @@ sync_host_runtime_jni_libs() {
 }
 
 # rootfs/NDK 的大文件缓存默认落在 WSL 本地文件系统，避免 DrvFs 上的大包下载与解压影响 Linux 构建稳定性。
-working_root="${STAI_ANDROID_ROOTFS_WORKDIR:-${XDG_CACHE_HOME:-$HOME/.cache}/stai-android-rootfs}"
+working_root="${SILLYDROID_ANDROID_ROOTFS_WORKDIR:-${XDG_CACHE_HOME:-$HOME/.cache}/sillydroid-android-rootfs}"
 downloads_root="$working_root/downloads"
 apt_indexes_root="$working_root/apt-indexes"
 apt_packages_root="$downloads_root/apt"
@@ -910,22 +910,22 @@ if [[ -f "$existing_manifest_path" ]] \
     && [[ -f "$resolved_jni_libs_root/libproot.so" ]] \
     && [[ -f "$resolved_jni_libs_root/libproot-loader.so" ]]
 then
-    stai_log "Android rootfs assets are up to date, skipping sync."
+    sillydroid_log "Android rootfs assets are up to date, skipping sync."
     exit 0
 fi
 
 mkdir -p "$downloads_root" "$apt_indexes_root" "$apt_packages_root"
-stai_download_queue_reset
-stai_queue_download_if_missing "$proot_package_url" "$proot_package_path" 'proot-termux'
-stai_queue_download_if_missing "$proot_source_url" "$proot_source_archive_path" 'proot-source'
-stai_queue_download_if_missing "$termux_packages_index_url" "$termux_packages_index_path" 'termux-packages-index'
-stai_run_download_queue
+sillydroid_download_queue_reset
+sillydroid_queue_download_if_missing "$proot_package_url" "$proot_package_path" 'proot-termux'
+sillydroid_queue_download_if_missing "$proot_source_url" "$proot_source_archive_path" 'proot-source'
+sillydroid_queue_download_if_missing "$termux_packages_index_url" "$termux_packages_index_path" 'termux-packages-index'
+sillydroid_run_download_queue
 
-stai_ensure_java_home
-stai_log "开始准备 Android SDK/NDK 工具链"
-android_sdk_root="$(stai_resolve_linux_android_sdk_root)"
-stai_ensure_linux_android_sdk "$android_sdk_root"
-ndk_root="$(stai_ensure_linux_android_ndk_root "$android_sdk_root")"
+sillydroid_ensure_java_home
+sillydroid_log "开始准备 Android SDK/NDK 工具链"
+android_sdk_root="$(sillydroid_resolve_linux_android_sdk_root)"
+sillydroid_ensure_linux_android_sdk "$android_sdk_root"
+ndk_root="$(sillydroid_ensure_linux_android_ndk_root "$android_sdk_root")"
 ndk_prebuilt_root="$(resolve_android_ndk_prebuilt_root "$ndk_root")"
 jar_path="$JAVA_HOME/bin/jar"
 assert_path_exists "$jar_path" "缺少 jar 命令。Android rootfs 资产归档要求当前 Linux 环境提供 JDK。"
@@ -933,7 +933,7 @@ assert_path_exists "$jar_path" "缺少 jar 命令。Android rootfs 资产归档�
 rm -rf "$assets_stage_root" "$termux_extract_root" "$proot_build_root" "$rootfs_extract_root"
 mkdir -p "$host_prefix_stage_root/lib" "$rootfs_fs_stage_root" "$termux_extract_root" "$proot_build_root" "$rootfs_extract_root"
 
-stai_log "开始解包 Termux proot 与运行时依赖"
+sillydroid_log "开始解包 Termux proot 与运行时依赖"
 expand_deb_archive "$proot_package_path" "$termux_extract_root/proot-deb" 'termux:proot-deb'
 proot_control_archive_path="$(find "$termux_extract_root/proot-deb" -maxdepth 1 -type f -name 'control.tar*' | head -n 1)"
 assert_path_exists "$proot_control_archive_path" "control.tar archive was not found in $proot_package_path"
@@ -959,15 +959,15 @@ for package_name in "${resolved_termux_dependency_names[@]}" "${resolved_termux_
     resolved_termux_package_names+=("$package_name")
 done
 
-stai_download_queue_reset
+sillydroid_download_queue_reset
 for dependency_name in "${resolved_termux_package_names[@]}"; do
     dependency_url="${termux_repo_by_package[$dependency_name]}/${termux_filename_by_package[$dependency_name]}"
     dependency_package_path="$downloads_root/$(basename "${termux_filename_by_package[$dependency_name]}")"
-    stai_queue_download_if_missing "$dependency_url" "$dependency_package_path" "termux:$dependency_name"
+    sillydroid_queue_download_if_missing "$dependency_url" "$dependency_package_path" "termux:$dependency_name"
 done
-stai_run_download_queue
+sillydroid_run_download_queue
 
-stai_log "开始展开 ${#resolved_termux_package_names[@]} 个 Termux 包"
+sillydroid_log "开始展开 ${#resolved_termux_package_names[@]} 个 Termux 包"
 for dependency_name in "${resolved_termux_package_names[@]}"; do
     dependency_url="${termux_repo_by_package[$dependency_name]}/${termux_filename_by_package[$dependency_name]}"
     dependency_package_path="$downloads_root/$(basename "${termux_filename_by_package[$dependency_name]}")"
@@ -987,7 +987,7 @@ install_termux_host_prefix_wrappers "$host_prefix_stage_root"
 
 rm -rf "$proot_build_root/source"
 mkdir -p "$proot_build_root/source"
-stai_extract_archive_with_progress "$proot_source_archive_path" "$proot_build_root/source" 'proot-source'
+sillydroid_extract_archive_with_progress "$proot_source_archive_path" "$proot_build_root/source" 'proot-source'
 proot_source_root="$(find "$proot_build_root/source" -mindepth 1 -maxdepth 1 -type d -name 'proot-*' | LC_ALL=C sort | head -n 1)"
 assert_path_exists "$proot_source_root" "Unable to extract Termux proot source from $proot_source_archive_path"
 
@@ -1004,11 +1004,11 @@ for dependency_name in "${resolved_termux_dependency_names[@]}"; do
 done
 copy_resolved_directory_contents "$host_prefix_stage_root/lib" "$libtalloc_lib_root"
 
-stai_log "开始编译 proot 原生库"
+sillydroid_log "开始编译 proot 原生库"
 build_termux_proot "$proot_source_root" "$ndk_prebuilt_root" "$libtalloc_include_root" "$libtalloc_lib_root" "$host_prefix_stage_root" "$proot_build_root/toolwrap"
 sync_host_runtime_jni_libs "$host_prefix_stage_root" "$resolved_jni_libs_root"
 
-stai_log '开始组装 Termux guest rootfs skeleton'
+sillydroid_log '开始组装 Termux guest rootfs skeleton'
 install_termux_guest_rootfs_shims "$host_prefix_stage_root" "$rootfs_fs_stage_root"
 
 assert_path_exists "$rootfs_fs_stage_root/bin/sh" "Resolved Android rootfs is incomplete: missing bin/sh at $rootfs_fs_stage_root/bin/sh"
@@ -1019,7 +1019,7 @@ mkdir -p "$resolved_target_root"
 
 # 把 rootfs fs/usr 资产收敛成两个 ZIP，直接减少 Gradle merge/compress assets 的文件数。
 rm -f "$rootfs_fs_archive_path" "$host_prefix_archive_path"
-stai_log "开始归档 rootfs fs/usr 资产"
+sillydroid_log "开始归档 rootfs fs/usr 资产"
 prepare_archive_stage_with_symlink_manifest "$host_prefix_stage_root" "$host_prefix_archive_stage_root"
 "$jar_path" --create --file "$rootfs_fs_archive_path" --no-manifest -C "$rootfs_fs_stage_root" .
 "$jar_path" --create --file "$host_prefix_archive_path" --no-manifest -C "$host_prefix_archive_stage_root" .
@@ -1035,13 +1035,13 @@ else
     termux_base_version='stable'
 fi
 proot_package_version="$(printf '%s' "$proot_package_url" | sed -n 's#.*/proot_\([^_]*\)_aarch64\.deb#\1#p')"
-runtime_version="$STAI_ROOTFS_VERSION"
+runtime_version="$SILLYDROID_ROOTFS_VERSION"
 
 manifest_path="$resolved_target_root/rootfs-manifest.json"
 
 {
     printf '{\n'
-    printf '  "staiRootfsVersion": "%s",\n' "$(json_escape "$STAI_ROOTFS_VERSION")"
+    printf '  "staiRootfsVersion": "%s",\n' "$(json_escape "$SILLYDROID_ROOTFS_VERSION")"
     printf '  "runtimeVersion": "%s",\n' "$(json_escape "$runtime_version")"
     printf '  "baseFlavor": "termux",\n'
     printf '  "baseVersion": "%s",\n' "$(json_escape "$termux_base_version")"
@@ -1101,5 +1101,5 @@ manifest_path="$resolved_target_root/rootfs-manifest.json"
     printf '}\n'
 } > "$manifest_path"
 
-stai_log "已打包 Android rootfs 资产：$rootfs_fs_archive_path 和 $host_prefix_archive_path"
+sillydroid_log "已打包 Android rootfs 资产：$rootfs_fs_archive_path 和 $host_prefix_archive_path"
 printf 'Packed Android rootfs assets into %s and %s\n' "$rootfs_fs_archive_path" "$host_prefix_archive_path"

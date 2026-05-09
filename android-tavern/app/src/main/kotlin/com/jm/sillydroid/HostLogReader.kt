@@ -1,4 +1,4 @@
-package com.stai.sillytavern
+package com.jm.sillydroid
 
 import android.content.Context
 import java.io.File
@@ -58,7 +58,7 @@ internal object HostLogReader {
         val selectedEntry = when {
             availableEntries.isEmpty() -> null
             preferTavernServerLog -> availableEntries.firstOrNull { entry ->
-                entry.fileName.equals("sillytavern-server.log", ignoreCase = true)
+                entry.fileName.equals("sillydroid-server.log", ignoreCase = true)
             } ?: availableEntries.first()
             else -> availableEntries.first()
         }
@@ -117,7 +117,7 @@ internal object HostLogReader {
     private fun resolveDisplayName(context: Context, fileName: String): String {
         val normalizedName = fileName.lowercase(Locale.ROOT)
         return when {
-            normalizedName == "sillytavern-server.log" -> context.getString(R.string.bootstrap_settings_logs_name_tavern_server)
+            normalizedName == "sillydroid-server.log" -> context.getString(R.string.bootstrap_settings_logs_name_tavern_server)
             normalizedName == "startup.log" -> context.getString(R.string.bootstrap_settings_logs_name_startup)
             normalizedName.startsWith("extension-install-preview-") -> context.getString(R.string.bootstrap_settings_logs_name_extension_preview)
             normalizedName.startsWith("extension-reinstall-") -> context.getString(R.string.bootstrap_settings_logs_name_extension_reinstall)
@@ -191,3 +191,4 @@ internal object HostLogReader {
         return content.substring(firstLineBreak + 1)
     }
 }
+

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">SillyTavern</string>
+    <string name="app_name">SillyDroid</string>
     <string name="bootstrap_title">本地服务启动中</string>
-    <string name="bootstrap_idle">正在准备 SillyTavern Android 宿主环境。</string>
+    <string name="bootstrap_idle">正在准备 SillyDroid 宿主环境。</string>
     <string name="bootstrap_progress_label">初始化进度 %1$d%%</string>
     <string name="bootstrap_progress_indeterminate">正在准备启动步骤…</string>
     <string name="bootstrap_startup_tavern_log_tail">酒馆启动日志：%1$s</string>
@@ -14,8 +14,8 @@
     <string name="bootstrap_settings_open">打开启动设置</string>
     <string name="bootstrap_update_open">下载并安装更新</string>
     <string name="bootstrap_update_available_badge">发现可用更新</string>
-    <string name="bootstrap_notification_title">SillyTavern Android 宿主</string>
-    <string name="system_notification_channel_title">SillyTavern 系统通知</string>
+    <string name="bootstrap_notification_title">SillyDroid Android 宿主</string>
+    <string name="system_notification_channel_title">SillyDroid 系统通知</string>
     <string name="system_notification_channel_description">用于展示 WebView 页面发起的业务系统通知。</string>
     <string name="download_status_preparing">正在准备下载“%1$s”。</string>
     <string name="download_status_saving">正在保存“%1$s”。</string>
@@ -55,7 +55,7 @@
     <string name="bootstrap_settings_settings_summary">端口和服务配置集中在这里，按分组折叠显示。</string>
     <string name="bootstrap_settings_about_summary">这里集中显示当前宿主说明、版本信息和应用更新入口，主界面不再单独保留更新按钮。</string>
     <string name="bootstrap_settings_about_info_title">应用信息</string>
-    <string name="bootstrap_settings_about_info_body">SillyTavern Android 宿主负责在本机启动 Tavern 服务、管理扩展和执行完整数据迁移。关于页会集中展示宿主信息、运行时来源和更新状态，不会直接改动当前 Tavern 配置。</string>
+    <string name="bootstrap_settings_about_info_body">SillyDroid 宿主负责在本机启动 Tavern 服务、管理扩展和执行完整数据迁移。关于页会集中展示宿主信息、运行时来源和更新状态，不会直接改动当前 Tavern 配置。</string>
     <string name="bootstrap_settings_about_version_title">版本信息</string>
     <string name="bootstrap_settings_about_version_apk">APK版本：%1$s</string>
     <string name="bootstrap_settings_about_version_code">APK版本号：%1$s</string>
@@ -153,7 +153,7 @@
     <string name="bootstrap_settings_extensions_bundled_missing_badge">未安装，目标目录：%1$s</string>
     <string name="bootstrap_settings_extensions_installed_title">当前已安装扩展</string>
     <string name="bootstrap_settings_extensions_installed_summary">这里列出当前宿主 extensions 目录中的扩展，可直接删除或重新拉取。</string>
-    <string name="bootstrap_settings_extensions_install_prompt_hint">输入扩展仓库地址，一行一个，例如 https://github.com/owner/repo</string>
+    <string name="bootstrap_settings_extensions_install_prompt_hint">输入扩展仓库地址，一行一个，例如 https://github.com/owner/repo；如 GitHub 不通，也可尝试 https://gitclone.com/github.com/owner/repo.git</string>
     <string name="bootstrap_settings_extensions_install_empty">请至少输入一个扩展仓库地址。</string>
     <string name="bootstrap_settings_extensions_install_prompt_action">校验并安装</string>
     <string name="bootstrap_settings_extensions_batch_preview_stage">正在预检 %1$d 个扩展</string>
@@ -173,7 +173,9 @@
     <string name="bootstrap_settings_extensions_batch_result_failures">失败：</string>
     <string name="bootstrap_settings_extensions_batch_result_source">来源：%1$s</string>
     <string name="bootstrap_settings_extensions_batch_result_log">日志：%1$s</string>
-    <string name="bootstrap_settings_extensions_github_unreachable">当前网络无法完整访问 GitHub，扩展安装前请先确认这些地址可用：%1$s</string>
+    <string name="bootstrap_settings_extensions_github_check_action">检测</string>
+    <string name="bootstrap_settings_extensions_github_checking">正在检测 GitHub 可访问性…</string>
+    <string name="bootstrap_settings_extensions_github_unreachable">当前网络无法完整访问 GitHub，扩展安装前请先确认这些地址可用：%1$s。若直连 GitHub 不通，可尝试支持 git clone 的镜像地址，例如 https://gitclone.com/github.com/owner/repo.git</string>
     <string name="bootstrap_settings_extensions_cleanup_broken_empty">当前没有缺少 manifest.json 的错误插件目录。</string>
     <string name="bootstrap_settings_extensions_cleanup_broken_confirm_title">清理错误插件？</string>
     <string name="bootstrap_settings_extensions_cleanup_broken_confirm_message">检测到 %1$d 个缺少 manifest.json 的目录，确认后会直接删除：
@@ -249,7 +251,7 @@
     <string name="bootstrap_settings_import_confirm_message_host">检测到 Android 宿主完整备份 ZIP。导入前会先停止当前本地 Tavern 服务，再覆盖当前宿主的 config、data、plugins、extensions 四个目录。导入失败会自动回滚；导入成功后会自动返回主界面并重新启动。是否继续？</string>
     <string name="bootstrap_settings_import_confirm_action">确认导入</string>
     <string name="bootstrap_settings_import_confirm_cancel">取消</string>
-    <string name="bootstrap_settings_export_name">sillytavern-data-backup-%1$s.zip</string>
+    <string name="bootstrap_settings_export_name">sillydroid-data-backup-%1$s.zip</string>
     <string name="browser_open_external_failed">无法在系统浏览器中打开该链接。</string>
     <string name="app_update_check_failed">检查更新失败。</string>
     <string name="app_update_check_failed_with_reason">检查更新失败：%1$s</string>
@@ -263,3 +265,4 @@
     <string name="app_update_install_permission_required">请允许当前应用安装更新包后重试。</string>
     <string name="app_update_no_updates">当前已是最新版本。</string>
 </resources>
+

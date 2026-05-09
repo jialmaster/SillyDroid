@@ -1,4 +1,4 @@
-package com.stai.sillytavern
+package com.jm.sillydroid
 
 internal enum class TavernConfigFieldKind {
     BOOLEAN,

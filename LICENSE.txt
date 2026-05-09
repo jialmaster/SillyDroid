@@ -14,39 +14,3 @@ upstream license texts referenced there.
 
 This file is intentionally a licensing notice, not a blanket relicense of every
 bundled third-party component.
-*** Add File: d:\Git\ST.AI.SillyTavern.Android\THIRD_PARTY_NOTICES.md
-# Third-Party Notices
-
-This repository's Android runtime layer is built around the Termux ecosystem.
-It bundles or references runtime assets, package metadata, bootstrap
-conventions, and compatibility paths that come from or are designed to
-interoperate with upstream Termux components.
-
-## Termux
-
-- Upstream repository: https://github.com/termux/termux-app
-- Upstream license: GPLv3 only
-- Upstream license file: https://github.com/termux/termux-app/blob/master/LICENSE.md
-
-## termux-shared exceptions
-
-- License overview: https://github.com/termux/termux-app/blob/master/termux-shared/LICENSE.md
-- The termux-shared library contains file-level exceptions, including MIT,
-	GPLv2 with Classpath Exception, Apache 2.0, and other source-specific
-	notices depending on the copied or derived file path.
-
-## Runtime and bootstrap sources used here
-
-- Termux package metadata and source URLs used to assemble the Android runtime
-	image are recorded in android-tavern/app/src/main/assets/bootstrap/rootfs/rootfs-manifest.json.
-- That manifest also records the proot package URL and proot source URL used by
-	the bundled runtime payload.
-
-## Redistribution checklist
-
-- Preserve upstream copyright notices and license texts for bundled third-party
-	components.
-- Keep this notice file together with any redistributed APK, runtime image, or
-	extracted payload that still contains those components.
-- Re-review newly added runtime packages, copied source files, and bundled
-	extensions for their own license obligations before release.

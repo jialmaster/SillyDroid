@@ -2,9 +2,9 @@
   "display_name": "安卓宿主",
   "loading_order": 25,
   "version": "1.0.0",
-  "author": "ST.AI",
+  "author": "SillyDroid",
   "js": "index.js",
-  "stai_bundle_category": "host",
+  "sillydroid_bundle_category": "host",
   "hooks": {
     "activate": "activate"
   }

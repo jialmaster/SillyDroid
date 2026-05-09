@@ -2,8 +2,8 @@ import { POPUP_RESULT, POPUP_TYPE, Popup } from '../../../popup.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 
-const bridgeName = 'StaiAndroidHostBridge';
-const menuButtonId = 'stai_android_host_menu_button';
+const bridgeName = 'SillyDroidAndroidHostBridge';
+const menuButtonId = 'sillydroid_android_host_menu_button';
 const popupTitle = '安卓宿主';
 
 let slashCommandsRegistered = false;

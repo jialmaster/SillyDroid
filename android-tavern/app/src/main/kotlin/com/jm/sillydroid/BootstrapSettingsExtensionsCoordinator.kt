@@ -1,4 +1,4 @@
-package com.stai.sillytavern
+package com.jm.sillydroid
 
 import android.content.res.ColorStateList
 import android.net.Uri
@@ -13,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
+import androidx.core.widget.doAfterTextChanged
 import androidx.core.widget.TextViewCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.card.MaterialCardView
@@ -397,22 +398,22 @@ internal class BootstrapSettingsExtensionsCoordinator(
             orientation = LinearLayout.VERTICAL
             addView(TextView(activity).apply {
                 text = title
-                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsSectionTitle)
+                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsSectionTitle)
                 setTextColor(resolveColor(MaterialR.attr.colorOnSurface))
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
             })
             addView(TextView(activity).apply {
                 text = summary
-                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsMeta)
+                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsMeta)
                 setTextColor(resolveColor(MaterialR.attr.colorOnSurfaceVariant))
-                setPadding(0, dimen(R.dimen.stai_space_xs), 0, 0)
+                setPadding(0, dimen(R.dimen.sillydroid_space_xs), 0, 0)
             })
         }
     }
 
     private fun createBundledInstallCard(extension: BundledExtension): MaterialCardView {
         val card = MaterialCardView(activity).apply {
-            radius = dimenFloat(R.dimen.stai_nested_card_radius)
+            radius = dimenFloat(R.dimen.sillydroid_nested_card_radius)
             strokeWidth = dp(1)
             strokeColor = resolveColor(MaterialR.attr.colorOutlineVariant)
             setCardBackgroundColor(resolveColor(MaterialR.attr.colorSurfaceContainerLow))
@@ -421,7 +422,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
         val container = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.TOP
-            setPadding(dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_section_padding))
+            setPadding(dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_section_padding))
         }
 
         val infoColumn = LinearLayout(activity).apply {
@@ -430,7 +431,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
         }
         infoColumn.addView(TextView(activity).apply {
             text = extension.displayName
-            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsDenseCardTitle)
+            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsDenseCardTitle)
             setTextColor(resolveColor(MaterialR.attr.colorOnSurface))
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
@@ -438,15 +439,15 @@ internal class BootstrapSettingsExtensionsCoordinator(
             val versionLabel = extension.version ?: activity.getString(R.string.bootstrap_settings_extensions_version_unknown)
             val authorLabel = extension.author ?: activity.getString(R.string.bootstrap_settings_extensions_author_unknown)
             text = "$versionLabel  •  $authorLabel"
-            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsBody)
+            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsBody)
             setTextColor(resolveColor(MaterialR.attr.colorOnSurfaceVariant))
-            setPadding(0, dimen(R.dimen.stai_space_xs), 0, 0)
+            setPadding(0, dimen(R.dimen.sillydroid_space_xs), 0, 0)
         })
         infoColumn.addView(TextView(activity).apply {
             text = activity.getString(R.string.bootstrap_settings_extensions_bundled_missing_badge, extension.folderName)
-            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsMeta)
+            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsMeta)
             setTextColor(resolveColor(MaterialR.attr.colorError))
-            setPadding(0, dimen(R.dimen.stai_space_sm), 0, 0)
+            setPadding(0, dimen(R.dimen.sillydroid_space_sm), 0, 0)
         })
         container.addView(infoColumn)
 
@@ -466,7 +467,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
 
     private fun createExtensionCard(extension: ManagedExtension): MaterialCardView {
         val card = MaterialCardView(activity).apply {
-            radius = dimenFloat(R.dimen.stai_nested_card_radius)
+            radius = dimenFloat(R.dimen.sillydroid_nested_card_radius)
             strokeWidth = dp(1)
             strokeColor = resolveColor(MaterialR.attr.colorOutlineVariant)
             setCardBackgroundColor(resolveColor(MaterialR.attr.colorSurfaceContainerLow))
@@ -474,7 +475,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
 
         val container = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_section_padding))
+            setPadding(dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_section_padding))
         }
 
         val contentRow = LinearLayout(activity).apply {
@@ -489,7 +490,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
 
         infoColumn.addView(TextView(activity).apply {
             text = extension.displayName
-            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsDenseCardTitle)
+            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsDenseCardTitle)
             setTextColor(resolveColor(MaterialR.attr.colorOnSurface))
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
@@ -498,33 +499,33 @@ internal class BootstrapSettingsExtensionsCoordinator(
             val versionLabel = extension.version ?: activity.getString(R.string.bootstrap_settings_extensions_version_unknown)
             val authorLabel = extension.author ?: activity.getString(R.string.bootstrap_settings_extensions_author_unknown)
             text = "$versionLabel  •  $authorLabel"
-            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsBody)
+            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsBody)
             setTextColor(resolveColor(MaterialR.attr.colorOnSurfaceVariant))
-            setPadding(0, dimen(R.dimen.stai_space_xs), 0, 0)
+            setPadding(0, dimen(R.dimen.sillydroid_space_xs), 0, 0)
         })
 
         infoColumn.addView(TextView(activity).apply {
             text = activity.getString(R.string.bootstrap_settings_extensions_folder, extension.folderName)
-            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsBody)
+            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsBody)
             setTextColor(resolveColor(MaterialR.attr.colorOnSurfaceVariant))
-            setPadding(0, dimen(R.dimen.stai_space_sm), 0, 0)
+            setPadding(0, dimen(R.dimen.sillydroid_space_sm), 0, 0)
         })
 
         if (!extension.homePage.isNullOrBlank()) {
             infoColumn.addView(TextView(activity).apply {
                 text = activity.getString(R.string.bootstrap_settings_extensions_source, extension.homePage)
-                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsMeta)
+                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsMeta)
                 setTextColor(resolveColor(MaterialR.attr.colorOnSurfaceVariant))
-                setPadding(0, dimen(R.dimen.stai_space_xs), 0, 0)
+                setPadding(0, dimen(R.dimen.sillydroid_space_xs), 0, 0)
             })
         }
 
         if (!extension.manifestHealthy || !extension.manifestMessage.isNullOrBlank()) {
             infoColumn.addView(TextView(activity).apply {
                 text = extension.manifestMessage ?: activity.getString(R.string.bootstrap_settings_extensions_manifest_missing)
-                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsMeta)
+                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsMeta)
                 setTextColor(resolveColor(MaterialR.attr.colorError))
-                setPadding(0, dimen(R.dimen.stai_space_sm), 0, 0)
+                setPadding(0, dimen(R.dimen.sillydroid_space_sm), 0, 0)
             })
         }
 
@@ -532,7 +533,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END
             layoutParams = LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                marginStart = dimen(R.dimen.stai_space_sm)
+                marginStart = dimen(R.dimen.sillydroid_space_sm)
             }
         }
 
@@ -558,7 +559,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             confirmDelete(extension)
         }.apply {
             isEnabled = !busy
-            (layoutParams as? LinearLayout.LayoutParams)?.marginStart = dimen(R.dimen.stai_space_xs)
+            (layoutParams as? LinearLayout.LayoutParams)?.marginStart = dimen(R.dimen.sillydroid_space_xs)
         }
         actionsRow.addView(deleteButton)
 
@@ -604,8 +605,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
         tintAttr: Int = MaterialR.attr.colorOnSurfaceVariant,
         onClick: () -> Unit
     ): ImageButton {
-        val size = dimen(R.dimen.stai_settings_dense_icon_button_size)
-        val padding = dimen(R.dimen.stai_settings_dense_icon_button_padding)
+        val size = dimen(R.dimen.sillydroid_settings_dense_icon_button_size)
+        val padding = dimen(R.dimen.sillydroid_settings_dense_icon_button_padding)
         val backgroundAttr = TypedValue()
         activity.theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, backgroundAttr, true)
 
@@ -805,6 +806,9 @@ internal class BootstrapSettingsExtensionsCoordinator(
         }
 
         val checkedItems = BooleanArray(repositories.size) { true }
+        var validatedSelectionKey: String? = null
+        var githubCheckVersion = 0
+        var selectionDialog: androidx.appcompat.app.AlertDialog? = null
         val labels = repositories.map { repository ->
             repository.description?.takeIf { it.isNotBlank() }?.let { description ->
                 "${repository.displayName} | $description"
@@ -813,24 +817,77 @@ internal class BootstrapSettingsExtensionsCoordinator(
 
         val dialog = MaterialAlertDialogBuilder(activity)
             .setTitle(R.string.bootstrap_settings_extensions_default_title)
+            .setMessage(" ")
             .setMultiChoiceItems(labels, checkedItems) { _, which, isChecked ->
                 checkedItems[which] = isChecked
+                validatedSelectionKey = null
+                githubCheckVersion += 1
+                selectionDialog?.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)?.text = activity.getString(R.string.bootstrap_settings_extensions_install)
+                selectionDialog?.let { updateDialogMessage(it, baseMessage = null, statusMessage = null) }
             }
             .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
             .setPositiveButton(R.string.bootstrap_settings_extensions_install, null)
             .create()
 
+        selectionDialog = dialog
+
         dialog.setOnShowListener {
-            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            updateDialogMessage(dialog, baseMessage = null, statusMessage = null)
+            val positiveButton = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+
+            fun selectionKey(repositoryUrls: List<String>): String {
+                return repositoryUrls.joinToString(separator = "\n")
+            }
+
+            fun runGithubCheck(repositoryUrls: List<String>, autoContinueOnReachable: Boolean) {
+                val currentSelectionKey = selectionKey(repositoryUrls)
+                val checkVersion = githubCheckVersion + 1
+                githubCheckVersion = checkVersion
+                positiveButton.isEnabled = false
+                updateDialogMessage(
+                    dialog,
+                    baseMessage = null,
+                    statusMessage = activity.getString(R.string.bootstrap_settings_extensions_github_checking)
+                )
+                checkRepositoryUrlsGithubReachability(repositoryUrls) { reachable, failureMessage ->
+                    if (checkVersion != githubCheckVersion) {
+                        return@checkRepositoryUrlsGithubReachability
+                    }
+
+                    positiveButton.isEnabled = true
+                    if (reachable) {
+                        validatedSelectionKey = currentSelectionKey
+                        positiveButton.text = activity.getString(R.string.bootstrap_settings_extensions_install)
+                        updateDialogMessage(dialog, baseMessage = null, statusMessage = null)
+                        if (autoContinueOnReachable) {
+                            dialog.dismiss()
+                            promptDefaultRepositoryInstallMode(repositoryUrls)
+                        }
+                    } else {
+                        validatedSelectionKey = null
+                        positiveButton.text = activity.getString(R.string.bootstrap_settings_extensions_github_check_action)
+                        updateDialogMessage(dialog, baseMessage = null, statusMessage = failureMessage)
+                    }
+                }
+            }
+
+            positiveButton.setOnClickListener {
                 val selectedRepositories = repositories.filterIndexed { index, _ -> checkedItems[index] }
                 if (selectedRepositories.isEmpty()) {
                     showError(activity.getString(R.string.bootstrap_settings_extensions_default_select_required))
                     return@setOnClickListener
                 }
 
-                dialog.dismiss()
                 val repositoryUrls = selectedRepositories.map { repository -> repository.repositoryUrl }
-                promptDefaultRepositoryInstallMode(repositoryUrls)
+                val currentSelectionKey = selectionKey(repositoryUrls)
+                if (validatedSelectionKey == currentSelectionKey) {
+                    dialog.dismiss()
+                    promptDefaultRepositoryInstallMode(repositoryUrls)
+                    return@setOnClickListener
+                }
+
+                val requestedByDetectAction = positiveButton.text?.toString() == activity.getString(R.string.bootstrap_settings_extensions_github_check_action)
+                runGithubCheck(repositoryUrls, autoContinueOnReachable = !requestedByDetectAction)
             }
         }
 
@@ -865,6 +922,11 @@ internal class BootstrapSettingsExtensionsCoordinator(
                 skipConfirmation = true
             )
         }
+    }
+
+    fun checkDefaultRepositoriesGithubReachability(onResult: (reachable: Boolean, failureMessage: String?) -> Unit) {
+        val repositoryUrls = loadDefaultExtensionRepositories().map { it.repositoryUrl }
+        checkRepositoryUrlsGithubReachability(repositoryUrls, onResult)
     }
 
     private fun promptDefaultRepositoryInstallMode(repositoryUrls: List<String>) {
@@ -938,7 +1000,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
         val inputLayout = TextInputLayout(activity).apply {
             hint = activity.getString(R.string.bootstrap_settings_extensions_install_prompt_hint)
             boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
-            setBoxCornerRadii(dimenFloat(R.dimen.stai_nested_card_radius), dimenFloat(R.dimen.stai_nested_card_radius), dimenFloat(R.dimen.stai_nested_card_radius), dimenFloat(R.dimen.stai_nested_card_radius))
+            setBoxCornerRadii(dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius))
             layoutParams = LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -950,10 +1012,22 @@ internal class BootstrapSettingsExtensionsCoordinator(
             minLines = 4
             maxLines = 8
             textSize = 13f
-            minHeight = dimen(R.dimen.stai_input_min_height)
-            setPadding(dimen(R.dimen.stai_control_padding_horizontal), dimen(R.dimen.stai_control_padding_vertical), dimen(R.dimen.stai_control_padding_horizontal), dimen(R.dimen.stai_control_padding_vertical))
+            minHeight = dimen(R.dimen.sillydroid_input_min_height)
+            setPadding(dimen(R.dimen.sillydroid_control_padding_horizontal), dimen(R.dimen.sillydroid_control_padding_vertical), dimen(R.dimen.sillydroid_control_padding_horizontal), dimen(R.dimen.sillydroid_control_padding_vertical))
         }
         inputLayout.addView(inputView)
+
+        var validatedSelectionKey: String? = null
+        var githubCheckVersion = 0
+        var inputDialog: androidx.appcompat.app.AlertDialog? = null
+
+        inputView.doAfterTextChanged {
+            validatedSelectionKey = null
+            githubCheckVersion += 1
+            inputLayout.error = null
+            inputLayout.helperText = null
+            inputDialog?.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)?.text = activity.getString(R.string.bootstrap_settings_extensions_install_prompt_action)
+        }
 
         val dialog = MaterialAlertDialogBuilder(activity)
             .setTitle(R.string.bootstrap_settings_extensions_install_prompt_title)
@@ -962,8 +1036,61 @@ internal class BootstrapSettingsExtensionsCoordinator(
             .setPositiveButton(R.string.bootstrap_settings_extensions_install_prompt_action, null)
             .create()
 
+        inputDialog = dialog
+
         dialog.setOnShowListener {
-            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val positiveButton = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+
+            fun continueInstall(repositoryUrls: List<String>) {
+                dialog.dismiss()
+                if (repositoryUrls.size == 1) {
+                    val repositoryUrl = repositoryUrls.single()
+                    val normalizedRepository = normalizeRepositoryUrl(repositoryUrl)
+                    if (normalizedRepository == null) {
+                        showError(activity.getString(R.string.bootstrap_settings_extensions_install_invalid_url))
+                        return
+                    }
+
+                    previewInstallExtension(repositoryUrl, normalizedRepository)
+                    return
+                }
+
+                previewInstallExtensionsBatch(repositoryUrls)
+            }
+
+            fun selectionKey(repositoryUrls: List<String>): String {
+                return repositoryUrls.joinToString(separator = "\n")
+            }
+
+            fun runGithubCheck(repositoryUrls: List<String>, autoContinueOnReachable: Boolean) {
+                val currentSelectionKey = selectionKey(repositoryUrls)
+                val checkVersion = githubCheckVersion + 1
+                githubCheckVersion = checkVersion
+                positiveButton.isEnabled = false
+                inputLayout.error = null
+                inputLayout.helperText = activity.getString(R.string.bootstrap_settings_extensions_github_checking)
+                checkRepositoryUrlsGithubReachability(repositoryUrls) { reachable, failureMessage ->
+                    if (checkVersion != githubCheckVersion) {
+                        return@checkRepositoryUrlsGithubReachability
+                    }
+
+                    positiveButton.isEnabled = true
+                    if (reachable) {
+                        validatedSelectionKey = currentSelectionKey
+                        inputLayout.helperText = null
+                        positiveButton.text = activity.getString(R.string.bootstrap_settings_extensions_install_prompt_action)
+                        if (autoContinueOnReachable) {
+                            continueInstall(repositoryUrls)
+                        }
+                    } else {
+                        validatedSelectionKey = null
+                        inputLayout.helperText = failureMessage
+                        positiveButton.text = activity.getString(R.string.bootstrap_settings_extensions_github_check_action)
+                    }
+                }
+            }
+
+            positiveButton.setOnClickListener {
                 val repositoryUrls = parseRepositoryUrls(inputView.text?.toString().orEmpty())
                 if (repositoryUrls.isEmpty()) {
                     inputLayout.error = activity.getString(R.string.bootstrap_settings_extensions_install_empty)
@@ -971,20 +1098,20 @@ internal class BootstrapSettingsExtensionsCoordinator(
                 }
 
                 inputLayout.error = null
-                dialog.dismiss()
-                if (repositoryUrls.size == 1) {
-                    val repositoryUrl = repositoryUrls.single()
-                    val normalizedRepository = normalizeRepositoryUrl(repositoryUrl)
-                    if (normalizedRepository == null) {
-                        showError(activity.getString(R.string.bootstrap_settings_extensions_install_invalid_url))
-                        return@setOnClickListener
-                    }
-
-                    previewInstallExtension(repositoryUrl, normalizedRepository)
+                val supportedUrls = repositoryUrls.filter(::isSupportedRepositoryUrl)
+                if (supportedUrls.size != repositoryUrls.size) {
+                    showError(activity.getString(R.string.bootstrap_settings_extensions_install_invalid_url))
                     return@setOnClickListener
                 }
 
-                previewInstallExtensionsBatch(repositoryUrls)
+                val currentSelectionKey = selectionKey(repositoryUrls)
+                if (validatedSelectionKey == currentSelectionKey) {
+                    continueInstall(repositoryUrls)
+                    return@setOnClickListener
+                }
+
+                val requestedByDetectAction = positiveButton.text?.toString() == activity.getString(R.string.bootstrap_settings_extensions_github_check_action)
+                runGithubCheck(repositoryUrls, autoContinueOnReachable = !requestedByDetectAction)
             }
         }
         dialog.show()
@@ -1524,11 +1651,11 @@ internal class BootstrapSettingsExtensionsCoordinator(
         val requestName = "extension-reinstall-${folderName.replace(Regex("[^A-Za-z0-9._-]"), "_")}"
         val environment = mutableMapOf(
             "APP_DATA_ROOT" to paths.serverDataDir.absolutePath,
-            "STAI_EXTENSION_TARGET_DIR" to "/tavern/data/extensions/$folderName",
-            "STAI_EXTENSION_REPO_URL" to repository.cloneUrl
+            "SILLYDROID_EXTENSION_TARGET_DIR" to "/tavern/data/extensions/$folderName",
+            "SILLYDROID_EXTENSION_REPO_URL" to repository.cloneUrl
         )
         repository.branch?.let { branch ->
-            environment["STAI_EXTENSION_REPO_BRANCH"] = branch
+            environment["SILLYDROID_EXTENSION_REPO_BRANCH"] = branch
         }
         runExtensionCommand(
             requestName = requestName,
@@ -1553,8 +1680,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
         paths.ensureWorkingDirectories()
         runtimeProvisioner.ensure()
 
-        val maintenanceRoot = File(paths.serverDataDir, ".stai-maintenance")
-        val serverMaintenanceRoot = File(paths.bootstrapRoot, "server/.stai-maintenance")
+        val maintenanceRoot = File(paths.serverDataDir, ".sillydroid-maintenance")
+        val serverMaintenanceRoot = File(paths.bootstrapRoot, "server/.sillydroid-maintenance")
         maintenanceRoot.mkdirs()
         serverMaintenanceRoot.mkdirs()
 
@@ -1565,7 +1692,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
 
         val logPath = File(paths.logsDir, "$requestName.log").absolutePath
         val progressFile = File(maintenanceRoot, "$requestName.progress.json")
-        val guestProgressFile = "/tavern/data/.stai-maintenance/${progressFile.name}"
+        val guestProgressFile = "/tavern/data/.sillydroid-maintenance/${progressFile.name}"
         progressFile.delete()
         val request = LaunchRequest(
             name = requestName,
@@ -1573,8 +1700,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
             workingDirectory = paths.bootstrapRoot,
             environment = environment + mapOf(
                 "APP_DATA_ROOT" to paths.serverDataDir.absolutePath,
-                "COMMAND_JS" to "/tavern/server/.stai-maintenance/$commandFileName",
-                "STAI_EXTENSION_PROGRESS_FILE" to guestProgressFile
+                "COMMAND_JS" to "/tavern/server/.sillydroid-maintenance/$commandFileName",
+                "SILLYDROID_EXTENSION_PROGRESS_FILE" to guestProgressFile
             )
         )
         val process = launcher.start(request)
@@ -1629,19 +1756,19 @@ internal class BootstrapSettingsExtensionsCoordinator(
     ): ExtensionInstallPreview {
         val previewId = System.currentTimeMillis()
         val requestName = "extension-install-preview-$previewId"
-        val maintenanceRoot = File(paths.serverDataDir, ".stai-maintenance")
+        val maintenanceRoot = File(paths.serverDataDir, ".sillydroid-maintenance")
         maintenanceRoot.mkdirs()
         val previewHostFile = File(maintenanceRoot, "$requestName.json")
-        val previewGuestFile = "/tavern/data/.stai-maintenance/${previewHostFile.name}"
+        val previewGuestFile = "/tavern/data/.sillydroid-maintenance/${previewHostFile.name}"
         val previewTempDir = File(maintenanceRoot, "$requestName-repo")
-        val previewGuestTempDir = "/tavern/data/.stai-maintenance/${previewTempDir.name}"
+        val previewGuestTempDir = "/tavern/data/.sillydroid-maintenance/${previewTempDir.name}"
         val environment = mutableMapOf(
-            "STAI_EXTENSION_REPO_URL" to normalizedRepository.cloneUrl,
-            "STAI_EXTENSION_PREVIEW_FILE" to previewGuestFile,
-            "STAI_EXTENSION_TEMP_DIR" to previewGuestTempDir
+            "SILLYDROID_EXTENSION_REPO_URL" to normalizedRepository.cloneUrl,
+            "SILLYDROID_EXTENSION_PREVIEW_FILE" to previewGuestFile,
+            "SILLYDROID_EXTENSION_TEMP_DIR" to previewGuestTempDir
         )
         normalizedRepository.branch?.let { branch ->
-            environment["STAI_EXTENSION_REPO_BRANCH"] = branch
+            environment["SILLYDROID_EXTENSION_REPO_BRANCH"] = branch
         }
         val logPath = runExtensionCommand(
             requestName = requestName,
@@ -1680,7 +1807,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
     private fun finalizeInstallPreview(preview: ExtensionInstallPreview) {
         val extensionsRoot = File(paths.serverDataDir, "extensions")
         val targetDir = File(extensionsRoot, preview.folderName)
-        val backupDir = File(extensionsRoot, "${preview.folderName}.stai-backup-${System.currentTimeMillis()}")
+        val backupDir = File(extensionsRoot, "${preview.folderName}.sillydroid-backup-${System.currentTimeMillis()}")
         var backupCreated = false
         var installed = false
 
@@ -1798,7 +1925,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
                         version = manifest.optString("version").ifBlank { null },
                         author = manifest.optString("author").ifBlank { null },
                         sourceDirectory = directory,
-                        category = manifest.optString("stai_bundle_category").ifBlank { "default" },
+                        category = manifest.optString("sillydroid_bundle_category").ifBlank { "default" },
                         targetExists = targetDirectory.isDirectory && File(targetDirectory, "manifest.json").isFile
                     )
                 }.getOrNull()
@@ -1807,27 +1934,13 @@ internal class BootstrapSettingsExtensionsCoordinator(
     }
 
     private fun loadDefaultExtensionRepositories(): List<DefaultExtensionRepository> {
-        val packagedConfigFile = File(paths.bootstrapRoot, "default-extensions/stai-build-config.json")
-        val bundledLegacyConfigFile = File(paths.bootstrapRoot, "bundled-extensions/stai-build-config.json")
-        val serverLegacyConfigFile = File(paths.bootstrapRoot, "server/bundled-extensions/stai-build-config.json")
-        val legacyRepositoriesFile = File(paths.bootstrapRoot, "default-extensions/default-extension-repositories.json")
-        val bundledLegacyRepositoriesFile = File(paths.bootstrapRoot, "bundled-extensions/default-extension-repositories.json")
-        val serverLegacyRepositoriesFile = File(paths.bootstrapRoot, "server/bundled-extensions/default-extension-repositories.json")
-        val repositoriesFile = when {
-            packagedConfigFile.isFile -> packagedConfigFile
-            bundledLegacyConfigFile.isFile -> bundledLegacyConfigFile
-            serverLegacyConfigFile.isFile -> serverLegacyConfigFile
-            legacyRepositoriesFile.isFile -> legacyRepositoriesFile
-            bundledLegacyRepositoriesFile.isFile -> bundledLegacyRepositoriesFile
-            serverLegacyRepositoriesFile.isFile -> serverLegacyRepositoriesFile
-            else -> return emptyList()
-        }
-        if (!repositoriesFile.isFile) {
+        val packagedConfigFile = File(paths.bootstrapRoot, "default-extensions/sillydroid-build-config.json")
+        if (!packagedConfigFile.isFile) {
             return emptyList()
         }
 
         return runCatching {
-            val root = JSONObject(repositoriesFile.readText())
+            val root = JSONObject(packagedConfigFile.readText())
             val repositories = root.optJSONArray("defaultExtensionRepositories")
                 ?: root.optJSONArray("repositories")
                 ?: return@runCatching emptyList()
@@ -2011,6 +2124,48 @@ internal class BootstrapSettingsExtensionsCoordinator(
         }
     }
 
+    private fun checkRepositoryUrlsGithubReachability(
+        repositoryUrls: List<String>,
+        onResult: (reachable: Boolean, failureMessage: String?) -> Unit
+    ) {
+        val normalizedRepositories = repositoryUrls.mapNotNull(::normalizeRepositoryUrl)
+        if (normalizedRepositories.none(::requiresGithubReachabilityCheck)) {
+            onResult(true, null)
+            return
+        }
+
+        activity.lifecycleScope.launch {
+            val failureMessage = withContext(Dispatchers.IO) {
+                runCatching {
+                    ensureRemoteSourcesReachable(normalizedRepositories)
+                    null
+                }.getOrElse { exception ->
+                    exception.message ?: activity.getString(R.string.bootstrap_settings_extensions_github_unreachable, "github.com")
+                }
+            }
+            onResult(failureMessage == null, failureMessage)
+        }
+    }
+
+    private fun updateDialogMessage(
+        dialog: androidx.appcompat.app.AlertDialog,
+        baseMessage: String?,
+        statusMessage: String?
+    ) {
+        val resolvedMessage = buildDialogMessage(baseMessage, statusMessage)
+        val messageView = dialog.findViewById<TextView>(android.R.id.message)
+        messageView?.text = resolvedMessage
+        messageView?.isVisible = !resolvedMessage.isNullOrBlank()
+    }
+
+    private fun buildDialogMessage(baseMessage: String?, statusMessage: String?): String? {
+        val messageParts = listOfNotNull(
+            baseMessage?.trim()?.takeIf { it.isNotEmpty() },
+            statusMessage?.trim()?.takeIf { it.isNotEmpty() }
+        )
+        return messageParts.takeIf { it.isNotEmpty() }?.joinToString(separator = "\n\n")
+    }
+
     private fun fetchReachabilityStatusCode(targetUrl: String): Int {
         val connection = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
@@ -2018,7 +2173,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             connectTimeout = 8_000
             readTimeout = 8_000
             setRequestProperty("Accept", "*/*")
-            setRequestProperty("User-Agent", "STAI-Android-Host")
+            setRequestProperty("User-Agent", "SillyDroid-Android-Host")
         }
 
         return try {
@@ -2147,8 +2302,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
             APP_DATA_ROOT="${'$'}{APP_DATA_ROOT:?APP_DATA_ROOT is required}"
             LOGS_DIR="${'$'}{LOGS_DIR:?LOGS_DIR is required}"
             COMMAND_JS="${'$'}{COMMAND_JS:?COMMAND_JS is required}"
-            STAI_EXTENSION_TARGET_DIR="${'$'}{STAI_EXTENSION_TARGET_DIR:-}"
-            STAI_EXTENSION_REPO_URL="${'$'}{STAI_EXTENSION_REPO_URL:?STAI_EXTENSION_REPO_URL is required}"
+            SILLYDROID_EXTENSION_TARGET_DIR="${'$'}{SILLYDROID_EXTENSION_TARGET_DIR:-}"
+            SILLYDROID_EXTENSION_REPO_URL="${'$'}{SILLYDROID_EXTENSION_REPO_URL:?SILLYDROID_EXTENSION_REPO_URL is required}"
 
             PROOT_BIN="${'$'}{HOST_PROOT_BIN:?HOST_PROOT_BIN is required}"
             PROOT_LIB_DIR="${'$'}{HOST_PROOT_LIB_DIR:?HOST_PROOT_LIB_DIR is required}"
@@ -2240,9 +2395,9 @@ internal class BootstrapSettingsExtensionsCoordinator(
             import git from 'isomorphic-git';
             import http from 'isomorphic-git/http/node';
 
-            const targetDir = process.env.STAI_EXTENSION_TARGET_DIR;
-            const repoUrl = process.env.STAI_EXTENSION_REPO_URL;
-            const repoBranch = process.env.STAI_EXTENSION_REPO_BRANCH || undefined;
+            const targetDir = process.env.SILLYDROID_EXTENSION_TARGET_DIR;
+            const repoUrl = process.env.SILLYDROID_EXTENSION_REPO_URL;
+            const repoBranch = process.env.SILLYDROID_EXTENSION_REPO_BRANCH || undefined;
             if (!targetDir || !repoUrl) {
                 throw new Error('Missing extension target or repository URL.');
             }
@@ -2250,7 +2405,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             ${extensionProgressHelpers()}
 
             const parentDir = path.dirname(targetDir);
-            const backupDir = targetDir + '.stai-backup-' + Date.now();
+            const backupDir = targetDir + '.sillydroid-backup-' + Date.now();
             fs.mkdirSync(parentDir, { recursive: true });
 
             try {
@@ -2311,10 +2466,10 @@ internal class BootstrapSettingsExtensionsCoordinator(
             import git from 'isomorphic-git';
             import http from 'isomorphic-git/http/node';
 
-            const repoUrl = process.env.STAI_EXTENSION_REPO_URL;
-            const repoBranch = process.env.STAI_EXTENSION_REPO_BRANCH || undefined;
-            const previewFile = process.env.STAI_EXTENSION_PREVIEW_FILE;
-            const tempDir = process.env.STAI_EXTENSION_TEMP_DIR;
+            const repoUrl = process.env.SILLYDROID_EXTENSION_REPO_URL;
+            const repoBranch = process.env.SILLYDROID_EXTENSION_REPO_BRANCH || undefined;
+            const previewFile = process.env.SILLYDROID_EXTENSION_PREVIEW_FILE;
+            const tempDir = process.env.SILLYDROID_EXTENSION_TEMP_DIR;
             if (!repoUrl || !previewFile || !tempDir) {
                 throw new Error('Missing preview environment.');
             }
@@ -2388,7 +2543,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
 
     private fun extensionProgressHelpers(): String {
         return """
-            const progressFile = process.env.STAI_EXTENSION_PROGRESS_FILE || null;
+            const progressFile = process.env.SILLYDROID_EXTENSION_PROGRESS_FILE || null;
 
             function writeProgress({ step = null, phase = null, loaded = null, total = null, indeterminate = false, message = null }) {
                 if (!progressFile) {
@@ -2621,3 +2776,4 @@ internal class BootstrapSettingsExtensionsCoordinator(
         return (value * activity.resources.displayMetrics.density).toInt()
     }
 }
+

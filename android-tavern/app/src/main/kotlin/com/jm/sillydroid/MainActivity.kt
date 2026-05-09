@@ -1,4 +1,4 @@
-package com.stai.sillytavern
+package com.jm.sillydroid
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -108,8 +108,8 @@ class MainActivity : AppCompatActivity() {
         private const val loadedUrlStateKey = "tavern.webview.loadedUrl"
         private const val webSessionBridgeName = "StaiWebSessionBridge"
         private const val systemNotificationBridgeName = "AndroidSystemNotificationBridge"
-        private const val androidHostBridgeName = "StaiAndroidHostBridge"
-        private const val webSessionStoragePreferencesName = "stai-webview-session"
+        private const val androidHostBridgeName = "SillyDroidAndroidHostBridge"
+        private const val webSessionStoragePreferencesName = "sillydroid-webview-session"
         private const val webSessionStorageSnapshotKey = "session-storage"
     }
 
@@ -478,10 +478,10 @@ class MainActivity : AppCompatActivity() {
             return null
         }
 
-        val desiredWidth = resources.getDimensionPixelSize(R.dimen.stai_floating_logs_panel_width)
-        val desiredHeight = resources.getDimensionPixelSize(R.dimen.stai_floating_logs_panel_height)
-        val horizontalMargin = resources.getDimensionPixelSize(R.dimen.stai_floating_logs_panel_horizontal_margin)
-        val verticalMargin = resources.getDimensionPixelSize(R.dimen.stai_floating_logs_panel_vertical_margin)
+        val desiredWidth = resources.getDimensionPixelSize(R.dimen.sillydroid_floating_logs_panel_width)
+        val desiredHeight = resources.getDimensionPixelSize(R.dimen.sillydroid_floating_logs_panel_height)
+        val horizontalMargin = resources.getDimensionPixelSize(R.dimen.sillydroid_floating_logs_panel_horizontal_margin)
+        val verticalMargin = resources.getDimensionPixelSize(R.dimen.sillydroid_floating_logs_panel_vertical_margin)
         val availableWidth = (contentRoot.width - contentRoot.paddingLeft - contentRoot.paddingRight - horizontalMargin).coerceAtLeast(0)
         val availableHeight = (contentRoot.height - contentRoot.paddingTop - contentRoot.paddingBottom - verticalMargin).coerceAtLeast(0)
         val targetWidth = desiredWidth.coerceAtMost(availableWidth)
@@ -661,8 +661,8 @@ class MainActivity : AppCompatActivity() {
                 return@post
             }
 
-            val horizontalInset = resources.getDimensionPixelSize(R.dimen.stai_floating_logs_panel_horizontal_margin) / 2f
-            val verticalInset = resources.getDimensionPixelSize(R.dimen.stai_floating_logs_panel_vertical_margin) / 2f
+            val horizontalInset = resources.getDimensionPixelSize(R.dimen.sillydroid_floating_logs_panel_horizontal_margin) / 2f
+            val verticalInset = resources.getDimensionPixelSize(R.dimen.sillydroid_floating_logs_panel_vertical_margin) / 2f
             val minX = contentRoot.paddingLeft + horizontalInset
             val maxX = (contentRoot.width - contentRoot.paddingRight - panelSize.width - horizontalInset).toFloat().coerceAtLeast(minX)
             val minY = contentRoot.paddingTop + verticalInset
@@ -1847,7 +1847,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         return JSONObject()
-            .put("hostVersion", BuildConfig.STAI_HOST_VERSION)
+            .put("hostVersion", BuildConfig.SILLYDROID_HOST_VERSION)
             .put("apkVersionName", packageInfo.versionName.orEmpty().trim())
             .put("apkVersionCode", packageInfo.longVersionCode.toString())
             .put("floatingLogBubbleEnabled", hostConfigStore.floatingLogBubbleEnabled)
@@ -1921,14 +1921,76 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        val baseMessage = getString(R.string.bootstrap_settings_extensions_default_prompt_message, repositoryCount)
+        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.bootstrap_settings_extensions_default_prompt_title)
-            .setMessage(getString(R.string.bootstrap_settings_extensions_default_prompt_message, repositoryCount))
+            .setMessage(baseMessage)
             .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
-            .setPositiveButton(R.string.bootstrap_settings_extensions_install) { _, _ ->
-                defaultExtensionsCoordinator.autoInstallDefaultRepositories()
+            .setPositiveButton(R.string.bootstrap_settings_extensions_install, null)
+            .create()
+
+        dialog.setOnShowListener {
+            val positiveButton = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+            var githubReachable = false
+            var githubCheckVersion = 0
+
+            fun runGithubCheck() {
+                val checkVersion = githubCheckVersion + 1
+                githubCheckVersion = checkVersion
+                positiveButton.isEnabled = false
+                updateDefaultExtensionsPromptMessage(
+                    dialog = dialog,
+                    baseMessage = baseMessage,
+                    statusMessage = getString(R.string.bootstrap_settings_extensions_github_checking)
+                )
+                defaultExtensionsCoordinator.checkDefaultRepositoriesGithubReachability { reachable, failureMessage ->
+                    if (checkVersion != githubCheckVersion) {
+                        return@checkDefaultRepositoriesGithubReachability
+                    }
+
+                    githubReachable = reachable
+                    positiveButton.isEnabled = true
+                    positiveButton.text = getString(
+                        if (reachable) {
+                            R.string.bootstrap_settings_extensions_install
+                        } else {
+                            R.string.bootstrap_settings_extensions_github_check_action
+                        }
+                    )
+                    updateDefaultExtensionsPromptMessage(
+                        dialog = dialog,
+                        baseMessage = baseMessage,
+                        statusMessage = if (reachable) null else failureMessage
+                    )
+                }
             }
-            .show()
+
+            positiveButton.setOnClickListener {
+                if (githubReachable) {
+                    dialog.dismiss()
+                    defaultExtensionsCoordinator.autoInstallDefaultRepositories()
+                    return@setOnClickListener
+                }
+
+                runGithubCheck()
+            }
+
+            runGithubCheck()
+        }
+
+        dialog.show()
+    }
+
+    private fun updateDefaultExtensionsPromptMessage(
+        dialog: androidx.appcompat.app.AlertDialog,
+        baseMessage: String,
+        statusMessage: String?
+    ) {
+        val resolvedMessage = listOfNotNull(
+            baseMessage.trim().takeIf { it.isNotEmpty() },
+            statusMessage?.trim()?.takeIf { it.isNotEmpty() }
+        ).joinToString(separator = "\n\n")
+        dialog.findViewById<TextView>(android.R.id.message)?.text = resolvedMessage
     }
 
     private fun showDefaultExtensionsMessage(message: String) {
@@ -1953,24 +2015,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadDefaultExtensionRepositoryCount(): Int {
         val paths = HostPaths.from(this)
-        val packagedConfigFile = File(paths.bootstrapRoot, "default-extensions/stai-build-config.json")
-        val bundledLegacyConfigFile = File(paths.bootstrapRoot, "bundled-extensions/stai-build-config.json")
-        val serverLegacyConfigFile = File(paths.bootstrapRoot, "server/bundled-extensions/stai-build-config.json")
-        val legacyRepositoriesFile = File(paths.bootstrapRoot, "default-extensions/default-extension-repositories.json")
-        val bundledLegacyRepositoriesFile = File(paths.bootstrapRoot, "bundled-extensions/default-extension-repositories.json")
-        val serverLegacyRepositoriesFile = File(paths.bootstrapRoot, "server/bundled-extensions/default-extension-repositories.json")
-        val repositoriesFile = when {
-            packagedConfigFile.isFile -> packagedConfigFile
-            bundledLegacyConfigFile.isFile -> bundledLegacyConfigFile
-            serverLegacyConfigFile.isFile -> serverLegacyConfigFile
-            legacyRepositoriesFile.isFile -> legacyRepositoriesFile
-            bundledLegacyRepositoriesFile.isFile -> bundledLegacyRepositoriesFile
-            serverLegacyRepositoriesFile.isFile -> serverLegacyRepositoriesFile
-            else -> return 0
+        val packagedConfigFile = File(paths.bootstrapRoot, "default-extensions/sillydroid-build-config.json")
+        if (!packagedConfigFile.isFile) {
+            return 0
         }
 
         return runCatching {
-            val root = JSONObject(repositoriesFile.readText())
+            val root = JSONObject(packagedConfigFile.readText())
             val repositories = root.optJSONArray("defaultExtensionRepositories")
                 ?: root.optJSONArray("repositories")
                 ?: return@runCatching 0
@@ -2187,3 +2238,4 @@ class MainActivity : AppCompatActivity() {
         return arrayOf(selectedUri)
     }
 }
+

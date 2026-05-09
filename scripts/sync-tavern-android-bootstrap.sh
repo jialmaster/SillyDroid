@@ -15,9 +15,9 @@ runtime_rid="linux-arm64"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workspace_root="$(cd "$script_dir/.." && pwd)"
 target_root=''
-working_root="${STAI_TAVERN_ANDROID_BOOTSTRAP_WORK_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/stai-tavern-android-bootstrap}"
+working_root="${SILLYDROID_TAVERN_ANDROID_BOOTSTRAP_WORK_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/sillydroid-tavern-android-bootstrap}"
 server_overlay_root="$workspace_root/android-tavern/server-overlay"
-build_config_path="$workspace_root/stai-build-config.json"
+build_config_path="$workspace_root/sillydroid-build-config.json"
 
 read_build_config_value() {
     local key_path="$1"
@@ -28,7 +28,7 @@ read_build_config_value() {
         return
     fi
 
-    python3 "$workspace_root/scripts/read-stai-build-config.py" "$build_config_path" "$key_path" "$default_value"
+    python3 "$workspace_root/scripts/read-sillydroid-build-config.py" "$build_config_path" "$key_path" "$default_value"
 }
 
 resolve_latest_tavern_tag() {
@@ -44,7 +44,7 @@ import urllib.request
 
 request = urllib.request.Request(
     'https://api.github.com/repos/SillyTavern/SillyTavern/releases/latest',
-    headers={'User-Agent': 'STAI-Android-Build'}
+    headers={'User-Agent': 'SillyDroid-Android-Build'}
 )
 with urllib.request.urlopen(request) as response:
     payload = json.load(response)
@@ -118,7 +118,7 @@ usage() {
 Usage: sync-tavern-android-bootstrap.sh [--tag <sillytavern-tag>] [--runtime-rid linux-arm64] [--target-root <path>] [--working-root <path>]
 
 说明：
-- 未传 --tag 时优先读取仓库根目录 stai-build-config.json 的 build.tavernVersion。
+- 未传 --tag 时优先读取仓库根目录 sillydroid-build-config.json 的 build.tavernVersion。
 - build.tavernVersion 为 latest 或 auto 时，会自动解析上游最新 GitHub Release tag。
 - 默认输出目录为 artifacts/releases/server-source/<rid>/<tag>。
 - 该脚本只生成 Tavern server source；其中包含 Tavern 源码、overlay 和 npm 运行依赖，不包含 node/git dependency packs，也不生成最终 server-payload。
@@ -128,7 +128,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --tag)
-            STAI_TAVERN_TAG="$2"
+            SILLYDROID_TAVERN_TAG="$2"
             shift 2
             ;;
         --runtime-rid)
@@ -157,18 +157,18 @@ done
 
 configured_tavern_tag="$(read_build_config_value 'build.tavernVersion' 'latest')"
 
-if [[ -z "${STAI_TAVERN_TAG:-}" ]]; then
-    STAI_TAVERN_TAG="$configured_tavern_tag"
+if [[ -z "${SILLYDROID_TAVERN_TAG:-}" ]]; then
+    SILLYDROID_TAVERN_TAG="$configured_tavern_tag"
 fi
 
-case "${STAI_TAVERN_TAG,,}" in
+case "${SILLYDROID_TAVERN_TAG,,}" in
     ''|auto|latest)
-        STAI_TAVERN_TAG="$(resolve_latest_tavern_tag)"
+        SILLYDROID_TAVERN_TAG="$(resolve_latest_tavern_tag)"
         ;;
 esac
 
 if [[ -z "$target_root" ]]; then
-    target_root="$workspace_root/artifacts/releases/server-source/$runtime_rid/$STAI_TAVERN_TAG"
+    target_root="$workspace_root/artifacts/releases/server-source/$runtime_rid/$SILLYDROID_TAVERN_TAG"
 fi
 
 case "$runtime_rid" in
@@ -190,38 +190,38 @@ json_escape() {
     printf '%s' "$value"
 }
 
-stai_ensure_node
-stai_ensure_java_home
-stai_require_command tar
-stai_require_command find
-stai_require_command unzip
+sillydroid_ensure_node
+sillydroid_ensure_java_home
+sillydroid_require_command tar
+sillydroid_require_command find
+sillydroid_require_command unzip
 
 resolved_target_root="$(realpath -m "$target_root")"
 resolved_working_root="$(realpath -m "$working_root")"
 downloads_root="$resolved_working_root/downloads"
 source_root="$resolved_working_root/source"
 payload_root="$resolved_working_root/payload"
-archive_name="sillytavern-${STAI_TAVERN_TAG}.tar.gz"
+archive_name="sillytavern-${SILLYDROID_TAVERN_TAG}.tar.gz"
 source_archive_path="$downloads_root/$archive_name"
-source_archive_url="https://github.com/SillyTavern/SillyTavern/archive/refs/tags/${STAI_TAVERN_TAG}.tar.gz"
+source_archive_url="https://github.com/SillyTavern/SillyTavern/archive/refs/tags/${SILLYDROID_TAVERN_TAG}.tar.gz"
 
 mkdir -p "$downloads_root" "$resolved_target_root"
-stai_download_file_if_missing "$source_archive_url" "$source_archive_path"
+sillydroid_download_file_if_missing "$source_archive_url" "$source_archive_path"
 
 rm -rf "$source_root" "$payload_root"
 mkdir -p "$source_root"
-stai_extract_archive_with_progress "$source_archive_path" "$source_root" 'sillytavern-source'
+sillydroid_extract_archive_with_progress "$source_archive_path" "$source_root" 'sillytavern-source'
 resolved_source_root="$(find "$source_root" -mindepth 1 -maxdepth 1 -type d | sort | head -n 1)"
-stai_assert_path_exists "$resolved_source_root/package.json" "SillyTavern 源码解压失败：$source_archive_path"
+sillydroid_assert_path_exists "$resolved_source_root/package.json" "SillyTavern 源码解压失败：$source_archive_path"
 payload_root="$resolved_source_root"
 
 # 在构建机上提前安装运行依赖并裁掉 devDependencies，避免 Android 设备首次启动时再联网安装 npm 包。
-stai_progress_stage 1 3 "开始安装 Tavern 运行依赖（npm omit=dev）"
+sillydroid_progress_stage 1 3 "开始安装 Tavern 运行依赖（npm omit=dev）"
 (
     cd "$resolved_source_root"
-    npm_cache_dir="$(stai_toolchain_root)/npm-cache"
+    npm_cache_dir="$(sillydroid_toolchain_root)/npm-cache"
     mkdir -p "$npm_cache_dir"
-    stai_log "复用 npm 缓存目录：$npm_cache_dir"
+    sillydroid_log "复用 npm 缓存目录：$npm_cache_dir"
     if [[ -f package-lock.json ]]; then
         npm ci --omit=dev --no-fund --no-audit --prefer-offline --progress=true --cache "$npm_cache_dir"
     else
@@ -245,7 +245,7 @@ stai_progress_stage 1 3 "开始安装 Tavern 运行依赖（npm omit=dev）"
         exit 1
     fi
 )
-stai_progress_stage 2 3 "Tavern 运行依赖安装完成"
+sillydroid_progress_stage 2 3 "Tavern 运行依赖安装完成"
 
 rm -rf "$payload_root/data" "$payload_root/backups"
 
@@ -310,21 +310,21 @@ EOF
 chmod +x "$payload_root/tavern-entrypoint.sh"
 
 jar_path="$JAVA_HOME/bin/jar"
-stai_assert_path_exists "$jar_path" "缺少 jar 命令：$jar_path"
+sillydroid_assert_path_exists "$jar_path" "缺少 jar 命令：$jar_path"
 server_source_archive_path="$resolved_target_root/server-source.zip"
 server_source_manifest_path="$resolved_target_root/server-source-manifest.json"
 mapfile -t packaged_files < <(find "$payload_root" -type f -printf '%P\n' | LC_ALL=C sort)
 rm -f "$server_source_archive_path" "$server_source_manifest_path"
-stai_progress_stage 3 3 "开始归档 Tavern server source"
+sillydroid_progress_stage 3 3 "开始归档 Tavern server source"
 "$jar_path" --create --file "$server_source_archive_path" --no-manifest -C "$payload_root" .
 server_source_archive_size_bytes="$(stat -c '%s' "$server_source_archive_path")"
 
 {
     printf '{\n'
     printf '  "package": "%s",\n' "$(json_escape "SillyTavernServerSource")"
-    printf '  "payloadVersion": "%s",\n' "$(json_escape "$STAI_TAVERN_TAG")"
+    printf '  "payloadVersion": "%s",\n' "$(json_escape "$SILLYDROID_TAVERN_TAG")"
     printf '  "runtimeRid": "%s",\n' "$(json_escape "$runtime_rid")"
-    printf '  "tag": "%s",\n' "$(json_escape "$STAI_TAVERN_TAG")"
+    printf '  "tag": "%s",\n' "$(json_escape "$SILLYDROID_TAVERN_TAG")"
     printf '  "sourceArchive": "%s",\n' "$(json_escape "$archive_name")"
     printf '  "syncedAtUtc": "%s",\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
     printf '  "archiveFile": "%s",\n' "$(json_escape "$(basename "$server_source_archive_path")")"
@@ -333,4 +333,4 @@ server_source_archive_size_bytes="$(stat -c '%s' "$server_source_archive_path")"
     printf '}\n'
 } > "$server_source_manifest_path"
 
-printf 'Packed %s tavern files for tag %s into %s\n' "${#packaged_files[@]}" "$STAI_TAVERN_TAG" "$server_source_archive_path"
+printf 'Packed %s tavern files for tag %s into %s\n' "${#packaged_files[@]}" "$SILLYDROID_TAVERN_TAG" "$server_source_archive_path"

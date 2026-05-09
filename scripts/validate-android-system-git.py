@@ -200,7 +200,7 @@ def build_probe_script(context: AdbContext, repo_url: str, branch: str | None, p
         set -eu
         APP_ROOT={quoted(context.app_root)}
         SERVER_ENTRY={quoted(context.server_entrypoint)}
-        BACKUP="${{SERVER_ENTRY}}.stai-validation.bak"
+        BACKUP="${{SERVER_ENTRY}}.sillydroid-validation.bak"
         cp "$SERVER_ENTRY" "$BACKUP"
         trap 'if [ -f "$BACKUP" ]; then mv -f "$BACKUP" "$SERVER_ENTRY"; fi' EXIT
         printf '%s\\n' {entrypoint_printf} > "$SERVER_ENTRY"
@@ -299,7 +299,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="在真机上通过真实 start-server 链路验证 Node 对系统 git 的调用是否可用。"
     )
-    parser.add_argument("--package", default="com.stai.sillytavern", help="Android 应用包名。")
+    parser.add_argument("--package", default="com.jm.sillydroid", help="Android 应用包名。")
     parser.add_argument("--serial", help="adb 设备序列号。")
     parser.add_argument(
         "--repo-url",

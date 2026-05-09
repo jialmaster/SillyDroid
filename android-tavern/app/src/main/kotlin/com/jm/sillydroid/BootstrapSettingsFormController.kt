@@ -1,4 +1,4 @@
-package com.stai.sillytavern
+package com.jm.sillydroid
 
 import android.content.res.ColorStateList
 import android.transition.ChangeBounds
@@ -246,7 +246,7 @@ internal class BootstrapSettingsFormController(
         expandedByDefault: Boolean
     ): SectionBinding {
         val cardView = MaterialCardView(activity).apply {
-            radius = dimenFloat(R.dimen.stai_card_radius)
+            radius = dimenFloat(R.dimen.sillydroid_card_radius)
             cardElevation = 0f
             strokeWidth = dp(1)
             strokeColor = resolveThemeColor(MaterialR.attr.colorOutlineVariant)
@@ -268,7 +268,7 @@ internal class BootstrapSettingsFormController(
             isClickable = true
             isFocusable = true
             setBackgroundResource(resolveThemeResource(android.R.attr.selectableItemBackground))
-            setPadding(dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_space_lg))
+            setPadding(dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_space_lg))
         }
 
         val titleRow = LinearLayout(activity).apply {
@@ -278,14 +278,14 @@ internal class BootstrapSettingsFormController(
 
         titleRow.addView(TextView(activity).apply {
             text = section.title
-            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsSectionTitle)
+            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsSectionTitle)
             setTextColor(resolveThemeColor(MaterialR.attr.colorOnSurface))
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         })
 
         val toggleView = TextView(activity).apply {
-            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsBadge)
-            setPadding(dimen(R.dimen.stai_space_lg), dimen(R.dimen.stai_space_xs), dimen(R.dimen.stai_space_lg), dimen(R.dimen.stai_space_xs))
+            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsBadge)
+            setPadding(dimen(R.dimen.sillydroid_space_lg), dimen(R.dimen.sillydroid_space_xs), dimen(R.dimen.sillydroid_space_lg), dimen(R.dimen.sillydroid_space_xs))
             setTextColor(resolveThemeColor(MaterialR.attr.colorOnPrimaryContainer))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
@@ -297,9 +297,9 @@ internal class BootstrapSettingsFormController(
         headerLayout.addView(titleRow)
         headerLayout.addView(TextView(activity).apply {
             text = section.summary
-            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsBody)
+            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsBody)
             setTextColor(resolveThemeColor(MaterialR.attr.colorOnSurfaceVariant))
-            setPadding(0, dimen(R.dimen.stai_space_xs), 0, 0)
+            setPadding(0, dimen(R.dimen.sillydroid_space_xs), 0, 0)
         })
 
         val dividerView = View(activity).apply {
@@ -313,7 +313,7 @@ internal class BootstrapSettingsFormController(
 
         val contentLayout = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_space_xs), dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_section_padding))
+            setPadding(dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_space_xs), dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_section_padding))
         }
         val fieldPaths = mutableListOf<String>()
 
@@ -345,7 +345,7 @@ internal class BootstrapSettingsFormController(
         return when (field.kind) {
             TavernConfigFieldKind.BOOLEAN -> {
                 val card = MaterialCardView(activity).apply {
-                    radius = dimenFloat(R.dimen.stai_nested_card_radius)
+                    radius = dimenFloat(R.dimen.sillydroid_nested_card_radius)
                     cardElevation = 0f
                     strokeWidth = 0
                     setCardBackgroundColor(resolveThemeColor(MaterialR.attr.colorSurfaceContainerLow))
@@ -359,7 +359,7 @@ internal class BootstrapSettingsFormController(
                 val container = LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_space_lg), dimen(R.dimen.stai_section_padding), dimen(R.dimen.stai_space_lg))
+                    setPadding(dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_space_lg), dimen(R.dimen.sillydroid_section_padding), dimen(R.dimen.sillydroid_space_lg))
                 }
                 val textContainer = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
@@ -367,14 +367,14 @@ internal class BootstrapSettingsFormController(
                 }
                 textContainer.addView(TextView(activity).apply {
                     text = field.title
-                    TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsCardTitle)
+                    TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsCardTitle)
                     setTextColor(resolveThemeColor(MaterialR.attr.colorOnSurface))
                 })
                 textContainer.addView(TextView(activity).apply {
                     text = field.summary
-                    TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyTavern_SettingsBody)
+                    TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsBody)
                     setTextColor(resolveThemeColor(MaterialR.attr.colorOnSurfaceVariant))
-                    setPadding(0, dimen(R.dimen.stai_space_xs), dimen(R.dimen.stai_space_lg), 0)
+                    setPadding(0, dimen(R.dimen.sillydroid_space_xs), dimen(R.dimen.sillydroid_space_lg), 0)
                 })
                 val switch = MaterialSwitch(activity).apply {
                     showText = false
@@ -423,12 +423,12 @@ internal class BootstrapSettingsFormController(
                     }
                 }
                 val inputLayout = TextInputLayout(
-                    ContextThemeWrapper(activity, R.style.Widget_SillyTavern_SettingsTextInputLayout_OutlinedBox)
+                    ContextThemeWrapper(activity, R.style.Widget_SillyDroid_SettingsTextInputLayout_OutlinedBox)
                 ).apply {
                     hint = field.title
                     helperText = field.summary
                     boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
-                    setBoxCornerRadii(dimenFloat(R.dimen.stai_nested_card_radius), dimenFloat(R.dimen.stai_nested_card_radius), dimenFloat(R.dimen.stai_nested_card_radius), dimenFloat(R.dimen.stai_nested_card_radius))
+                    setBoxCornerRadii(dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius))
                     setPadding(0, 0, 0, 0)
                     if (field.kind == TavernConfigFieldKind.PASSWORD) {
                         endIconMode = TextInputLayout.END_ICON_PASSWORD_TOGGLE
@@ -439,7 +439,7 @@ internal class BootstrapSettingsFormController(
                     )
                 }
                 val editText = TextInputEditText(
-                    ContextThemeWrapper(inputLayout.context, R.style.Widget_SillyTavern_SettingsTextInputEditText)
+                    ContextThemeWrapper(inputLayout.context, R.style.Widget_SillyDroid_SettingsTextInputEditText)
                 ).apply {
                     setText(formatFieldValue(field, currentValue))
                     inputType = resolveInputType(field.kind)
@@ -516,13 +516,13 @@ internal class BootstrapSettingsFormController(
         }
 
         val inputLayout = TextInputLayout(
-            ContextThemeWrapper(activity, R.style.Widget_SillyTavern_SettingsTextInputLayout_OutlinedBox)
+            ContextThemeWrapper(activity, R.style.Widget_SillyDroid_SettingsTextInputLayout_OutlinedBox)
         ).apply {
             hint = field.title
             helperText = field.summary
             endIconMode = TextInputLayout.END_ICON_CLEAR_TEXT
             boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
-            setBoxCornerRadii(dimenFloat(R.dimen.stai_nested_card_radius), dimenFloat(R.dimen.stai_nested_card_radius), dimenFloat(R.dimen.stai_nested_card_radius), dimenFloat(R.dimen.stai_nested_card_radius))
+            setBoxCornerRadii(dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius))
             setPadding(0, 0, 0, 0)
             layoutParams = LinearLayout.LayoutParams(
                 0,
@@ -532,7 +532,7 @@ internal class BootstrapSettingsFormController(
         }
 
         val editText = TextInputEditText(
-            ContextThemeWrapper(inputLayout.context, R.style.Widget_SillyTavern_SettingsTextInputEditText)
+            ContextThemeWrapper(inputLayout.context, R.style.Widget_SillyDroid_SettingsTextInputEditText)
         ).apply {
             setText(formatFieldValue(field, currentValue))
             inputType = resolveInputType(field.kind)
@@ -550,17 +550,17 @@ internal class BootstrapSettingsFormController(
         inputLayout.addView(editText)
 
         val randomButton = ImageButton(activity).apply {
-            layoutParams = LinearLayout.LayoutParams(dimen(R.dimen.stai_icon_button_size), dimen(R.dimen.stai_icon_button_size)).apply {
-                marginStart = dimen(R.dimen.stai_space_md)
+            layoutParams = LinearLayout.LayoutParams(dimen(R.dimen.sillydroid_icon_button_size), dimen(R.dimen.sillydroid_icon_button_size)).apply {
+                marginStart = dimen(R.dimen.sillydroid_space_md)
                 topMargin = dp(6)
             }
             minimumWidth = 0
             minimumHeight = 0
-            setPadding(dimen(R.dimen.stai_icon_button_padding), dimen(R.dimen.stai_icon_button_padding), dimen(R.dimen.stai_icon_button_padding), dimen(R.dimen.stai_icon_button_padding))
+            setPadding(dimen(R.dimen.sillydroid_icon_button_padding), dimen(R.dimen.sillydroid_icon_button_padding), dimen(R.dimen.sillydroid_icon_button_padding), dimen(R.dimen.sillydroid_icon_button_padding))
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = dimenFloat(R.dimen.stai_nested_card_radius)
+                cornerRadius = dimenFloat(R.dimen.sillydroid_nested_card_radius)
                 setColor(resolveThemeColor(MaterialR.attr.colorSurfaceContainerHigh))
                 setStroke(dp(1), resolveThemeColor(MaterialR.attr.colorOutlineVariant))
             }

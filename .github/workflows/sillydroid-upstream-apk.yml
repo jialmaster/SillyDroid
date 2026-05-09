@@ -6,8 +6,8 @@ on:
       - master
       - main
     paths:
-      - .github/workflows/tavern-upstream-apk.yml
-      - stai-build-config.json
+      - .github/workflows/sillydroid-upstream-apk.yml
+      - sillydroid-build-config.json
       - android-tavern/**
       - gradle/**
       - gradlew
@@ -98,9 +98,9 @@ jobs:
           fetch-depth: 0
           sparse-checkout: |
             android-tavern/gradle.properties
-            scripts/read-stai-build-config.py
+            scripts/read-sillydroid-build-config.py
             scripts/resolve-tavern-build-plan.sh
-            stai-build-config.json
+            sillydroid-build-config.json
 
       - name: Resolve build plan
         id: plan
@@ -154,16 +154,16 @@ jobs:
           sparse-checkout: |
             android-tavern/app/src/main/assets/bootstrap/scripts
             scripts
-            stai-build-config.json
+            sillydroid-build-config.json
 
       - name: Restore rootfs build caches
         if: needs.plan.outputs.force_rebuild != 'true'
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/stai-android-toolchain
-            ~/.cache/stai-android-rootfs
-          key: tavern-rootfs-${{ runner.os }}-${{ hashFiles('scripts/android-build-common.sh', 'scripts/build-tavern-android-runtime-image.sh', 'scripts/sync-android-rootfs.sh', 'android-tavern/app/src/main/assets/bootstrap/scripts/**', 'stai-build-config.json') }}
+            ~/.cache/sillydroid-android-toolchain
+            ~/.cache/sillydroid-android-rootfs
+          key: tavern-rootfs-${{ runner.os }}-${{ hashFiles('scripts/android-build-common.sh', 'scripts/build-tavern-android-runtime-image.sh', 'scripts/sync-android-rootfs.sh', 'android-tavern/app/src/main/assets/bootstrap/scripts/**', 'sillydroid-build-config.json') }}
           restore-keys: |
             tavern-rootfs-${{ runner.os }}-
 
@@ -286,16 +286,16 @@ jobs:
         with:
           sparse-checkout: |
             scripts
-            stai-build-config.json
+            sillydroid-build-config.json
 
       - name: Restore dependency packaging caches
         if: needs.plan.outputs.force_rebuild != 'true'
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/stai-android-toolchain
-            ~/.cache/stai-tavern-dependency-packs
-          key: tavern-dependency-packs-${{ runner.os }}-${{ hashFiles('scripts/android-build-common.sh', 'scripts/build-tavern-dependency-packs.sh', 'stai-build-config.json') }}
+            ~/.cache/sillydroid-android-toolchain
+            ~/.cache/sillydroid-tavern-dependency-packs
+          key: tavern-dependency-packs-${{ runner.os }}-${{ hashFiles('scripts/android-build-common.sh', 'scripts/build-tavern-dependency-packs.sh', 'sillydroid-build-config.json') }}
           restore-keys: |
             tavern-dependency-packs-${{ runner.os }}-
 
@@ -310,7 +310,7 @@ jobs:
 
           mkdir -p "$dependency_dir"
 
-          enabled="$(python3 -c "import json; value = (json.load(open('stai-build-config.json', encoding='utf-8')).get('build') or {}).get('includeDependencyPacks'); normalized = [str(item).strip() for item in value if str(item).strip()] if isinstance(value, list) else None; print('true' if normalized is None or normalized else 'false')")"
+          enabled="$(python3 -c "import json; value = (json.load(open('sillydroid-build-config.json', encoding='utf-8')).get('build') or {}).get('includeDependencyPacks'); normalized = [str(item).strip() for item in value if str(item).strip()] if isinstance(value, list) else None; print('true' if normalized is None or normalized else 'false')")"
 
           printf 'enabled=%s\n' "$enabled" >> "$GITHUB_OUTPUT"
 
@@ -428,17 +428,17 @@ jobs:
           sparse-checkout: |
             android-tavern/server-overlay
             scripts
-            stai-build-config.json
+            sillydroid-build-config.json
 
       - name: Restore server source packaging caches
         if: needs.plan.outputs.force_rebuild != 'true'
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/stai-android-toolchain
-            ~/.cache/stai-tavern-android-bootstrap
+            ~/.cache/sillydroid-android-toolchain
+            ~/.cache/sillydroid-tavern-android-bootstrap
             ~/.npm
-          key: tavern-server-source-${{ runner.os }}-${{ needs.plan.outputs.safe_tag }}-${{ hashFiles('scripts/android-build-common.sh', 'scripts/sync-tavern-android-bootstrap.sh', 'android-tavern/server-overlay/**', 'stai-build-config.json') }}
+          key: tavern-server-source-${{ runner.os }}-${{ needs.plan.outputs.safe_tag }}-${{ hashFiles('scripts/android-build-common.sh', 'scripts/sync-tavern-android-bootstrap.sh', 'android-tavern/server-overlay/**', 'sillydroid-build-config.json') }}
           restore-keys: |
             tavern-server-source-${{ runner.os }}-${{ needs.plan.outputs.safe_tag }}-
             tavern-server-source-${{ runner.os }}-
@@ -605,19 +605,19 @@ jobs:
             gradlew
             gradlew.bat
             scripts
-            stai-build-config.json
+            sillydroid-build-config.json
 
       - name: Restore Tavern Android build caches
         if: steps.resolve.outputs.source == 'built'
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/stai-android-toolchain
-            ~/.cache/stai-android-rootfs
+            ~/.cache/sillydroid-android-toolchain
+            ~/.cache/sillydroid-android-rootfs
             ~/.gradle/caches
             ~/.gradle/wrapper
             ~/.npm
-          key: tavern-upstream-apk-${{ runner.os }}-${{ hashFiles('scripts/*.sh', 'stai-build-config.json', 'android-tavern/build.gradle.kts', 'android-tavern/settings.gradle.kts', 'android-tavern/gradle.properties', 'android-tavern/app/build.gradle.kts', 'gradle/wrapper/*', 'gradlew') }}
+          key: tavern-upstream-apk-${{ runner.os }}-${{ hashFiles('scripts/*.sh', 'sillydroid-build-config.json', 'android-tavern/build.gradle.kts', 'android-tavern/settings.gradle.kts', 'android-tavern/gradle.properties', 'android-tavern/app/build.gradle.kts', 'gradle/wrapper/*', 'gradlew') }}
           restore-keys: |
             tavern-upstream-apk-${{ runner.os }}-
 
@@ -707,17 +707,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          export STAI_TAVERN_ANDROID_BUILD_ROOT="$RUNNER_TEMP/stai-tavern-android-build"
-          export STAI_ANDROID_HOST_VERSION='${{ needs.plan.outputs.host_version }}'
-          export STAI_ANDROID_UPSTREAM_VERSION='${{ needs.plan.outputs.tavern_tag }}'
-          export STAI_ANDROID_VERSION_NAME='${{ needs.plan.outputs.version_name }}'
-          export STAI_ANDROID_VERSION_CODE='${{ needs.plan.outputs.version_code }}'
+          export SILLYDROID_TAVERN_ANDROID_BUILD_ROOT="$RUNNER_TEMP/sillydroid-tavern-android-build"
+          export SILLYDROID_ANDROID_HOST_VERSION='${{ needs.plan.outputs.host_version }}'
+          export SILLYDROID_ANDROID_UPSTREAM_VERSION='${{ needs.plan.outputs.tavern_tag }}'
+          export SILLYDROID_ANDROID_VERSION_NAME='${{ needs.plan.outputs.version_name }}'
+          export SILLYDROID_ANDROID_VERSION_CODE='${{ needs.plan.outputs.version_code }}'
 
           if [ '${{ needs.plan.outputs.build_type }}' = 'release' ] && [ '${{ steps.signing.outputs.signing_source }}' = 'github-secrets' ]; then
-            export STAI_ANDROID_RELEASE_KEYSTORE_PATH='${{ steps.signing.outputs.keystore_path }}'
-            export STAI_ANDROID_RELEASE_KEYSTORE_PASSWORD='${{ steps.signing.outputs.store_password }}'
-            export STAI_ANDROID_RELEASE_KEY_ALIAS='${{ steps.signing.outputs.key_alias }}'
-            export STAI_ANDROID_RELEASE_KEY_PASSWORD='${{ steps.signing.outputs.key_password }}'
+            export SILLYDROID_ANDROID_RELEASE_KEYSTORE_PATH='${{ steps.signing.outputs.keystore_path }}'
+            export SILLYDROID_ANDROID_RELEASE_KEYSTORE_PASSWORD='${{ steps.signing.outputs.store_password }}'
+            export SILLYDROID_ANDROID_RELEASE_KEY_ALIAS='${{ steps.signing.outputs.key_alias }}'
+            export SILLYDROID_ANDROID_RELEASE_KEY_PASSWORD='${{ steps.signing.outputs.key_password }}'
           fi
 
           bash ./scripts/build-tavern-android-apk.sh \
@@ -836,7 +836,7 @@ jobs:
           fi
 
           {
-            echo '## SillyTavern Android APK'
+            echo '## SillyDroid Android APK'
             echo
             echo '- Host version: ${{ needs.plan.outputs.host_version }}'
             echo '- Upstream repo: SillyTavern/SillyTavern'
@@ -924,3 +924,4 @@ jobs:
           for artifact_id in "${artifact_ids[@]}"; do
             gh api repos/${{ github.repository }}/actions/artifacts/${artifact_id} -X DELETE > /dev/null
           done
+

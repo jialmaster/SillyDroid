@@ -1,4 +1,4 @@
-package com.stai.sillytavern
+package com.jm.sillydroid
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -30,9 +30,9 @@ import kotlinx.coroutines.withContext
 class StartupCoordinatorService : Service() {
     companion object {
         private const val logTag = "StartupCoordinator"
-        private const val ACTION_START = "com.stai.sillytavern.action.START"
-        private const val ACTION_RETRY = "com.stai.sillytavern.action.RETRY"
-        private const val ACTION_STOP_FOR_SETTINGS = "com.stai.sillytavern.action.STOP_FOR_SETTINGS"
+        private const val ACTION_START = "com.jm.sillydroid.action.START"
+        private const val ACTION_RETRY = "com.jm.sillydroid.action.RETRY"
+        private const val ACTION_STOP_FOR_SETTINGS = "com.jm.sillydroid.action.STOP_FOR_SETTINGS"
 
         fun createStartIntent(context: Context, retry: Boolean = false): Intent {
             return Intent(context, StartupCoordinatorService::class.java).apply {
@@ -57,7 +57,7 @@ class StartupCoordinatorService : Service() {
     private val startupLogFile: File
         get() = File(filesDir, "android-tavern/logs/startup.log")
     private val serverLogFile: File
-        get() = File(filesDir, "android-tavern/logs/sillytavern-server.log")
+        get() = File(filesDir, "android-tavern/logs/sillydroid-server.log")
 
     override fun onCreate() {
         super.onCreate()
@@ -203,7 +203,7 @@ class StartupCoordinatorService : Service() {
 
             updateStartupPhaseState(
                 phase = StartupPhase.STARTING_SERVER,
-                message = "正在拉起 SillyTavern。",
+                message = "正在拉起 Tavern。",
                 baseDetails = "正在启动本地 Node 服务进程。",
                 localUrl = localUrl,
                 progressPercent = 94
@@ -459,11 +459,11 @@ class StartupCoordinatorService : Service() {
     private fun buildServerExitDetails(exitCode: Int): String {
         val excerpt = readServerLogExcerpt()
         if (excerpt.isBlank()) {
-            return "SillyTavern 进程退出码：$exitCode"
+            return "Tavern 进程退出码：$exitCode"
         }
 
         return buildString {
-            append("SillyTavern 进程退出码：")
+            append("Tavern 进程退出码：")
             append(exitCode)
             append("\n\n最近服务日志：\n")
             append(excerpt)
@@ -551,3 +551,5 @@ class StartupCoordinatorService : Service() {
         }
     }
 }
+
+

@@ -3,11 +3,11 @@ import org.gradle.api.tasks.Sync
 import java.util.Properties
 
 fun resolvePackagedBuildConfigFile() = sequenceOf(
-    rootProject.file("stai-build-config.json"),
-    rootProject.file("../stai-build-config.json")
+    rootProject.file("sillydroid-build-config.json"),
+    rootProject.file("../sillydroid-build-config.json")
 ).firstOrNull { candidate -> candidate.isFile }
 
-val packagedBootstrapAssetsDir = layout.buildDirectory.dir("generated/stai-bootstrap-assets")
+val packagedBootstrapAssetsDir = layout.buildDirectory.dir("generated/sillydroid-bootstrap-assets")
 val packagedBootstrapAssetsDirFile = packagedBootstrapAssetsDir.get().asFile
 val packagedBuildConfigFile = resolvePackagedBuildConfigFile()
 val bundledExtensionsSourceDir = rootProject.file("extensions")
@@ -23,7 +23,7 @@ val syncBootstrapExtensionAssets by tasks.registering(Sync::class) {
     if (packagedBuildConfigFile != null) {
         from(packagedBuildConfigFile) {
             into("bootstrap/default-extensions")
-            rename { "stai-build-config.json" }
+            rename { "sillydroid-build-config.json" }
         }
     }
 }
@@ -67,22 +67,22 @@ val requiresReleaseSigning = requestedTasks.any { taskName ->
 }
 val releaseSigningProperties = loadReleaseSigningProperties()
 val releaseSigningKeystorePath = resolveReleaseSigningValue(
-    envName = "STAI_ANDROID_RELEASE_KEYSTORE_PATH",
+    envName = "SILLYDROID_ANDROID_RELEASE_KEYSTORE_PATH",
     propertyName = "storeFile",
     properties = releaseSigningProperties
 )
 val releaseSigningKeystorePassword = resolveReleaseSigningValue(
-    envName = "STAI_ANDROID_RELEASE_KEYSTORE_PASSWORD",
+    envName = "SILLYDROID_ANDROID_RELEASE_KEYSTORE_PASSWORD",
     propertyName = "storePassword",
     properties = releaseSigningProperties
 )
 val releaseSigningKeyAlias = resolveReleaseSigningValue(
-    envName = "STAI_ANDROID_RELEASE_KEY_ALIAS",
+    envName = "SILLYDROID_ANDROID_RELEASE_KEY_ALIAS",
     propertyName = "keyAlias",
     properties = releaseSigningProperties
 )
 val releaseSigningKeyPassword = resolveReleaseSigningValue(
-    envName = "STAI_ANDROID_RELEASE_KEY_PASSWORD",
+    envName = "SILLYDROID_ANDROID_RELEASE_KEY_PASSWORD",
     propertyName = "keyPassword",
     properties = releaseSigningProperties
 )
@@ -93,11 +93,11 @@ fun resolveAndroidVersionCode(rawValue: String): Int {
     }
 
     return rawValue.toIntOrNull()?.takeIf { it > 0 }
-        ?: throw GradleException("STAI_ANDROID_VERSION_CODE 必须是正整数：$rawValue")
+        ?: throw GradleException("SILLYDROID_ANDROID_VERSION_CODE 必须是正整数：$rawValue")
 }
 
 fun resolveAndroidHostVersion(): String {
-    val envValue = System.getenv("STAI_ANDROID_HOST_VERSION").orEmpty().trim()
+    val envValue = System.getenv("SILLYDROID_ANDROID_HOST_VERSION").orEmpty().trim()
     if (envValue.isNotBlank()) {
         return envValue
     }
@@ -135,17 +135,17 @@ fun quoteBuildConfigString(value: String): String {
     }
 }
 
-val androidVersionCode = resolveAndroidVersionCode(System.getenv("STAI_ANDROID_VERSION_CODE").orEmpty().trim())
+val androidVersionCode = resolveAndroidVersionCode(System.getenv("SILLYDROID_ANDROID_VERSION_CODE").orEmpty().trim())
 val androidHostVersion = resolveAndroidHostVersion()
-val androidUpstreamVersion = System.getenv("STAI_ANDROID_UPSTREAM_VERSION").orEmpty().trim()
+val androidUpstreamVersion = System.getenv("SILLYDROID_ANDROID_UPSTREAM_VERSION").orEmpty().trim()
 val androidVersionName = resolveAndroidVersionName(
-    rawValue = System.getenv("STAI_ANDROID_VERSION_NAME").orEmpty().trim(),
+    rawValue = System.getenv("SILLYDROID_ANDROID_VERSION_NAME").orEmpty().trim(),
     hostVersion = androidHostVersion,
     upstreamVersion = androidUpstreamVersion
 )
 
 android {
-    namespace = "com.stai.sillytavern"
+    namespace = "com.jm.sillydroid"
     compileSdk = 36
 
     signingConfigs {
@@ -153,7 +153,7 @@ android {
             if (requiresReleaseSigning) {
                 val signingKeystoreFile = file(
                     requireReleaseSigningValue(
-                        name = "STAI_ANDROID_RELEASE_KEYSTORE_PATH / signing/release-signing.properties:storeFile",
+                        name = "SILLYDROID_ANDROID_RELEASE_KEYSTORE_PATH / signing/release-signing.properties:storeFile",
                         value = releaseSigningKeystorePath
                     )
                 )
@@ -164,15 +164,15 @@ android {
 
                 storeFile = signingKeystoreFile
                 storePassword = requireReleaseSigningValue(
-                    name = "STAI_ANDROID_RELEASE_KEYSTORE_PASSWORD / signing/release-signing.properties:storePassword",
+                    name = "SILLYDROID_ANDROID_RELEASE_KEYSTORE_PASSWORD / signing/release-signing.properties:storePassword",
                     value = releaseSigningKeystorePassword
                 )
                 keyAlias = requireReleaseSigningValue(
-                    name = "STAI_ANDROID_RELEASE_KEY_ALIAS / signing/release-signing.properties:keyAlias",
+                    name = "SILLYDROID_ANDROID_RELEASE_KEY_ALIAS / signing/release-signing.properties:keyAlias",
                     value = releaseSigningKeyAlias
                 )
                 keyPassword = requireReleaseSigningValue(
-                    name = "STAI_ANDROID_RELEASE_KEY_PASSWORD / signing/release-signing.properties:keyPassword",
+                    name = "SILLYDROID_ANDROID_RELEASE_KEY_PASSWORD / signing/release-signing.properties:keyPassword",
                     value = releaseSigningKeyPassword
                 )
             }
@@ -180,14 +180,14 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.stai.sillytavern"
+        applicationId = "com.jm.sillydroid"
         minSdk = 29
         targetSdk = 36
         versionCode = androidVersionCode
         versionName = androidVersionName
-        buildConfigField("String", "STAI_HOST_VERSION", quoteBuildConfigString(androidHostVersion))
-        buildConfigField("String", "STAI_UPSTREAM_VERSION", quoteBuildConfigString(androidUpstreamVersion))
-        buildConfigField("String", "STAI_GITHUB_REPOSITORY", quoteBuildConfigString("jialmaster/ST.AI.SillyTavern.Android"))
+        buildConfigField("String", "SILLYDROID_HOST_VERSION", quoteBuildConfigString(androidHostVersion))
+        buildConfigField("String", "SILLYDROID_UPSTREAM_VERSION", quoteBuildConfigString(androidUpstreamVersion))
+        buildConfigField("String", "SILLYDROID_GITHUB_REPOSITORY", quoteBuildConfigString("jialmaster/SillyDroid"))
     }
 
     buildTypes {

@@ -7,7 +7,7 @@ from pathlib import Path
 
 def main() -> int:
     if len(sys.argv) != 4:
-        print("Usage: read-stai-build-config.py <config-path> <key.path> <default>", file=sys.stderr)
+        print("Usage: read-sillydroid-build-config.py <config-path> <key.path> <default>", file=sys.stderr)
         return 1
 
     config_path = Path(sys.argv[1])

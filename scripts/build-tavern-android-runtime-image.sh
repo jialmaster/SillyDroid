@@ -100,7 +100,7 @@ EOF
 patch_sync_script_for_tavern() {
     local generated_script_path="$1"
     local tavern_jni_lib_root="$2"
-    local tavern_runtime_prefix='/data/data/com.stai.sillytavern/files/usr'
+    local tavern_runtime_prefix='/data/data/com.jm.sillydroid/files/usr'
     local escaped_scripts_dir='' 
     local escaped_workspace_root=''
     local escaped_jni_root=''
@@ -145,11 +145,11 @@ stage_runtime_image() {
     rm -rf "$stage_root"
     mkdir -p "$stage_root/assets/bootstrap" "$stage_root/jniLibs/arm64-v8a"
 
-    stai_assert_path_exists "$tavern_bootstrap_root/scripts" "缺少 Tavern bootstrap scripts：$tavern_bootstrap_root/scripts"
-    stai_assert_path_exists "$tavern_rootfs_root/rootfs-fs.zip" "缺少 Tavern rootfs 归档：$tavern_rootfs_root/rootfs-fs.zip"
-    stai_assert_path_exists "$tavern_rootfs_root/rootfs-manifest.json" "缺少 Tavern rootfs manifest：$tavern_rootfs_root/rootfs-manifest.json"
-    stai_assert_path_exists "$tavern_jni_lib_root/libproot.so" "缺少 Tavern libproot.so：$tavern_jni_lib_root/libproot.so"
-    stai_assert_path_exists "$tavern_jni_lib_root/libtalloc_2.so" "缺少 Tavern libtalloc_2.so：$tavern_jni_lib_root/libtalloc_2.so"
+    sillydroid_assert_path_exists "$tavern_bootstrap_root/scripts" "缺少 Tavern bootstrap scripts：$tavern_bootstrap_root/scripts"
+    sillydroid_assert_path_exists "$tavern_rootfs_root/rootfs-fs.zip" "缺少 Tavern rootfs 归档：$tavern_rootfs_root/rootfs-fs.zip"
+    sillydroid_assert_path_exists "$tavern_rootfs_root/rootfs-manifest.json" "缺少 Tavern rootfs manifest：$tavern_rootfs_root/rootfs-manifest.json"
+    sillydroid_assert_path_exists "$tavern_jni_lib_root/libproot.so" "缺少 Tavern libproot.so：$tavern_jni_lib_root/libproot.so"
+    sillydroid_assert_path_exists "$tavern_jni_lib_root/libtalloc_2.so" "缺少 Tavern libtalloc_2.so：$tavern_jni_lib_root/libtalloc_2.so"
 
     cp -R "$tavern_bootstrap_root/scripts" "$stage_root/assets/bootstrap/"
     cp -R "$tavern_rootfs_root" "$stage_root/assets/bootstrap/rootfs"
@@ -191,10 +191,10 @@ if [[ -z "$metadata_path" ]]; then
 fi
 metadata_path="$(realpath -m "$metadata_path")"
 
-stai_assert_path_exists "$rootfs_sync_script" "缺少 rootfs 同步脚本：$rootfs_sync_script"
-stai_require_command bash
-stai_require_command sha256sum
-stai_ensure_java_home
+sillydroid_assert_path_exists "$rootfs_sync_script" "缺少 rootfs 同步脚本：$rootfs_sync_script"
+sillydroid_require_command bash
+sillydroid_require_command sha256sum
+sillydroid_ensure_java_home
 
 working_root="$workspace_root/artifacts/tmp/tavern-runtime-image-$runtime_rid"
 tavern_rootfs_root="$working_root/rootfs"
@@ -203,15 +203,15 @@ stage_root="$working_root/stage"
 output_directory="$(dirname "$output_path")"
 
 mkdir -p "$output_directory"
-stai_progress_stage 1 3 "开始生成 Tavern rootfs 资产"
+sillydroid_progress_stage 1 3 "开始生成 Tavern rootfs 资产"
 generate_tavern_rootfs_assets "$working_root" "$tavern_rootfs_root" "$tavern_jni_lib_root"
-stai_progress_stage 2 3 "开始整理 runtime image stage"
+sillydroid_progress_stage 2 3 "开始整理 runtime image stage"
 stage_runtime_image "$stage_root" "$tavern_rootfs_root" "$tavern_jni_lib_root"
 
 rm -f "$output_path"
-stai_progress_stage 3 3 "开始归档 Tavern Android runtime image"
+sillydroid_progress_stage 3 3 "开始归档 Tavern Android runtime image"
 "$JAVA_HOME/bin/jar" --create --file "$output_path" --no-manifest -C "$stage_root" .
-stai_assert_path_exists "$output_path" "Tavern Android runtime image 打包失败：$output_path"
+sillydroid_assert_path_exists "$output_path" "Tavern Android runtime image 打包失败：$output_path"
 write_runtime_image_metadata "$output_path" "$metadata_path"
-stai_log "已生成 Tavern Android runtime image：$(realpath "$output_path")"
-stai_log "已生成 Tavern Android runtime image metadata：$(realpath "$metadata_path")"
+sillydroid_log "已生成 Tavern Android runtime image：$(realpath "$output_path")"
+sillydroid_log "已生成 Tavern Android runtime image metadata：$(realpath "$metadata_path")"

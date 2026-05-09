@@ -150,7 +150,7 @@ def download_one(task: DownloadTask) -> None:
     temp_path = pathlib.Path(f"{task.destination}.part")
     destination_path.parent.mkdir(parents=True, exist_ok=True)
 
-    request = urllib.request.Request(task.url, headers={"User-Agent": "STAI-Android-Build"})
+    request = urllib.request.Request(task.url, headers={"User-Agent": "SillyDroid-Android-Build"})
     try:
         with urllib.request.urlopen(request) as response, open(temp_path, "wb") as handle:
             total = int(response.headers.get("Content-Length") or "0")
