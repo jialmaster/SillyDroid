@@ -15,6 +15,11 @@ PROOT_TMP_DIR="${HOST_TMP_DIR:?HOST_TMP_DIR is required}"
 MANIFEST_PATH="$ROOTFS_DIR/rootfs-manifest.json"
 GUEST_BASE_PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 GUEST_PATH="$HOST_RUNTIME_PREFIX/bin:$GUEST_BASE_PATH"
+HAS_LINKERCONFIG_BIND=''
+
+if [ -d /linkerconfig ] || [ -f /linkerconfig/ld.config.txt ]; then
+	HAS_LINKERCONFIG_BIND='1'
+fi
 
 assert_file() {
 	if [ ! -f "$1" ]; then
@@ -53,6 +58,7 @@ run_in_rootfs() {
 		-b /system \
 		-b /apex \
 		-b /vendor \
+		${HAS_LINKERCONFIG_BIND:+-b /linkerconfig} \
 		-b "$PROOT_TMP_DIR:/tmp" \
 		-b "$HOST_PREFIX_DIR:$HOST_RUNTIME_PREFIX" \
 		-w / \

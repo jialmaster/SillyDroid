@@ -21,6 +21,11 @@ DATA_MOUNT="/tavern/data"
 LOGS_MOUNT="/tavern/logs"
 GUEST_BASE_PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 GUEST_PATH="$HOST_RUNTIME_PREFIX/bin:$GUEST_BASE_PATH"
+HAS_LINKERCONFIG_BIND=''
+
+if [ -d /linkerconfig ] || [ -f /linkerconfig/ld.config.txt ]; then
+	HAS_LINKERCONFIG_BIND='1'
+fi
 
 assert_file() {
 	if [ ! -f "$1" ]; then
@@ -75,6 +80,7 @@ exec "$PROOT_BIN" -r "$LINUX_FS_DIR" \
 	-b /system \
 	-b /apex \
 	-b /vendor \
+	${HAS_LINKERCONFIG_BIND:+-b /linkerconfig} \
 	-b "$PROOT_TMP_DIR:/tmp" \
 	-b "$HOST_PREFIX_DIR:$HOST_RUNTIME_PREFIX" \
 	-b "$ANDROID_RESOLV_CONF:/etc/resolv.conf" \
