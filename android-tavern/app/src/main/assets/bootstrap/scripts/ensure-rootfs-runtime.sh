@@ -17,7 +17,7 @@ GUEST_BASE_PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 GUEST_PATH="$HOST_RUNTIME_PREFIX/bin:$GUEST_BASE_PATH"
 HAS_LINKERCONFIG_BIND=''
 
-if [ -d /linkerconfig ] || [ -f /linkerconfig/ld.config.txt ]; then
+if [ -f /linkerconfig/ld.config.txt ]; then
 	HAS_LINKERCONFIG_BIND='1'
 fi
 
@@ -58,7 +58,7 @@ run_in_rootfs() {
 		-b /system \
 		-b /apex \
 		-b /vendor \
-		${HAS_LINKERCONFIG_BIND:+-b /linkerconfig} \
+		${HAS_LINKERCONFIG_BIND:+-b /linkerconfig/ld.config.txt:/linkerconfig/ld.config.txt} \
 		-b "$PROOT_TMP_DIR:/tmp" \
 		-b "$HOST_PREFIX_DIR:$HOST_RUNTIME_PREFIX" \
 		-w / \
@@ -73,7 +73,7 @@ assert_dir "$HOST_PREFIX_DIR" "缺少 host prefix 目录：$HOST_PREFIX_DIR"
 assert_file "$MANIFEST_PATH" "缺少 rootfs manifest：$MANIFEST_PATH"
 
 mkdir -p "$LOGS_DIR" "$PROOT_TMP_DIR"
-mkdir -p "$LINUX_FS_DIR$HOST_RUNTIME_PREFIX"
+mkdir -p "$LINUX_FS_DIR$HOST_RUNTIME_PREFIX" "$LINUX_FS_DIR/linkerconfig"
 chmod 1777 "$PROOT_TMP_DIR"
 
 if [ -d "$PROOT_LIB_DIR" ]; then

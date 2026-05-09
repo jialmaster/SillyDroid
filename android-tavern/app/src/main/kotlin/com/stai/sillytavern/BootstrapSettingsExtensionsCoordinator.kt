@@ -32,20 +32,100 @@ import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import com.google.android.material.R as MaterialR
 
+internal interface ExtensionInstallProgressHost {
+    fun show(message: String, percent: Int?, indeterminate: Boolean)
+
+    fun hide()
+}
+
+internal class ViewExtensionInstallProgressHost(
+    private val activity: AppCompatActivity,
+    private val progressIndicator: LinearProgressIndicator,
+    private val progressLabel: TextView
+) : ExtensionInstallProgressHost {
+    override fun show(message: String, percent: Int?, indeterminate: Boolean) {
+        progressIndicator.isVisible = true
+        progressLabel.isVisible = true
+        progressIndicator.isIndeterminate = indeterminate
+        if (!indeterminate) {
+            progressIndicator.max = 100
+            progressIndicator.setProgressCompat(percent ?: 0, true)
+        }
+        progressLabel.text = message
+    }
+
+    override fun hide() {
+        progressIndicator.isVisible = false
+        progressLabel.isVisible = false
+    }
+}
+
 internal class BootstrapSettingsExtensionsCoordinator(
     private val activity: AppCompatActivity,
     private val listContainer: LinearLayout,
     private val emptyView: TextView,
     private val installButton: ImageButton,
     private val reloadButton: ImageButton,
-    private val progressIndicator: LinearProgressIndicator,
-    private val progressLabel: TextView,
+    private val progressHost: ExtensionInstallProgressHost,
     private val setBusy: (Boolean) -> Unit,
     private val showError: (String) -> Unit,
     private val showBanner: (String) -> Unit,
     private val showMessage: (String) -> Unit,
     private val onTavernUiReloadRequired: () -> Unit
 ) {
+    companion object {
+        fun createHeadless(
+            activity: AppCompatActivity,
+            progressHost: ExtensionInstallProgressHost,
+            setBusy: (Boolean) -> Unit = {},
+            showError: (String) -> Unit,
+            showBanner: (String) -> Unit,
+            showMessage: (String) -> Unit,
+            onTavernUiReloadRequired: () -> Unit
+        ): BootstrapSettingsExtensionsCoordinator {
+            return BootstrapSettingsExtensionsCoordinator(
+                activity = activity,
+                listContainer = LinearLayout(activity),
+                emptyView = TextView(activity),
+                installButton = ImageButton(activity),
+                reloadButton = ImageButton(activity),
+                progressHost = progressHost,
+                setBusy = setBusy,
+                showError = showError,
+                showBanner = showBanner,
+                showMessage = showMessage,
+                onTavernUiReloadRequired = onTavernUiReloadRequired
+            )
+        }
+    }
+
+    constructor(
+        activity: AppCompatActivity,
+        listContainer: LinearLayout,
+        emptyView: TextView,
+        installButton: ImageButton,
+        reloadButton: ImageButton,
+        progressIndicator: LinearProgressIndicator,
+        progressLabel: TextView,
+        setBusy: (Boolean) -> Unit,
+        showError: (String) -> Unit,
+        showBanner: (String) -> Unit,
+        showMessage: (String) -> Unit,
+        onTavernUiReloadRequired: () -> Unit
+    ) : this(
+        activity = activity,
+        listContainer = listContainer,
+        emptyView = emptyView,
+        installButton = installButton,
+        reloadButton = reloadButton,
+        progressHost = ViewExtensionInstallProgressHost(activity, progressIndicator, progressLabel),
+        setBusy = setBusy,
+        showError = showError,
+        showBanner = showBanner,
+        showMessage = showMessage,
+        onTavernUiReloadRequired = onTavernUiReloadRequired
+    )
+
     private data class ExtensionInventory(
         val installedExtensions: List<ManagedExtension>,
         val bundledExtensions: List<BundledExtension>
@@ -767,6 +847,26 @@ internal class BootstrapSettingsExtensionsCoordinator(
         promptInstallDefaultRepositories(repositories)
     }
 
+    fun autoInstallDefaultRepositories() {
+        if (busy) {
+            return
+        }
+
+        val repositories = loadDefaultExtensionRepositories()
+        if (repositories.isEmpty()) {
+            showMessage(activity.getString(R.string.bootstrap_settings_extensions_default_empty))
+            return
+        }
+
+        previewInstallExtensionsBatch(repositories.map { it.repositoryUrl }) { batchPreview ->
+            continueDefaultRepositoryBatchInstall(
+                batchPreview = batchPreview,
+                installMode = DefaultExtensionInstallMode.SKIP,
+                skipConfirmation = true
+            )
+        }
+    }
+
     private fun promptDefaultRepositoryInstallMode(repositoryUrls: List<String>) {
         MaterialAlertDialogBuilder(activity)
             .setTitle(R.string.bootstrap_settings_extensions_default_existing_strategy_title)
@@ -789,8 +889,20 @@ internal class BootstrapSettingsExtensionsCoordinator(
         batchPreview: BatchExtensionPreview,
         installMode: DefaultExtensionInstallMode
     ) {
+        continueDefaultRepositoryBatchInstall(batchPreview, installMode, skipConfirmation = false)
+    }
+
+    private fun continueDefaultRepositoryBatchInstall(
+        batchPreview: BatchExtensionPreview,
+        installMode: DefaultExtensionInstallMode,
+        skipConfirmation: Boolean
+    ) {
         if (installMode == DefaultExtensionInstallMode.OVERWRITE) {
-            confirmBatchInstallPreview(batchPreview)
+            if (skipConfirmation) {
+                installPreviewedExtensionsBatch(batchPreview)
+            } else {
+                confirmBatchInstallPreview(batchPreview)
+            }
             return
         }
 
@@ -810,7 +922,12 @@ internal class BootstrapSettingsExtensionsCoordinator(
             return
         }
 
-        confirmBatchInstallPreview(batchPreview.copy(previews = installablePreviews, skipped = skippedPreviews))
+        val resolvedPreview = batchPreview.copy(previews = installablePreviews, skipped = skippedPreviews)
+        if (skipConfirmation) {
+            installPreviewedExtensionsBatch(resolvedPreview)
+        } else {
+            confirmBatchInstallPreview(resolvedPreview)
+        }
     }
 
     private fun promptInstallRepositoryExtension() {
@@ -2046,6 +2163,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             DATA_MOUNT="/tavern/data"
             LOGS_MOUNT="/tavern/logs"
             GUEST_PATH="${'$'}HOST_RUNTIME_PREFIX/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            HAS_LINKERCONFIG_BIND=""
 
             assert_file() {
                 	if [ ! -f "${'$'}1" ]; then
@@ -2069,8 +2187,12 @@ internal class BootstrapSettingsExtensionsCoordinator(
                 assert_file "${'$'}ANDROID_RESOLV_CONF" "缺少 Android DNS 配置：${'$'}ANDROID_RESOLV_CONF"
                 assert_dir "${'$'}SERVER_DIR" "缺少 Tavern 服务目录：${'$'}SERVER_DIR"
 
+                if [ -f /linkerconfig/ld.config.txt ]; then
+                	HAS_LINKERCONFIG_BIND=1
+            fi
+
                 mkdir -p "${'$'}APP_DATA_ROOT" "${'$'}LOGS_DIR" "${'$'}PROOT_TMP_DIR"
-                mkdir -p "${'$'}LINUX_FS_DIR${'$'}HOST_RUNTIME_PREFIX"
+                mkdir -p "${'$'}LINUX_FS_DIR${'$'}HOST_RUNTIME_PREFIX" "${'$'}LINUX_FS_DIR/linkerconfig"
                 chmod 1777 "${'$'}PROOT_TMP_DIR"
 
                 if [ -d "${'$'}PROOT_LIB_DIR" ]; then
@@ -2099,6 +2221,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
                 	-b /system \
                 	-b /apex \
                 	-b /vendor \
+                	${'$'}{HAS_LINKERCONFIG_BIND:+-b /linkerconfig/ld.config.txt:/linkerconfig/ld.config.txt} \
                 	-b "${'$'}PROOT_TMP_DIR:/tmp" \
                 	-b "${'$'}HOST_PREFIX_DIR:${'$'}HOST_RUNTIME_PREFIX" \
                 	-b "${'$'}ANDROID_RESOLV_CONF:/etc/resolv.conf" \
@@ -2302,14 +2425,20 @@ internal class BootstrapSettingsExtensionsCoordinator(
 
             val json = JSONObject(rawPayload)
             rawPayload to ExtensionRuntimeProgress(
-                step = json.optString("step").ifBlank { null },
-                phase = json.optString("phase").ifBlank { null },
+                step = json.optMeaningfulString("step"),
+                phase = json.optMeaningfulString("phase"),
                 loaded = json.optInt("loaded").takeIf { !json.isNull("loaded") },
                 total = json.optInt("total").takeIf { !json.isNull("total") },
                 indeterminate = json.optBoolean("indeterminate", false),
-                message = json.optString("message").ifBlank { null }
+                message = json.optMeaningfulString("message")
             )
         }.getOrNull()
+    }
+
+    private fun JSONObject.optMeaningfulString(key: String): String? {
+        return optString(key)
+            .trim()
+            .takeUnless { value -> value.isBlank() || value.equals("null", ignoreCase = true) }
     }
 
     private data class BatchProgressDescriptor(
@@ -2443,19 +2572,12 @@ internal class BootstrapSettingsExtensionsCoordinator(
 
     private fun renderProgress() {
         val currentProgress = progressState
-        progressIndicator.isVisible = currentProgress != null
-        progressLabel.isVisible = currentProgress != null
         if (currentProgress == null) {
+            progressHost.hide()
             return
         }
 
-        progressIndicator.isIndeterminate = currentProgress.indeterminate
-        if (!currentProgress.indeterminate) {
-            progressIndicator.max = 100
-            progressIndicator.setProgressCompat(currentProgress.percent ?: 0, true)
-        }
-
-        progressLabel.text = if (!currentProgress.indeterminate && currentProgress.percent != null) {
+        val message = if (!currentProgress.indeterminate && currentProgress.percent != null) {
             activity.getString(
                 R.string.bootstrap_settings_extensions_progress_label,
                 currentProgress.actionLabel,
@@ -2469,6 +2591,12 @@ internal class BootstrapSettingsExtensionsCoordinator(
                 currentProgress.stageLabel
             )
         }
+
+        progressHost.show(
+            message = message,
+            percent = currentProgress.percent,
+            indeterminate = currentProgress.indeterminate
+        )
     }
 
     private fun setBusyState(value: Boolean) {

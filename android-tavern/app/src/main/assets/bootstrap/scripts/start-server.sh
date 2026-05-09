@@ -23,7 +23,7 @@ GUEST_BASE_PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 GUEST_PATH="$HOST_RUNTIME_PREFIX/bin:$GUEST_BASE_PATH"
 HAS_LINKERCONFIG_BIND=''
 
-if [ -d /linkerconfig ] || [ -f /linkerconfig/ld.config.txt ]; then
+if [ -f /linkerconfig/ld.config.txt ]; then
 	HAS_LINKERCONFIG_BIND='1'
 fi
 
@@ -50,7 +50,7 @@ assert_file "$ANDROID_RESOLV_CONF" "缺少 Android DNS 配置：$ANDROID_RESOLV_
 assert_file "$SERVER_DIR/tavern-entrypoint.sh" "缺少 Tavern 服务入口：$SERVER_DIR/tavern-entrypoint.sh"
 
 mkdir -p "$APP_DATA_ROOT" "$LOGS_DIR" "$PROOT_TMP_DIR"
-mkdir -p "$LINUX_FS_DIR$HOST_RUNTIME_PREFIX"
+mkdir -p "$LINUX_FS_DIR$HOST_RUNTIME_PREFIX" "$LINUX_FS_DIR/linkerconfig"
 chmod 1777 "$PROOT_TMP_DIR"
 
 if [ -d "$PROOT_LIB_DIR" ]; then
@@ -80,7 +80,7 @@ exec "$PROOT_BIN" -r "$LINUX_FS_DIR" \
 	-b /system \
 	-b /apex \
 	-b /vendor \
-	${HAS_LINKERCONFIG_BIND:+-b /linkerconfig} \
+	${HAS_LINKERCONFIG_BIND:+-b /linkerconfig/ld.config.txt:/linkerconfig/ld.config.txt} \
 	-b "$PROOT_TMP_DIR:/tmp" \
 	-b "$HOST_PREFIX_DIR:$HOST_RUNTIME_PREFIX" \
 	-b "$ANDROID_RESOLV_CONF:/etc/resolv.conf" \

@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
 
 internal object BootConfig {
-    const val defaultServicePort = 7888
+    const val defaultServicePort = 8000
     const val readinessProbeAttempts = 300
     const val readinessPath = "/"
     const val bootstrapAssetRoot = "bootstrap"

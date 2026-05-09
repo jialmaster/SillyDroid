@@ -632,31 +632,31 @@ internal class AppUpdateCoordinator(
         val manifest = readJsonAssetOrNull("bootstrap/rootfs/rootfs-manifest.json")
             ?: return activity.getString(R.string.bootstrap_settings_about_version_unknown)
 
-        val directVersion = manifest.optString("runtimeVersion").trim()
+        val directVersion = manifest.optMeaningfulString("runtimeVersion")
         if (directVersion.isNotBlank()) {
             return directVersion
         }
 
-        val baseFlavor = manifest.optString("baseFlavor").trim().ifBlank {
+        val baseFlavor = manifest.optMeaningfulString("baseFlavor").ifBlank {
             if (manifest.has("ubuntuBaseVersion") || manifest.has("ubuntuBaseUrl")) {
                 "ubuntu"
             } else {
                 ""
             }
         }
-        val baseVersion = manifest.optString("baseVersion").trim().ifBlank {
-            manifest.optString("ubuntuBaseVersion").trim()
+        val baseVersion = manifest.optMeaningfulString("baseVersion").ifBlank {
+            manifest.optMeaningfulString("ubuntuBaseVersion")
         }.ifBlank {
             extractFirstGroup(
-                source = manifest.optString("baseSourceUrl").ifBlank {
-                    manifest.optString("ubuntuBaseUrl")
+                source = manifest.optMeaningfulString("baseSourceUrl").ifBlank {
+                    manifest.optMeaningfulString("ubuntuBaseUrl")
                 },
                 pattern = """ubuntu-base-([0-9][0-9.]+)-base-arm64\.tar\.gz"""
             )
         }
-        val prootVersion = manifest.optString("prootVersion").trim().ifBlank {
+        val prootVersion = manifest.optMeaningfulString("prootVersion").ifBlank {
             extractFirstGroup(
-                source = manifest.optString("prootPackageUrl"),
+                source = manifest.optMeaningfulString("prootPackageUrl"),
                 pattern = """proot_([^_]+)_aarch64\.deb"""
             )
         }
@@ -679,16 +679,23 @@ internal class AppUpdateCoordinator(
         val manifest = readJsonAssetOrNull("bootstrap/server/bootstrap-manifest.json")
             ?: return activity.getString(R.string.bootstrap_settings_about_version_unknown)
 
-        val directVersion = manifest.optString("payloadVersion").trim()
+        val directVersion = manifest.optMeaningfulString("payloadVersion")
         if (directVersion.isNotBlank()) {
             return directVersion
         }
 
-        val tag = manifest.optString("tag").trim()
-        val nodeVersion = manifest.optString("nodeVersion").trim()
+        val tag = manifest.optMeaningfulString("tag")
+        val nodeVersion = manifest.optMeaningfulString("nodeVersion")
+        val upstreamVersion = BuildConfig.STAI_UPSTREAM_VERSION.trim().ifBlank {
+            extractFirstGroup(
+                source = resolveCurrentPackageInfo().versionName.orEmpty(),
+                pattern = """\+tavern\.([0-9A-Za-z._-]+)"""
+            )
+        }
         return when {
             tag.isNotBlank() && nodeVersion.isNotBlank() -> "$tag+node.$nodeVersion"
             tag.isNotBlank() -> tag
+            upstreamVersion.isNotBlank() -> upstreamVersion
             nodeVersion.isNotBlank() -> "node.$nodeVersion"
             else -> activity.getString(R.string.bootstrap_settings_about_version_unknown)
         }
@@ -704,6 +711,13 @@ internal class AppUpdateCoordinator(
 
     private fun extractFirstGroup(source: String, pattern: String): String {
         return Regex(pattern).find(source)?.groupValues?.getOrNull(1).orEmpty().trim()
+    }
+
+    private fun JSONObject.optMeaningfulString(key: String): String {
+        return optString(key)
+            .trim()
+            .takeUnless { value -> value.isBlank() || value.equals("null", ignoreCase = true) }
+            .orEmpty()
     }
 
     @Suppress("DEPRECATION")

@@ -128,6 +128,7 @@ class StartupCoordinatorService : Service() {
         stopServerLogObserver()
         try {
             val paths = HostPaths.from(applicationContext)
+            TavernConfigRepository(applicationContext).syncStoredPortFromFile()
             val servicePort = BootConfig.servicePort(applicationContext)
             val localUrl = BootConfig.localServiceUrl(applicationContext)
             val readinessUrl = BootConfig.readinessUrl(applicationContext)

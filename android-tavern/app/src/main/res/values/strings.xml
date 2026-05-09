@@ -133,7 +133,7 @@
     <string name="bootstrap_settings_extensions_default_title">安装默认扩展</string>
     <string name="bootstrap_settings_extensions_default_empty">当前没有可安装的默认扩展列表。</string>
     <string name="bootstrap_settings_extensions_default_prompt_title">检测到默认扩展</string>
-    <string name="bootstrap_settings_extensions_default_prompt_message">当前宿主已经解压完成，检测到 %1$d 个可选默认扩展源。是否现在选择并安装默认扩展？</string>
+    <string name="bootstrap_settings_extensions_default_prompt_message">当前宿主已经解压完成，检测到 %1$d 个可选默认扩展源。是否现在自动安装默认扩展？</string>
     <string name="bootstrap_settings_extensions_default_select_required">请至少选择一个默认扩展。</string>
     <string name="bootstrap_settings_extensions_default_existing_strategy_title">默认扩展已安装时怎么处理？</string>
     <string name="bootstrap_settings_extensions_default_existing_strategy_message">如果选中的默认扩展里已有同名目标目录，可以直接覆盖，也可以跳过这些已安装项，只安装缺失的默认扩展。</string>

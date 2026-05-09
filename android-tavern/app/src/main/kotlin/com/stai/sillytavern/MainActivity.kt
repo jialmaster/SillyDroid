@@ -34,6 +34,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -58,6 +59,7 @@ import androidx.webkit.ScriptHandler
 import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -159,6 +161,19 @@ class MainActivity : AppCompatActivity() {
         val layoutChanged: Boolean
     )
     private val hostConfigStore by lazy { BootstrapHostConfigStore(this) }
+    private val defaultExtensionsProgressHost = DefaultExtensionsProgressHost()
+    private val defaultExtensionsCoordinator by lazy {
+        BootstrapSettingsExtensionsCoordinator.createHeadless(
+            activity = this,
+            progressHost = defaultExtensionsProgressHost,
+            showError = ::showDefaultExtensionsError,
+            showBanner = ::showDefaultExtensionsMessage,
+            showMessage = ::showDefaultExtensionsMessage,
+            onTavernUiReloadRequired = {
+                reloadTavernUiIfPossible(StartupRuntimeStore.state.value)
+            }
+        )
+    }
     private lateinit var appUpdateCoordinator: AppUpdateCoordinator
     private val webSessionStoragePreferences by lazy {
         getSharedPreferences(webSessionStoragePreferencesName, MODE_PRIVATE)
@@ -257,6 +272,7 @@ class MainActivity : AppCompatActivity() {
         webSessionScriptHandler = null
         pendingFileChooserCallback?.onReceiveValue(null)
         pendingFileChooserCallback = null
+        defaultExtensionsProgressHost.hide()
         appUpdateCoordinator.onDestroy()
         stopFloatingLogsRefreshLoop()
         skipNextWebViewStateRestore = false
@@ -1910,8 +1926,28 @@ class MainActivity : AppCompatActivity() {
             .setMessage(getString(R.string.bootstrap_settings_extensions_default_prompt_message, repositoryCount))
             .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
             .setPositiveButton(R.string.bootstrap_settings_extensions_install) { _, _ ->
-                openBootstrapSettings(openDefaultExtensionsInstaller = true)
+                defaultExtensionsCoordinator.autoInstallDefaultRepositories()
             }
+            .show()
+    }
+
+    private fun showDefaultExtensionsMessage(message: String) {
+        if (isFinishing || isDestroyed) {
+            return
+        }
+
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showDefaultExtensionsError(message: String) {
+        if (isFinishing || isDestroyed) {
+            return
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.bootstrap_settings_extensions_install)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok, null)
             .show()
     }
 
@@ -1991,6 +2027,84 @@ class MainActivity : AppCompatActivity() {
                 openDefaultExtensionsInstaller = openDefaultExtensionsInstaller
             )
         )
+    }
+
+    private inner class DefaultExtensionsProgressHost : ExtensionInstallProgressHost {
+        private var dialog: androidx.appcompat.app.AlertDialog? = null
+        private var progressIndicator: LinearProgressIndicator? = null
+        private var progressLabelView: TextView? = null
+
+        override fun show(message: String, percent: Int?, indeterminate: Boolean) {
+            if (isFinishing || isDestroyed) {
+                return
+            }
+
+            ensureDialog()
+            val indicator = progressIndicator ?: return
+            val labelView = progressLabelView ?: return
+            labelView.text = message
+            indicator.isIndeterminate = indeterminate
+            if (!indeterminate) {
+                indicator.max = 100
+                indicator.setProgressCompat(percent ?: 0, true)
+            }
+            if (dialog?.isShowing != true) {
+                dialog?.show()
+            }
+        }
+
+        override fun hide() {
+            dialog?.dismiss()
+            dialog = null
+            progressIndicator = null
+            progressLabelView = null
+        }
+
+        private fun ensureDialog() {
+            if (dialog != null) {
+                return
+            }
+
+            val density = resources.displayMetrics.density
+            val horizontalPadding = (24 * density).toInt()
+            val verticalPadding = (16 * density).toInt()
+            val topSpacing = (14 * density).toInt()
+            val contentView = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
+            }
+            val indicator = LinearProgressIndicator(this@MainActivity).apply {
+                isIndeterminate = true
+            }
+            val label = TextView(this@MainActivity).apply {
+                setPadding(0, topSpacing, 0, 0)
+            }
+            contentView.addView(
+                indicator,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+            contentView.addView(
+                label,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+
+            progressIndicator = indicator
+            progressLabelView = label
+            dialog = MaterialAlertDialogBuilder(this@MainActivity)
+                .setTitle(R.string.bootstrap_settings_extensions_default_title)
+                .setView(contentView)
+                .setCancelable(false)
+                .create()
+                .also { createdDialog ->
+                    createdDialog.setCanceledOnTouchOutside(false)
+                }
+        }
     }
 
     private fun isCurrentWebViewPageFor(baseUrl: String): Boolean {

@@ -186,6 +186,7 @@ android {
         versionCode = androidVersionCode
         versionName = androidVersionName
         buildConfigField("String", "STAI_HOST_VERSION", quoteBuildConfigString(androidHostVersion))
+        buildConfigField("String", "STAI_UPSTREAM_VERSION", quoteBuildConfigString(androidUpstreamVersion))
         buildConfigField("String", "STAI_GITHUB_REPOSITORY", quoteBuildConfigString("jialmaster/ST.AI.SillyTavern.Android"))
     }
 
