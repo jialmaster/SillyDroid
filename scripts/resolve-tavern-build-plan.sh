@@ -151,6 +151,156 @@ sanitize_tag() {
     printf '%s' "$1" | sed 's#[^0-9A-Za-z._-]#-#g'
 }
 
+resolve_current_repo_slug() {
+    local remote_url=''
+
+    remote_url="$(git -C "$workspace_root" config --get remote.origin.url 2>/dev/null || true)"
+    remote_url="${remote_url%.git}"
+
+    if [[ "$remote_url" =~ github\.com[:/]([^/]+)/([^/]+)$ ]]; then
+        printf '%s/%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+    fi
+}
+
+resolve_apk_release_state() {
+    local host_version_base="$1"
+    local safe_tag="$2"
+    local build_type="$3"
+    local current_head_sha="$4"
+    local repo_slug="$5"
+
+    python3 - "$workspace_root" "$host_version_base" "$safe_tag" "$build_type" "$current_head_sha" "$repo_slug" <<'PY'
+import json
+import re
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+
+workspace_root, host_version_base, safe_tag, build_type, current_head_sha, repo_slug = sys.argv[1:]
+
+tag_pattern = re.compile(
+    rf"^stai-sillytavern-v{re.escape(host_version_base)}(?:\.(\d+))?-[0-9A-Za-z._-]+-(?:debug|release)$"
+)
+exact_tag_pattern = re.compile(
+    rf"^stai-sillytavern-v{re.escape(host_version_base)}(?:\.(\d+))?-{re.escape(safe_tag)}-{re.escape(build_type)}$"
+)
+
+
+def run_git(*args: str) -> list[str]:
+    completed = subprocess.run(
+        ["git", "-C", workspace_root, *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        return []
+    return [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+
+
+def extract_counter(tag_name: str):
+    matched = tag_pattern.match(tag_name)
+    if not matched:
+        return None
+    counter = matched.group(1)
+    return int(counter) if counter is not None else 0
+
+
+matched_any = False
+max_counter = 0
+
+for tag_name in run_git("tag", "--list", f"stai-sillytavern-v{host_version_base}*"):
+    counter = extract_counter(tag_name)
+    if counter is None:
+        continue
+    matched_any = True
+    max_counter = max(max_counter, counter)
+
+for tag_name in run_git(
+    "tag",
+    "--points-at",
+    current_head_sha,
+    "--list",
+    f"stai-sillytavern-v{host_version_base}*-{safe_tag}-{build_type}",
+):
+    if not exact_tag_pattern.match(tag_name):
+        continue
+    counter = extract_counter(tag_name)
+    if counter is None:
+        continue
+    host_version = host_version_base if counter == 0 else f"{host_version_base}.{counter}"
+    print(host_version)
+    print(counter)
+    raise SystemExit(0)
+
+if repo_slug:
+    page = 1
+    while True:
+        request = urllib.request.Request(
+            f"https://api.github.com/repos/{repo_slug}/releases?per_page=100&page={page}",
+            headers={"User-Agent": "STAI-Android-Build"},
+        )
+        try:
+            with urllib.request.urlopen(request) as response:
+                payload = json.load(response)
+        except urllib.error.URLError:
+            payload = []
+            break
+
+        if not payload:
+            break
+
+        for release in payload:
+            tag_name = str(release.get("tag_name") or "").strip().removeprefix("refs/tags/")
+            counter = extract_counter(tag_name)
+            if counter is None:
+                continue
+            matched_any = True
+            max_counter = max(max_counter, counter)
+
+        page += 1
+
+next_counter = max_counter + 1 if matched_any else 1
+print(f"{host_version_base}.{next_counter}")
+print(next_counter)
+PY
+}
+
+compute_android_version_code() {
+    local host_version="$1"
+    local major='0'
+    local minor='0'
+    local patch='0'
+    local apk_release_index='0'
+    local remainder=''
+
+    IFS='.' read -r major minor patch apk_release_index remainder <<< "$host_version"
+
+    if [[ -n "$remainder" ]]; then
+        echo "Android 版本号格式非法：$host_version" >&2
+        exit 1
+    fi
+
+    if [[ -z "$major" || -z "$minor" || -z "$patch" ]]; then
+        echo "Android 版本号格式非法：$host_version" >&2
+        exit 1
+    fi
+
+    if [[ -z "$apk_release_index" ]]; then
+        apk_release_index='0'
+    fi
+
+    for segment in "$major" "$minor" "$patch" "$apk_release_index"; do
+        if ! printf '%s' "$segment" | grep -E '^[0-9]+$' >/dev/null 2>&1; then
+            echo "Android 版本号格式非法：$host_version" >&2
+            exit 1
+        fi
+    done
+
+    printf '%s\n' "$((1800000000 + major * 10000000 + minor * 100000 + patch * 1000 + apk_release_index))"
+}
+
 emit() {
     printf '%s=%s\n' "$1" "$2"
 }
@@ -192,17 +342,28 @@ if [[ -z "$host_version_base" ]]; then
     exit 1
 fi
 
-repo_revision_count="$(git -C "$workspace_root" rev-list --count HEAD | tr -d '\r')"
 upstream_release_index="$(count_upstream_release_index "$normalized_tag")"
 if ! printf '%s' "$upstream_release_index" | grep -E '^[0-9]+$' >/dev/null 2>&1; then
     upstream_release_index='0'
 fi
 
-host_version="${host_version_base}.${repo_revision_count}"
+current_head_sha="$(git -C "$workspace_root" rev-parse "$compare_head" 2>/dev/null | tr -d '\r')"
+if [[ -z "$current_head_sha" ]]; then
+    current_head_sha="$(git -C "$workspace_root" rev-parse HEAD | tr -d '\r')"
+fi
+
+repo_slug="$(resolve_current_repo_slug)"
+mapfile -t apk_release_state < <(resolve_apk_release_state "$host_version_base" "$safe_tag" "$build_type" "$current_head_sha" "$repo_slug")
+
+if [[ "${#apk_release_state[@]}" -lt 2 ]]; then
+    echo '无法解析 APK 发布版本计数。' >&2
+    exit 1
+fi
+
+host_version="${apk_release_state[0]}"
+apk_release_index="${apk_release_state[1]}"
 version_name="${host_version}+tavern.${normalized_tag}"
-version_code_base='1800000000'
-version_code_stride='1000'
-version_code="$((version_code_base + repo_revision_count * version_code_stride + upstream_release_index))"
+version_code="$(compute_android_version_code "$host_version")"
 
 rootfs_changed='false'
 dependency_changed='false'
@@ -256,7 +417,7 @@ emit safe_tag "$safe_tag"
 emit build_type "$build_type"
 emit host_version_base "$host_version_base"
 emit host_version "$host_version"
-emit repo_revision_count "$repo_revision_count"
+emit apk_release_index "$apk_release_index"
 emit upstream_release_index "$upstream_release_index"
 emit version_name "$version_name"
 emit version_code "$version_code"

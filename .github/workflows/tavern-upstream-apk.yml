@@ -62,7 +62,7 @@ jobs:
       build_type: ${{ steps.plan.outputs.build_type }}
       host_version_base: ${{ steps.plan.outputs.host_version_base }}
       host_version: ${{ steps.plan.outputs.host_version }}
-      repo_revision_count: ${{ steps.plan.outputs.repo_revision_count }}
+      apk_release_index: ${{ steps.plan.outputs.apk_release_index }}
       upstream_release_index: ${{ steps.plan.outputs.upstream_release_index }}
       version_name: ${{ steps.plan.outputs.version_name }}
       version_code: ${{ steps.plan.outputs.version_code }}
@@ -131,6 +131,7 @@ jobs:
             echo '- Tavern tag: ${{ steps.plan.outputs.tavern_tag }}'
             echo '- Build type: ${{ steps.plan.outputs.build_type }}'
             echo '- Host version: ${{ steps.plan.outputs.host_version }}'
+            echo '- APK release index: ${{ steps.plan.outputs.apk_release_index }}'
             echo '- Force rebuild: ${{ steps.plan.outputs.force_rebuild }}'
             echo '- Publish release: ${{ steps.plan.outputs.publish_release }}'
             echo '- Rootfs changed: ${{ steps.plan.outputs.rootfs_changed }}'
