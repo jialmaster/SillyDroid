@@ -808,6 +808,7 @@ jobs:
 
           release_notes_file="$(mktemp)"
           release_dir="$GITHUB_WORKSPACE/${{ needs.plan.outputs.apk_release_dir }}"
+          release_asset_name='${{ needs.build.outputs.release_asset_name }}'
           prerelease_flag=''
 
           if [ '${{ needs.plan.outputs.release_prerelease }}' = 'true' ]; then
