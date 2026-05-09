@@ -7,8 +7,6 @@
       "nodejs-lts"
     ],
     "includeDependencyPacks": [
-      "node",
-      "git"
     ]
   },
   "defaultExtensionRepositories": [

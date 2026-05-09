@@ -76,7 +76,8 @@ Usage: build-tavern-dependency-packs.sh [--runtime-rid linux-arm64] [--target-ro
 
 说明：
 - 依赖包输出目录默认为 artifacts/releases/dependency-packs/<rid>。
-- 未传 --include 时，优先读取 stai-build-config.json 的 build.includeDependencyPacks；为空则默认 node,git。
+- 未传 --include 时，优先读取 stai-build-config.json 的 build.includeDependencyPacks。
+- 若配置项缺失或格式非法，则回退默认 node,git；若显式配置为空数组，则禁用 dependency packs。
 EOF
 }
 
@@ -141,12 +142,16 @@ except Exception:
     raise SystemExit(0)
 
 items = (((payload or {}).get('build') or {}).get('includeDependencyPacks'))
-if not isinstance(items, list) or not items:
+if items is None:
+    print('node,git')
+    raise SystemExit(0)
+
+if not isinstance(items, list):
     print('node,git')
     raise SystemExit(0)
 
 normalized = [str(item).strip() for item in items if str(item).strip()]
-print(','.join(normalized) if normalized else 'node,git')
+print(','.join(normalized))
 PY
 )"
     fi
@@ -279,6 +284,84 @@ copy_resolved_directory_contents() {
         copy_resolved_item "$child" "$destination_root/$(basename "$child")" "$source_root"
     done
     shopt -u dotglob nullglob
+}
+
+deduplicate_pack_files() {
+    local pack_root="$1"
+    local link_map_relative_path="$2"
+    local link_map_path="$pack_root/$link_map_relative_path"
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        return 0
+    fi
+
+    python3 - "$pack_root" "$link_map_path" <<'PY'
+import hashlib
+import os
+import pathlib
+import sys
+
+pack_root = pathlib.Path(sys.argv[1])
+link_map_path = pathlib.Path(sys.argv[2])
+
+
+def choose_canonical(paths: list[str]) -> str:
+    if "git/bin/git" in paths:
+        return "git/bin/git"
+    return sorted(
+        paths,
+        key=lambda path: (-len(pathlib.PurePosixPath(path).name), -len(path), path),
+    )[0]
+
+
+groups: dict[tuple[int, str], list[str]] = {}
+for path in sorted(pack_root.rglob("*")):
+    if not path.is_file() or path == link_map_path:
+        continue
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+
+    key = (path.stat().st_size, digest.hexdigest())
+    groups.setdefault(key, []).append(path.relative_to(pack_root).as_posix())
+
+saved_bytes = 0
+deduped_files = 0
+link_rows: list[tuple[str, str, str]] = []
+
+for (size_bytes, _digest), paths in groups.items():
+    if len(paths) < 2:
+        continue
+
+    canonical = choose_canonical(paths)
+    canonical_path = pathlib.PurePosixPath(canonical)
+
+    for path in paths:
+        if path == canonical:
+            continue
+
+        duplicate_path = pathlib.PurePosixPath(path)
+        link_target = os.path.relpath(canonical_path, start=duplicate_path.parent or pathlib.PurePosixPath("."))
+        link_rows.append((canonical, path, link_target))
+        (pack_root / duplicate_path).unlink()
+        saved_bytes += size_bytes
+        deduped_files += 1
+
+if link_rows:
+    link_map_path.parent.mkdir(parents=True, exist_ok=True)
+    with link_map_path.open("w", encoding="utf-8", newline="\n") as handle:
+        for canonical, duplicate, link_target in sorted(link_rows, key=lambda row: row[1]):
+            handle.write(f"{canonical}\t{duplicate}\t{link_target}\n")
+else:
+    link_map_path.unlink(missing_ok=True)
+
+print(f"files={deduped_files} saved_bytes={saved_bytes}")
+PY
 }
 
 parse_packages_index_records() {
@@ -555,6 +638,29 @@ if pack_is_selected 'git'; then
 set -eu
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+LINK_MAP_PATH="$SCRIPT_DIR/.stai-dedup-links.tsv"
+
+if [ -f "$LINK_MAP_PATH" ]; then
+    TAB_CHAR="$(printf '\t')"
+    while IFS="$TAB_CHAR" read -r CANONICAL_REL DUPLICATE_REL LINK_TARGET; do
+        [ -n "$CANONICAL_REL" ] || continue
+
+        CANONICAL_PATH="$SCRIPT_DIR/$CANONICAL_REL"
+        DUPLICATE_PATH="$SCRIPT_DIR/$DUPLICATE_REL"
+        mkdir -p "$(dirname "$DUPLICATE_PATH")"
+        rm -f "$DUPLICATE_PATH"
+
+        if ln -sfn "$LINK_TARGET" "$DUPLICATE_PATH" 2>/dev/null; then
+            :
+        elif ln -f "$CANONICAL_PATH" "$DUPLICATE_PATH" 2>/dev/null; then
+            :
+        else
+            cp -f "$CANONICAL_PATH" "$DUPLICATE_PATH"
+            chmod --reference="$CANONICAL_PATH" "$DUPLICATE_PATH" 2>/dev/null || true
+        fi
+    done < "$LINK_MAP_PATH"
+    rm -f "$LINK_MAP_PATH"
+fi
 
 if [ -d "$SCRIPT_DIR/bin" ]; then
     find "$SCRIPT_DIR/bin" -maxdepth 1 -type f -exec chmod 0755 {} +
@@ -570,6 +676,10 @@ EOF
     git_pack_archive_path="$resolved_target_root/$git_pack_archive_name"
 
     mapfile -t git_packaged_files < <(find "$git_pack_root" -type f -printf '%P\n' | LC_ALL=C sort)
+    dedup_report="$(deduplicate_pack_files "$git_pack_root/git" '.stai-dedup-links.tsv')"
+    if [[ -n "$dedup_report" ]]; then
+        stai_log "git dependency pack 去重结果：$dedup_report"
+    fi
     stai_log "开始归档 git dependency pack：$git_pack_archive_path"
     "$JAVA_HOME/bin/jar" --create --file "$git_pack_archive_path" --no-manifest -C "$git_pack_root" .
 
@@ -605,7 +715,7 @@ EOF
 fi
 
 if [[ "${#archive_files[@]}" -eq 0 ]]; then
-    stai_fail "未生成任何依赖包，请检查 --include 参数：$include_packs"
+    stai_log '当前未选择任何 dependency pack；将只生成空 component-index.json。'
 fi
 
 component_index_path="$resolved_target_root/component-index.json"

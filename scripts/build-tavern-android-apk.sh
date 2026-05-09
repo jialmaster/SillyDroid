@@ -58,6 +58,7 @@ Usage: build-tavern-android-apk.sh [--runtime-image <path>] [--server-package <p
 - 这是纯 stage 4 脚本，只消费现有 runtime image、server source 与 dependency packs，然后把它们合并进 android-tavern 工程。
 - 若不传 --runtime-image，默认读取 artifacts/releases/rootfs/<rid>/tavern-rootfs-<rid>.zip；缺失时会直接报错。
 - 若不传 --server-package，则默认读取 artifacts/releases/server-source/<rid>/<tag>/server-source.zip，并从 artifacts/releases/dependency-packs/<rid> 组合出最终 server payload。
+- build.includeDependencyPacks 若显式配置为空数组，则跳过 dependency packs，直接依赖 rootfs 提供运行时。
 - 若显式传 --server-package，则直接把该归档写入 Android 工程，不再读取 dependency packs 目录。
 - 若不传 --build-type，则优先读取仓库根目录 stai-build-config.json 的 build.buildType。
 - 缺少前置物料时会直接报错，并提示对应上一阶段命令；不会隐式触发下载或构建。
@@ -224,7 +225,11 @@ except Exception:
     raise SystemExit(0)
 
 value = (((data or {}).get("build") or {}).get("includeDependencyPacks"))
-if not isinstance(value, list) or not value:
+if value is None:
+    print("\n".join(default))
+    raise SystemExit(0)
+
+if not isinstance(value, list):
     print("\n".join(default))
     raise SystemExit(0)
 
@@ -234,9 +239,6 @@ for entry in value:
         name = entry.strip()
         if name:
             items.append(name)
-
-if not items:
-    items = default
 
 print("\n".join(items))
 PY
@@ -425,12 +427,36 @@ compose_server_payload_from_components() {
         stai_assert_path_exists "$dependency_root" "缺少 dependency packs 目录：$dependency_root"
     fi
 
-    if ! command -v python3 >/dev/null 2>&1; then
-        stai_fail "组合 dependency packs 需要 python3 用于 manifest 校验。"
-    fi
+    if [[ "${#dependency_pack_names[@]}" -eq 0 ]]; then
+        if [[ "$rootfs_provides_node_pack" != '1' ]]; then
+            stai_fail '当前 server 启动依赖 node 运行时，请在 includeDependencyPacks 中包含 node。'
+        fi
 
-    stai_progress_stage 1 4 "开始校验 dependency manifests 并组合 server payload：${dependency_pack_names[*]}"
-    python3 - "$dependency_root" "$selected_list_path" "$env_file_path" "$post_extract_hook_path" "$selection_manifest_path" "$rootfs_provides_node_pack" "${dependency_pack_names[@]}" <<'PY'
+        stai_progress_stage 1 4 '未选择 dependency packs；将仅使用 rootfs 运行时。'
+        : > "$selected_list_path"
+        cat > "$env_file_path" <<'EOF'
+#!/bin/sh
+set -eu
+EOF
+        cat > "$post_extract_hook_path" <<'EOF'
+#!/bin/sh
+set -eu
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+if [ -f "./tavern-entrypoint.sh" ]; then chmod 0755 "./tavern-entrypoint.sh"; fi
+EOF
+        cat > "$selection_manifest_path" <<'EOF'
+{
+  "selected": []
+}
+EOF
+    else
+        if ! command -v python3 >/dev/null 2>&1; then
+            stai_fail "组合 dependency packs 需要 python3 用于 manifest 校验。"
+        fi
+
+        stai_progress_stage 1 4 "开始校验 dependency manifests 并组合 server payload：${dependency_pack_names[*]}"
+        python3 - "$dependency_root" "$selected_list_path" "$env_file_path" "$post_extract_hook_path" "$selection_manifest_path" "$rootfs_provides_node_pack" "${dependency_pack_names[@]}" <<'PY'
 import json
 import pathlib
 import sys
@@ -559,6 +585,7 @@ selection_manifest_path.write_text(
     encoding="utf-8",
 )
 PY
+    fi
 
     stai_progress_stage 2 4 "开始解包 server source"
     stai_extract_archive_with_progress "$server_source_path" "$compose_root" 'server-source'

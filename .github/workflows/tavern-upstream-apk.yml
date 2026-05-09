@@ -759,9 +759,9 @@ jobs:
         with:
           name: ${{ needs.plan.outputs.artifact_name }}
           path: |
-            ${{ needs.plan.outputs.apk_release_dir }}/*.apk
-            ${{ needs.plan.outputs.apk_release_dir }}/*.sha256
-            ${{ needs.plan.outputs.apk_release_dir }}/*.update.json
+            ${{ needs.plan.outputs.apk_release_dir }}/${{ needs.plan.outputs.artifact_name }}.apk
+            ${{ needs.plan.outputs.apk_release_dir }}/${{ needs.plan.outputs.artifact_name }}.apk.sha256
+            ${{ needs.plan.outputs.apk_release_dir }}/${{ needs.plan.outputs.artifact_name }}.update.json
           if-no-files-found: error
 
       - name: Append build summary
@@ -862,9 +862,9 @@ jobs:
           fi
 
           gh release upload '${{ needs.plan.outputs.release_tag }}' \
-            "$release_dir"/*.apk \
-            "$release_dir"/*.sha256 \
-            "$release_dir"/*.update.json \
+            "$release_dir/$release_asset_name" \
+            "$release_dir/$release_asset_name.sha256" \
+            "$release_dir/${{ needs.plan.outputs.artifact_name }}.update.json" \
             --repo '${{ github.repository }}' \
             --clobber
 

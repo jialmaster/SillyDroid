@@ -87,6 +87,11 @@ bash ./scripts/build-tavern-android-local.sh \
 
 每个阶段脚本开头都带有 `Stage Contract` 或 `Build Plan Contract` 注释。后续如果要调整阶段职责，必须先同步修改这些脚本头部契约和本节下方的“四阶段边界”，再改实现。
 
+`stai-build-config.json` 里的 `build.includeDependencyPacks` 现在支持两种语义：
+
+- 配置项缺失或格式非法时，回退默认 `node,git`。
+- 显式配置为空数组 `[]` 时，禁用 dependency packs，stage 2 只生成空索引，stage 4 直接依赖 rootfs 提供运行时。
+
 默认会生成这些产物：
 
 - `./artifacts/releases/rootfs/linux-arm64/tavern-rootfs-linux-arm64.zip`
