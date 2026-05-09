@@ -128,18 +128,16 @@ class StartupCoordinatorService : Service() {
         stopServerLogObserver()
         try {
             val paths = HostPaths.from(applicationContext)
-            TavernConfigRepository(applicationContext).syncStoredPortFromFile()
-            val servicePort = BootConfig.servicePort(applicationContext)
-            val localUrl = BootConfig.localServiceUrl(applicationContext)
-            val readinessUrl = BootConfig.readinessUrl(applicationContext)
+            val initialLocalUrl = BootConfig.localServiceUrl(applicationContext)
+            val initialReadinessUrl = BootConfig.readinessUrl(applicationContext)
 
-            if (HealthProbe.isReady(readinessUrl)) {
-                appendStartupLog("Detected existing local Tavern server at $localUrl, reusing current instance.")
+            if (HealthProbe.isReady(initialReadinessUrl)) {
+                appendStartupLog("Detected existing local Tavern server at $initialLocalUrl, reusing current instance.")
                 updateState(
                     StartupState(
                         phase = StartupPhase.READY,
                         message = "已连接到现有本地 Tavern 服务，正在打开 WebView。",
-                        localUrl = localUrl,
+                        localUrl = initialLocalUrl,
                         progressPercent = 100
                     )
                 )
@@ -151,7 +149,7 @@ class StartupCoordinatorService : Service() {
                     phase = StartupPhase.EXTRACTING,
                     message = "正在准备 Tavern bootstrap 资产。",
                     details = "首次启动时需要解包离线 rootfs、Node runtime 和 Tavern 资源。",
-                    localUrl = localUrl,
+                    localUrl = initialLocalUrl,
                     progressPercent = 5
                 )
             )
@@ -161,11 +159,16 @@ class StartupCoordinatorService : Service() {
                         phase = StartupPhase.EXTRACTING,
                         message = message,
                         details = details,
-                        localUrl = localUrl,
+                        localUrl = initialLocalUrl,
                         progressPercent = progressPercent
                     )
                 )
             }
+
+            TavernConfigRepository(applicationContext).syncStoredPortFromFile()
+            val servicePort = BootConfig.servicePort(applicationContext)
+            val localUrl = BootConfig.localServiceUrl(applicationContext)
+            val readinessUrl = BootConfig.readinessUrl(applicationContext)
 
             updateState(
                 StartupState(
