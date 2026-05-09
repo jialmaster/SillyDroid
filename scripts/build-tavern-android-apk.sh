@@ -157,48 +157,91 @@ PY
 }
 
 read_rootfs_base_flavor() {
-    if [[ ! -f "$rootfs_manifest_path" ]]; then
-        return
-    fi
-
-    if ! command -v python3 >/dev/null 2>&1; then
-        sed -n 's/^[[:space:]]*"baseFlavor":[[:space:]]*"\([^"]*\)".*$/\1/p' "$rootfs_manifest_path" | head -n 1
-        return
-    fi
-
-    python3 - "$rootfs_manifest_path" <<'PY'
+    if command -v python3 >/dev/null 2>&1; then
+        python3 - "$runtime_image_path" "$rootfs_manifest_path" <<'PY'
 import json
 import pathlib
 import sys
+import zipfile
 
-manifest_path = pathlib.Path(sys.argv[1])
-try:
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-except Exception:
+runtime_image = pathlib.Path(sys.argv[1])
+workspace_manifest_path = pathlib.Path(sys.argv[2])
+payload = None
+
+if runtime_image.is_file():
+    try:
+        with zipfile.ZipFile(runtime_image) as archive:
+            payload = json.loads(archive.read("assets/bootstrap/rootfs/rootfs-manifest.json").decode("utf-8"))
+    except Exception:
+        payload = None
+
+if payload is None and workspace_manifest_path.is_file():
+    try:
+        payload = json.loads(workspace_manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        payload = None
+
+if not isinstance(payload, dict):
     raise SystemExit(0)
 
 value = str(payload.get("baseFlavor") or "").strip()
 if value:
     print(value)
 PY
+        return
+    fi
+
+    if [[ -f "$rootfs_manifest_path" ]]; then
+        sed -n 's/^[[:space:]]*"baseFlavor":[[:space:]]*"\([^"]*\)".*$/\1/p' "$rootfs_manifest_path" | head -n 1
+    fi
 }
 
-rootfs_base_flavor="$(read_rootfs_base_flavor)"
+read_rootfs_termux_packages() {
+    if command -v python3 >/dev/null 2>&1; then
+        python3 - "$runtime_image_path" "$rootfs_manifest_path" <<'PY'
+import json
+import pathlib
+import sys
+import zipfile
+
+runtime_image = pathlib.Path(sys.argv[1])
+workspace_manifest_path = pathlib.Path(sys.argv[2])
+payload = None
+
+if runtime_image.is_file():
+    try:
+        with zipfile.ZipFile(runtime_image) as archive:
+            payload = json.loads(archive.read("assets/bootstrap/rootfs/rootfs-manifest.json").decode("utf-8"))
+    except Exception:
+        payload = None
+
+if payload is None and workspace_manifest_path.is_file():
+    try:
+        payload = json.loads(workspace_manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        payload = None
+
+items = (payload or {}).get("termuxBasePackages") if isinstance(payload, dict) else None
+if not isinstance(items, list):
+    raise SystemExit(0)
+
+seen = set()
+for item in items:
+    name = str(item).strip()
+    if not name or name in seen:
+        continue
+    seen.add(name)
+    print(name)
+PY
+        return
+    fi
+
+    read_termux_packages_from_config
+}
+
+rootfs_base_flavor=''
 rootfs_provides_node_pack='0'
 rootfs_provides_git_pack='0'
-
-if [[ "$rootfs_base_flavor" == 'termux' ]]; then
-    while IFS= read -r termux_package_name; do
-        case "$termux_package_name" in
-            git)
-                rootfs_provides_git_pack='1'
-                ;;
-            nodejs|nodejs-lts|nodejs-current)
-                rootfs_provides_node_pack='1'
-                ;;
-        esac
-    done < <(read_termux_packages_from_config)
-fi
 
 read_dependency_packs_from_config() {
     if ! command -v python3 >/dev/null 2>&1; then
@@ -668,6 +711,22 @@ esac
 
 if [[ -z "$runtime_image_path" ]]; then
     runtime_image_path="$workspace_root/artifacts/releases/rootfs/$runtime_rid/tavern-rootfs-$runtime_rid.zip"
+fi
+
+runtime_image_path="$(realpath -m "$runtime_image_path")"
+
+rootfs_base_flavor="$(read_rootfs_base_flavor)"
+if [[ "$rootfs_base_flavor" == 'termux' ]]; then
+    while IFS= read -r termux_package_name; do
+        case "$termux_package_name" in
+            git)
+                rootfs_provides_git_pack='1'
+                ;;
+            nodejs|nodejs-lts|nodejs-current)
+                rootfs_provides_node_pack='1'
+                ;;
+        esac
+    done < <(read_rootfs_termux_packages)
 fi
 
 if [[ -z "$server_package_path" ]]; then
