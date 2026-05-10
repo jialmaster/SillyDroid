@@ -27,9 +27,9 @@ ensure_zip_available() {
     fi
 }
 
-# 简单日志与分步提示函数
+# 简洁日志函数（不带时间戳）
 log() {
-    printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"
+    printf '%s\n' "$*"
 }
 
 STEP=0
@@ -37,7 +37,10 @@ TOTAL_STEPS=11
 step() {
     # 在 set -e 下避免 ((STEP++)) 初始值为 0 时返回 1 导致脚本提前退出
     STEP=$((STEP + 1))
-    log "Step ${STEP}/${TOTAL_STEPS}: $*"
+    local percent
+    percent=$((STEP * 100 / TOTAL_STEPS))
+    # 单行刷新进度，不持续追加新行
+    printf '\r[%3d%%] %s' "$percent" "$*"
 }
 
 is_termux_environment() {
@@ -130,17 +133,9 @@ ensure_storage_access() {
     fi
 
     if command -v termux-setup-storage >/dev/null 2>&1; then
-        log "未检测到已授权的共享存储目录，正在尝试请求 Termux 存储权限（如果出现授权提示，请选择允许）..."
+        log "请求 Termux 存储权限..."
         # 不重定向，让 termux-setup-storage 的交互/提示可见，以免脚本静默挂起
         termux-setup-storage || true
-    fi
-}
-
-bool_to_text() {
-    if [[ "$1" == "1" ]]; then
-        printf '是\n'
-    else
-        printf '否\n'
     fi
 }
 
@@ -271,13 +266,6 @@ main() {
         log "指定输出目录不可写，已回退到：$resolved_output_dir"
     fi
 
-    local direct_save_available=0
-    case "$resolved_output_dir" in
-        "$HOME/storage"/*|/storage/*)
-            direct_save_available=1
-            ;;
-    esac
-
     local timestamp archive_name archive_path
     timestamp="$(date +%Y%m%d-%H%M%S)"
     archive_name="sillytavern-termux-backup-${timestamp}.zip"
@@ -306,28 +294,23 @@ main() {
     step "正在打包为 zip"
     (
         cd "$stage_root"
-        log "开始打包到：$archive_path"
-        zip -r "$archive_path" config data plugins public
+        zip -qr "$archive_path" config data plugins public
     )
 
     step "导出完成"
+    printf '\n'
     log "导出文件已保存到：$archive_path"
 
-    printf '环境检查：%s\n' "$(bool_to_text 1 | tr -d '\n')"
     printf 'SillyTavern 安装目录：%s\n' "$install_root"
     if [[ -d "$config_root" ]]; then
         printf '配置目录：%s\n' "$config_root"
     elif [[ -f "$install_root/config.yaml" ]]; then
         printf '配置文件：%s\n' "$install_root/config.yaml"
-    else
-        printf '配置目录：未检测到（已按空目录导出）\n'
     fi
     printf '数据目录：%s\n' "$data_root"
     printf '插件目录：%s\n' "$plugins_root"
-    printf '扩展来源（导出到 public/scripts/extensions）：%s\n' "$extensions_sources"
-    printf '可直接保存到手机共享存储：%s\n' "$(bool_to_text "$direct_save_available" | tr -d '\n')"
-    if [[ "$direct_save_available" != '1' ]]; then
-        printf '提示：未检测到已授权的共享存储目录；如需直接导出到手机文件管理器可先执行 termux-setup-storage。\n'
+    if [[ -n "$extensions_sources" && "$extensions_sources" != "未检测到（已按空目录导出）" ]]; then
+        printf '扩展来源（导出到 public/scripts/extensions）：%s\n' "$extensions_sources"
     fi
     printf '导出结果：成功\n'
     printf 'ZIP 路径：%s\n' "$archive_path"
