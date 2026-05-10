@@ -217,20 +217,11 @@ class StartupCoordinatorService : Service() {
             updateStartupPhaseState(
                 phase = StartupPhase.WAITING_READY,
                 message = "正在等待本地 Tavern 服务就绪。",
-                baseDetails = "正在探测本地 HTTP 服务响应。",
+                baseDetails = "正在等待本地服务启动完成。",
                 localUrl = localUrl,
                 progressPercent = 96
             )
-            if (!HealthProbe.awaitReady(readinessUrl) { attempt, totalAttempts ->
-                    val progressPercent = (96 + ((attempt.toDouble() / totalAttempts.toDouble()) * 3.0).toInt()).coerceIn(96, 99)
-                    updateStartupPhaseState(
-                        phase = StartupPhase.WAITING_READY,
-                        message = "正在等待本地 Tavern 服务就绪。",
-                        baseDetails = "健康检查 $attempt/$totalAttempts，已耗时 ${attempt} 秒。",
-                        localUrl = localUrl,
-                        progressPercent = progressPercent
-                    )
-                }) {
+            if (!HealthProbe.awaitReady(readinessUrl)) {
                 throw BootstrapException("本地 Tavern 服务在等待窗口内未就绪。")
             }
 
