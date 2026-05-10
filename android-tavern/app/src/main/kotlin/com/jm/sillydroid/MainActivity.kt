@@ -217,6 +217,7 @@ class MainActivity : AppCompatActivity() {
     private var isPullGestureActive = false
     private var isPullGestureArmed = false
     private var isPullGestureRefreshing = false
+    private var isImeVisible = false
     private var pullRefreshArcDrawable: PullTopArcDrawable? = null
     // true 表示触点命中链上仍有节点可以继续向上滚动，此时不应触发下拉刷新。
     private var isTouchChainCanScrollUp = false
@@ -1113,11 +1114,26 @@ class MainActivity : AppCompatActivity() {
             val systemBarsInsets = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
+            val imeVisibleNow = insets.isVisible(WindowInsetsCompat.Type.ime())
+            if (imeVisibleNow != isImeVisible) {
+                isImeVisible = imeVisibleNow
+                if (imeVisibleNow) {
+                    isPullGestureTracking = false
+                    isPullGestureActive = false
+                    isPullGestureArmed = false
+                    updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
+                }
+            }
+            val imeInsets = if (imeVisibleNow) {
+                insets.getInsets(WindowInsetsCompat.Type.ime())
+            } else {
+                null
+            }
             view.setPadding(
                 initialLeftPadding + systemBarsInsets.left,
                 initialTopPadding + systemBarsInsets.top,
                 initialRightPadding + systemBarsInsets.right,
-                initialBottomPadding + systemBarsInsets.bottom
+                initialBottomPadding + systemBarsInsets.bottom + (imeInsets?.bottom ?: 0)
             )
             if (floatingLogsBubble.isVisible) {
                 view.post {
@@ -1135,7 +1151,11 @@ class MainActivity : AppCompatActivity() {
     private fun configureWebView() {
         webViewRefreshLayout.isEnabled = false
         webView.setOnTouchListener { _, event ->
-            if (!webView.isVisible || bootstrapOverlay.isVisible || isPullGestureRefreshing) {
+            if (!webView.isVisible || bootstrapOverlay.isVisible || isPullGestureRefreshing || isImeVisible) {
+                isPullGestureTracking = false
+                isPullGestureActive = false
+                isPullGestureArmed = false
+                updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
                 return@setOnTouchListener false
             }
 
@@ -2142,77 +2162,7 @@ class MainActivity : AppCompatActivity() {
         if (repositoryCount <= 0) {
             return
         }
-
-        val baseMessage = getString(R.string.bootstrap_settings_extensions_default_prompt_message, repositoryCount)
-        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.bootstrap_settings_extensions_default_prompt_title)
-            .setMessage(baseMessage)
-            .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
-            .setPositiveButton(R.string.bootstrap_settings_extensions_install, null)
-            .create()
-
-        dialog.setOnShowListener {
-            val positiveButton = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
-            var githubReachable = false
-            var githubCheckVersion = 0
-
-            fun runGithubCheck() {
-                val checkVersion = githubCheckVersion + 1
-                githubCheckVersion = checkVersion
-                positiveButton.isEnabled = false
-                updateDefaultExtensionsPromptMessage(
-                    dialog = dialog,
-                    baseMessage = baseMessage,
-                    statusMessage = getString(R.string.bootstrap_settings_extensions_github_checking)
-                )
-                defaultExtensionsCoordinator.checkDefaultRepositoriesGithubReachability { reachable, failureMessage ->
-                    if (checkVersion != githubCheckVersion) {
-                        return@checkDefaultRepositoriesGithubReachability
-                    }
-
-                    githubReachable = reachable
-                    positiveButton.isEnabled = true
-                    positiveButton.text = getString(
-                        if (reachable) {
-                            R.string.bootstrap_settings_extensions_install
-                        } else {
-                            R.string.bootstrap_settings_extensions_github_check_action
-                        }
-                    )
-                    updateDefaultExtensionsPromptMessage(
-                        dialog = dialog,
-                        baseMessage = baseMessage,
-                        statusMessage = if (reachable) null else failureMessage
-                    )
-                }
-            }
-
-            positiveButton.setOnClickListener {
-                if (githubReachable) {
-                    dialog.dismiss()
-                    defaultExtensionsCoordinator.autoInstallDefaultRepositories()
-                    return@setOnClickListener
-                }
-
-                runGithubCheck()
-            }
-
-            runGithubCheck()
-        }
-
-        dialog.show()
-    }
-
-    private fun updateDefaultExtensionsPromptMessage(
-        dialog: androidx.appcompat.app.AlertDialog,
-        baseMessage: String,
-        statusMessage: String?
-    ) {
-        val resolvedMessage = listOfNotNull(
-            baseMessage.trim().takeIf { it.isNotEmpty() },
-            statusMessage?.trim()?.takeIf { it.isNotEmpty() }
-        ).joinToString(separator = "\n\n")
-        dialog.findViewById<TextView>(android.R.id.message)?.text = resolvedMessage
+        defaultExtensionsCoordinator.promptDefaultRepositoriesSelection()
     }
 
     private fun showDefaultExtensionsMessage(message: String) {

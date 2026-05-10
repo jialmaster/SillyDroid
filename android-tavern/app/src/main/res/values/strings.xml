@@ -143,6 +143,7 @@
     <string name="bootstrap_settings_extensions_action_delete_batch">批量删除已安装扩展</string>
     <string name="bootstrap_settings_extensions_action_cleanup_broken">清理错误插件</string>
     <string name="bootstrap_settings_extensions_default_title">安装默认扩展</string>
+    <string name="bootstrap_settings_extensions_default_picker_message">请选择要安装的默认扩展源。安装前会先检测 GitHub 可访问性。</string>
     <string name="bootstrap_settings_extensions_default_empty">当前没有可安装的默认扩展列表。</string>
     <string name="bootstrap_settings_extensions_default_prompt_title">检测到默认扩展</string>
     <string name="bootstrap_settings_extensions_default_prompt_message">当前宿主已经解压完成，检测到 %1$d 个可选默认扩展源。是否现在自动安装默认扩展？</string>
