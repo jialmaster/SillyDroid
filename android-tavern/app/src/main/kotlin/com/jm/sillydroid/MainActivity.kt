@@ -68,6 +68,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.math.absoluteValue
 import kotlin.math.abs
 
@@ -133,6 +135,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var floatingLogsSelectButton: MaterialButton
     private lateinit var floatingLogsIntervalButton: MaterialButton
     private lateinit var floatingLogsCloseButton: ImageButton
+    private lateinit var floatingLogsDownloadButton: ImageButton
+    private lateinit var floatingLogsScrollToBottomButton: ImageButton
     private lateinit var backPressCallback: OnBackPressedCallback
     private var webSessionScriptHandler: ScriptHandler? = null
     private var loadedUrl = ""
@@ -314,6 +318,8 @@ class MainActivity : AppCompatActivity() {
         floatingLogsSelectButton = findViewById(R.id.floatingLogsSelectButton)
         floatingLogsIntervalButton = findViewById(R.id.floatingLogsIntervalButton)
         floatingLogsCloseButton = findViewById(R.id.floatingLogsCloseButton)
+        floatingLogsDownloadButton = findViewById(R.id.floatingLogsDownloadButton)
+        floatingLogsScrollToBottomButton = findViewById(R.id.floatingLogsScrollToBottomButton)
     }
 
     private fun configureFloatingLogsUi() {
@@ -420,12 +426,20 @@ class MainActivity : AppCompatActivity() {
         floatingLogsCloseButton.setOnClickListener {
             setFloatingLogsPanelVisible(false)
         }
+        floatingLogsScrollToBottomButton.setOnClickListener {
+            floatingLogsAutoScrollEnabled = true
+            scrollFloatingLogsToBottom()
+            floatingLogsScrollToBottomButton.isVisible = false
+        }
         floatingLogsPanel.setOnTouchListener(disableAutoScrollTouchListener)
         floatingLogsScroll.setOnTouchListener(disableAutoScrollTouchListener)
         floatingLogsContent.setOnTouchListener(disableAutoScrollTouchListener)
         floatingLogsScroll.setOnScrollChangeListener { _, _, _, _, _ ->
             if (isFloatingLogsScrolledToBottom()) {
                 floatingLogsAutoScrollEnabled = true
+                floatingLogsScrollToBottomButton.isVisible = false
+            } else {
+                floatingLogsScrollToBottomButton.isVisible = true
             }
         }
         configureFloatingLogsControlButtons()
@@ -438,6 +452,9 @@ class MainActivity : AppCompatActivity() {
         }
         floatingLogsIntervalButton.setOnClickListener {
             showFloatingLogsIntervalDialog()
+        }
+        floatingLogsDownloadButton.setOnClickListener {
+            downloadFloatingLogsAsZip()
         }
     }
 
@@ -466,6 +483,7 @@ class MainActivity : AppCompatActivity() {
                 repositionFloatingLogsPanel {
                     floatingLogsPanel.alpha = 1f
                     floatingLogsAutoScrollEnabled = true
+                    floatingLogsScrollToBottomButton.isVisible = false
                     scrollFloatingLogsToBottom()
                     startFloatingLogsRefreshLoop()
                 }
@@ -839,6 +857,8 @@ class MainActivity : AppCompatActivity() {
         floatingLogsContent.text = snapshot.content.ifBlank { getString(R.string.bootstrap_settings_logs_empty_content) }
         if (floatingLogsAutoScrollEnabled) {
             scrollFloatingLogsToBottom()
+        } else {
+            floatingLogsScrollToBottomButton.isVisible = !isFloatingLogsScrolledToBottom()
         }
     }
 
@@ -961,6 +981,37 @@ class MainActivity : AppCompatActivity() {
             BootstrapHostConfigStore.floatingLogRefreshIntervalThreeSecondsMillis -> getString(R.string.bootstrap_settings_host_floating_logs_refresh_interval_three_seconds)
             BootstrapHostConfigStore.floatingLogRefreshIntervalFiveSecondsMillis -> getString(R.string.bootstrap_settings_host_floating_logs_refresh_interval_five_seconds)
             else -> getString(R.string.bootstrap_settings_host_floating_logs_refresh_interval_one_second)
+        }
+    }
+
+    private fun downloadFloatingLogsAsZip() {
+        val snapshot = lastFloatingLogSnapshot ?: run {
+            Toast.makeText(this, getString(R.string.floating_logs_download_failed), Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val zipName = snapshot.fileName.removeSuffix(".log") + "-log.zip"
+                    val downloadsDir = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
+                        ?: filesDir
+                    downloadsDir.mkdirs()
+                    val zipFile = File(downloadsDir, zipName)
+                    ZipOutputStream(zipFile.outputStream()).use { zipOut ->
+                        zipOut.putNextEntry(ZipEntry(snapshot.fileName))
+                        snapshot.sourceFile.inputStream().use { input ->
+                            input.copyTo(zipOut)
+                        }
+                        zipOut.closeEntry()
+                    }
+                    zipFile.name
+                }
+            }
+            result.onSuccess {
+                Toast.makeText(this@MainActivity, getString(R.string.floating_logs_download_success), Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(this@MainActivity, getString(R.string.floating_logs_download_failed), Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
