@@ -23,7 +23,10 @@ internal data class TavernDataImportResult(
 internal data class TavernDataArchivePreview(
     val archiveKind: TavernDataArchiveKind,
     val sourceUserId: String? = null,
-    val targetUserId: String? = null
+    val targetUserId: String? = null,
+    val sourceLayoutLabel: String? = null,
+    val writeTargets: List<String> = emptyList(),
+    val contentStats: List<String> = emptyList()
 )
 
 internal class TavernDataArchiveManager(context: Context) {
@@ -40,7 +43,7 @@ internal class TavernDataArchiveManager(context: Context) {
         fun managedDirectory(directoryName: String): File = when (layout) {
             ArchiveLayout.MANAGED_ROOT -> File(sourceRoot, directoryName)
             ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> when (directoryName) {
-                "extensions" -> File(sourceRoot, "public/scripts/extensions/third-party")
+                "extensions" -> File(sourceRoot, "public/scripts/extensions")
                 else -> File(sourceRoot, directoryName)
             }
 
@@ -50,6 +53,8 @@ internal class TavernDataArchiveManager(context: Context) {
 
     companion object {
         private const val defaultUserHandle = "default-user"
+        private const val layoutLabelManaged = "Docker/宿主四目录（config,data,plugins,extensions）"
+        private const val layoutLabelPublic = "Linux/Termux public 结构（config,data,plugins,public/scripts/extensions）"
 
         private val upstreamUserBackupDirectories: Set<String> = setOf(
             "assets",
@@ -130,19 +135,114 @@ internal class TavernDataArchiveManager(context: Context) {
 
     fun inspectDataArchive(sourceUri: Uri): TavernDataArchivePreview {
         return withExtractedArchive(sourceUri, "inspect") { extractRoot ->
-            when (resolveImportPlan(extractRoot).layout) {
+            val importPlan = resolveImportPlan(extractRoot)
+            when (importPlan.layout) {
                 ArchiveLayout.MANAGED_ROOT,
                 ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> TavernDataArchivePreview(
-                    archiveKind = TavernDataArchiveKind.HOST_FULL_SNAPSHOT
+                    archiveKind = TavernDataArchiveKind.HOST_FULL_SNAPSHOT,
+                    sourceLayoutLabel = when (importPlan.layout) {
+                        ArchiveLayout.MANAGED_ROOT -> layoutLabelManaged
+                        ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> layoutLabelPublic
+                        ArchiveLayout.UPSTREAM_USER_ROOT -> null
+                    },
+                    writeTargets = when (importPlan.layout) {
+                        ArchiveLayout.MANAGED_ROOT -> listOf(
+                            "serverDataDir/config",
+                            "serverDataDir/data",
+                            "serverDataDir/plugins",
+                            "serverDataDir/extensions（第三方扩展）"
+                        )
+
+                        ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> listOf(
+                            "serverDataDir/config",
+                            "serverDataDir/data",
+                            "serverDataDir/plugins",
+                            "serverDataDir/extensions（第三方扩展）",
+                            "serverDir/public/scripts/extensions（内置扩展，排除 third-party）"
+                        )
+
+                        ArchiveLayout.UPSTREAM_USER_ROOT -> emptyList()
+                    },
+                    contentStats = buildContentStats(importPlan)
                 )
 
                 ArchiveLayout.UPSTREAM_USER_ROOT -> TavernDataArchivePreview(
                     archiveKind = TavernDataArchiveKind.USER_BACKUP,
                     sourceUserId = inferSourceUserId(sourceUri),
-                    targetUserId = defaultUserHandle
+                    targetUserId = defaultUserHandle,
+                    writeTargets = listOf("serverDataDir/data/$defaultUserHandle"),
+                    contentStats = buildContentStats(importPlan)
                 )
             }
         }
+    }
+
+    private fun buildContentStats(importPlan: ArchiveImportPlan): List<String> {
+        val dataRoot = when (importPlan.layout) {
+            ArchiveLayout.UPSTREAM_USER_ROOT -> importPlan.sourceRoot
+            else -> importPlan.managedDirectory("data")
+        }
+
+        val roleCardCount = countFilesInNamedDirectories(
+            dataRoot,
+            setOf("characters"),
+            setOf("json", "png", "jpg", "jpeg", "webp")
+        )
+        val presetCount = countFilesInNamedDirectories(
+            dataRoot,
+            setOf("KoboldAI Settings", "OpenAI Settings", "NovelAI Settings", "TextGen Settings", "instruct", "sysprompt", "QuickReplies"),
+            setOf("json", "yaml", "yml")
+        )
+        val dialogueCount = countFilesInNamedDirectories(
+            dataRoot,
+            setOf("chats", "group chats"),
+            setOf("jsonl", "json")
+        )
+        val worldsCount = countFilesInNamedDirectories(
+            dataRoot,
+            setOf("worlds"),
+            setOf("json", "yaml", "yml")
+        )
+        val thirdPartyExtensionsCount = countThirdPartyExtensions(importPlan)
+
+        return listOf(
+            "角色卡：$roleCardCount",
+            "预设：$presetCount",
+            "第三方扩展：$thirdPartyExtensionsCount",
+            "对话：$dialogueCount",
+            "世界书：$worldsCount"
+        )
+    }
+
+    private fun countThirdPartyExtensions(importPlan: ArchiveImportPlan): Int {
+        val thirdPartyRoot = when (importPlan.layout) {
+            ArchiveLayout.MANAGED_ROOT -> {
+                val extensionsRoot = importPlan.managedDirectory("extensions")
+                val structuredThirdParty = File(extensionsRoot, "third-party")
+                if (structuredThirdParty.isDirectory) structuredThirdParty else extensionsRoot
+            }
+
+            ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> File(importPlan.sourceRoot, "public/scripts/extensions/third-party")
+            ArchiveLayout.UPSTREAM_USER_ROOT -> File(importPlan.sourceRoot, "extensions")
+        }
+
+        return thirdPartyRoot.listFiles()
+            .orEmpty()
+            .count { it.isDirectory }
+    }
+
+    private fun countFilesInNamedDirectories(root: File, directoryNames: Set<String>, allowedExtensions: Set<String>): Int {
+        if (!root.exists()) {
+            return 0
+        }
+
+        return root.walkTopDown()
+            .filter { it.isDirectory && it.name in directoryNames }
+            .sumOf { directory ->
+                directory.walkTopDown().count { file ->
+                    file.isFile && file.extension.lowercase() in allowedExtensions
+                }
+            }
     }
 
     fun importDataArchive(sourceUri: Uri): TavernDataImportResult {
@@ -338,7 +438,7 @@ internal class TavernDataArchiveManager(context: Context) {
 
         val fullExtensionsRoot = File(publicRoot, "scripts/extensions")
         val thirdPartyRoot = File(fullExtensionsRoot, "third-party")
-        if (!thirdPartyRoot.isDirectory) {
+        if (!fullExtensionsRoot.isDirectory) {
             return false
         }
 
@@ -353,15 +453,20 @@ internal class TavernDataArchiveManager(context: Context) {
             .filter { it != publicRoot }
             .all { child ->
                 child.invariantSeparatorsPath in normalizedExpectedPaths ||
-                    child.toPath().startsWith(thirdPartyRoot.toPath())
+                    child.toPath().startsWith(fullExtensionsRoot.toPath())
             }
     }
 
     private fun replaceManagedData(paths: HostPaths, importPlan: ArchiveImportPlan) {
         val targetRoot = paths.serverDataDir
         val backupRoot = File(paths.dataRoot, "server-import-backup-${System.currentTimeMillis()}")
+        val builtinExtensionsTargetRoot = File(paths.serverDir, "public/scripts/extensions")
+        val builtinExtensionsBackupRoot = File(paths.dataRoot, "server-import-builtin-extensions-backup-${System.currentTimeMillis()}")
         if (targetRoot.exists()) {
             targetRoot.copyRecursively(backupRoot, overwrite = true)
+        }
+        if (builtinExtensionsTargetRoot.exists()) {
+            builtinExtensionsTargetRoot.copyRecursively(builtinExtensionsBackupRoot, overwrite = true)
         }
 
         try {
@@ -369,7 +474,9 @@ internal class TavernDataArchiveManager(context: Context) {
             for (directoryName in TavernConfigRepository.managedTopLevelDirectories) {
                 File(targetRoot, directoryName).deleteRecursively()
                 val importedDirectory = importPlan.managedDirectory(directoryName)
-                if (importedDirectory.exists()) {
+                if (directoryName == "extensions") {
+                    restoreExtensionsWithLayout(paths, importedDirectory, importPlan.layout)
+                } else if (importedDirectory.exists()) {
                     importedDirectory.copyRecursively(File(targetRoot, directoryName), overwrite = true)
                 } else {
                     File(targetRoot, directoryName).mkdirs()
@@ -382,9 +489,107 @@ internal class TavernDataArchiveManager(context: Context) {
             if (backupRoot.exists()) {
                 backupRoot.copyRecursively(targetRoot, overwrite = true)
             }
+            if (builtinExtensionsBackupRoot.exists()) {
+                builtinExtensionsTargetRoot.deleteRecursively()
+                builtinExtensionsBackupRoot.copyRecursively(builtinExtensionsTargetRoot, overwrite = true)
+            }
             throw exception
         } finally {
             backupRoot.deleteRecursively()
+            builtinExtensionsBackupRoot.deleteRecursively()
+        }
+    }
+
+    private fun restoreExtensionsWithLayout(paths: HostPaths, importedDirectory: File, layout: ArchiveLayout) {
+        val thirdPartyTargetRoot = File(paths.serverDataDir, "extensions")
+        val builtinTargetRoot = File(paths.serverDir, "public/scripts/extensions")
+
+        thirdPartyTargetRoot.deleteRecursively()
+        thirdPartyTargetRoot.mkdirs()
+
+        when (layout) {
+            ArchiveLayout.MANAGED_ROOT -> restoreManagedRootExtensions(importedDirectory, thirdPartyTargetRoot, builtinTargetRoot)
+            ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> restorePublicRootExtensions(importedDirectory, thirdPartyTargetRoot, builtinTargetRoot)
+            ArchiveLayout.UPSTREAM_USER_ROOT -> Unit
+        }
+    }
+
+    private fun restoreManagedRootExtensions(importedDirectory: File, thirdPartyTargetRoot: File, builtinTargetRoot: File) {
+        if (!importedDirectory.exists()) {
+            return
+        }
+
+        val thirdPartySource = File(importedDirectory, "third-party")
+        val builtinSource = File(importedDirectory, "builtin")
+        val hasStructuredLayout = thirdPartySource.isDirectory || builtinSource.isDirectory
+
+        if (!hasStructuredLayout) {
+            importedDirectory.copyRecursively(thirdPartyTargetRoot, overwrite = true)
+            return
+        }
+
+        clearBuiltinEntriesExcludingThirdParty(builtinTargetRoot)
+
+        if (thirdPartySource.isDirectory) {
+            copyDirectoryChildren(thirdPartySource, thirdPartyTargetRoot)
+        }
+        if (builtinSource.isDirectory) {
+            copyDirectoryChildren(builtinSource, builtinTargetRoot) { it == "third-party" }
+        }
+    }
+
+    private fun restorePublicRootExtensions(importedPublicExtensionsRoot: File, thirdPartyTargetRoot: File, builtinTargetRoot: File) {
+        if (!importedPublicExtensionsRoot.isDirectory) {
+            return
+        }
+
+        val thirdPartySource = File(importedPublicExtensionsRoot, "third-party")
+        if (thirdPartySource.isDirectory) {
+            copyDirectoryChildren(thirdPartySource, thirdPartyTargetRoot)
+        }
+
+        val builtinEntries = importedPublicExtensionsRoot
+            .listFiles()
+            .orEmpty()
+            .filter { it.name != "third-party" }
+
+        if (builtinEntries.isNotEmpty()) {
+            clearBuiltinEntriesExcludingThirdParty(builtinTargetRoot)
+            copyDirectoryChildren(importedPublicExtensionsRoot, builtinTargetRoot) { it == "third-party" }
+        }
+    }
+
+    private fun copyDirectoryChildren(sourceRoot: File, targetRoot: File, shouldSkipName: (String) -> Boolean = { false }) {
+        if (!sourceRoot.isDirectory) {
+            return
+        }
+
+        targetRoot.mkdirs()
+        for (child in sourceRoot.listFiles().orEmpty()) {
+            if (shouldSkipName(child.name)) {
+                continue
+            }
+
+            val targetChild = File(targetRoot, child.name)
+            if (child.isDirectory) {
+                child.copyRecursively(targetChild, overwrite = true)
+            } else {
+                targetChild.parentFile?.mkdirs()
+                child.copyTo(targetChild, overwrite = true)
+            }
+        }
+    }
+
+    private fun clearBuiltinEntriesExcludingThirdParty(builtinRoot: File) {
+        if (!builtinRoot.isDirectory) {
+            return
+        }
+
+        for (child in builtinRoot.listFiles().orEmpty()) {
+            if (child.name == "third-party") {
+                continue
+            }
+            child.deleteRecursively()
         }
     }
 

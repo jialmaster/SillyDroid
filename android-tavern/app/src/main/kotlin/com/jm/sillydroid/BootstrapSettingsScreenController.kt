@@ -133,7 +133,7 @@ internal class BootstrapSettingsScreenController(
     }
 
     fun confirmImport(preview: TavernDataArchivePreview, onConfirm: () -> Unit) {
-        val (titleRes, message) = when (preview.archiveKind) {
+        val (titleRes, baseMessage) = when (preview.archiveKind) {
             TavernDataArchiveKind.USER_BACKUP -> {
                 val sourceUserId = preview.sourceUserId ?: activity.getString(R.string.bootstrap_settings_import_unknown_user)
                 val targetUserId = preview.targetUserId ?: activity.getString(R.string.bootstrap_settings_import_unknown_user)
@@ -145,11 +145,27 @@ internal class BootstrapSettingsScreenController(
             }
 
             TavernDataArchiveKind.HOST_FULL_SNAPSHOT -> {
-                R.string.bootstrap_settings_import_confirm_title_host to activity.getString(
+                val baseMessage = activity.getString(
                     R.string.bootstrap_settings_import_confirm_message_host
                 )
+                val sourceLayoutLine = preview.sourceLayoutLabel?.let { "\n\n识别来源：$it" }.orEmpty()
+                R.string.bootstrap_settings_import_confirm_title_host to (baseMessage + sourceLayoutLine)
             }
         }
+
+        val writeTargetsBlock = if (preview.writeTargets.isNotEmpty()) {
+            "\n\n将写入目录：\n" + preview.writeTargets.joinToString(separator = "\n") { "- $it" }
+        } else {
+            ""
+        }
+
+        val statsBlock = if (preview.contentStats.isNotEmpty()) {
+            "\n\n包内容统计：\n" + preview.contentStats.joinToString(separator = "\n") { "- $it" }
+        } else {
+            ""
+        }
+
+        val message = baseMessage + writeTargetsBlock + statsBlock
 
         MaterialAlertDialogBuilder(activity)
             .setTitle(titleRes)

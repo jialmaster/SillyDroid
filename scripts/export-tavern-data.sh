@@ -6,7 +6,7 @@ usage() {
 Usage: export-tavern-data.sh [--output-dir <dir>] [--install-root <dir>]
 
 One-click export for official SillyTavern installs running inside Termux.
-The script detects the install root, normalizes data into config/data/plugins/extensions,
+The script detects the install root, normalizes data into config/data/plugins/public,
 creates a zip backup, and prints the final archive path.
 EOF
 }
@@ -79,36 +79,36 @@ detect_install_root() {
 
 copy_extensions_payload() {
     local install_root="$1"
-    local target_dir="$2"
+    local target_public_root="$2"
 
     local legacy_extensions_dir="$install_root/extensions"
-    local third_party_dir="$install_root/public/scripts/extensions/third-party"
+    local full_extensions_dir="$install_root/public/scripts/extensions"
+    local third_party_target="$target_public_root/scripts/extensions/third-party"
 
-    mkdir -p "$target_dir"
+    mkdir -p "$target_public_root/scripts/extensions"
+
+    if [[ -d "$full_extensions_dir" ]]; then
+        cp -a "$full_extensions_dir"/. "$target_public_root/scripts/extensions"/
+        return 0
+    fi
 
     if [[ -d "$legacy_extensions_dir" ]]; then
-        cp -a "$legacy_extensions_dir"/. "$target_dir"/
+        mkdir -p "$third_party_target"
+        cp -a "$legacy_extensions_dir"/. "$third_party_target"/
         return 0
     fi
-
-    if [[ -d "$third_party_dir" ]]; then
-        cp -a "$third_party_dir"/. "$target_dir"/
-        return 0
-    fi
-
-    mkdir -p "$target_dir"
 }
 
 describe_extensions_sources() {
     local install_root="$1"
 
-    if [[ -d "$install_root/extensions" ]]; then
-        printf '%s\n' "$install_root/extensions"
+    if [[ -d "$install_root/public/scripts/extensions" ]]; then
+        printf '%s\n' "$install_root/public/scripts/extensions"
         return 0
     fi
 
-    if [[ -d "$install_root/public/scripts/extensions/third-party" ]]; then
-        printf '%s\n' "$install_root/public/scripts/extensions/third-party"
+    if [[ -d "$install_root/extensions" ]]; then
+        printf '%s\n' "$install_root/extensions (legacy; exported as public/scripts/extensions/third-party)"
         return 0
     fi
 
@@ -248,18 +248,18 @@ main() {
     local temp_root stage_root
     temp_root="$(mktemp -d "${TMPDIR:-${PREFIX:-/tmp}}/st-export.XXXXXX")"
     stage_root="$temp_root/payload"
-    mkdir -p "$stage_root/config" "$stage_root/data" "$stage_root/plugins" "$stage_root/extensions"
+    mkdir -p "$stage_root/config" "$stage_root/data" "$stage_root/plugins" "$stage_root/public"
 
     trap '[[ -n "${temp_root:-}" ]] && rm -rf "$temp_root"' EXIT
 
     copy_config_payload "$install_root" "$stage_root/config"
     copy_or_create_empty_dir "$data_root" "$stage_root/data"
     copy_or_create_empty_dir "$plugins_root" "$stage_root/plugins"
-    copy_extensions_payload "$install_root" "$stage_root/extensions"
+    copy_extensions_payload "$install_root" "$stage_root/public"
 
     (
         cd "$stage_root"
-        zip -qr "$archive_path" config data plugins extensions
+        zip -qr "$archive_path" config data plugins public
     )
 
     printf '环境检查：%s\n' "$(bool_to_text 1 | tr -d '\n')"
@@ -273,7 +273,7 @@ main() {
     fi
     printf '数据目录：%s\n' "$data_root"
     printf '插件目录：%s\n' "$plugins_root"
-    printf '扩展来源：%s\n' "$extensions_sources"
+    printf '扩展来源（导出到 public/scripts/extensions）：%s\n' "$extensions_sources"
     printf '可直接保存到手机共享存储：%s\n' "$(bool_to_text "$direct_save_available" | tr -d '\n')"
     if [[ "$direct_save_available" != '1' ]]; then
         printf '提示：未检测到已授权的共享存储目录；如需直接导出到手机文件管理器可先执行 termux-setup-storage。\n'
