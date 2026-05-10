@@ -219,7 +219,7 @@ class MainActivity : AppCompatActivity() {
     private var pullRefreshArcDrawable: PullTopArcDrawable? = null
     // true 表示触点命中链上仍有节点可以继续向上滚动，此时不应触发下拉刷新。
     private var isTouchChainCanScrollUp = false
-    private val pullRefreshTriggerDistancePx by lazy { 96f * resources.displayMetrics.density }
+    private val pullRefreshTriggerDistancePx by lazy { 192f * resources.displayMetrics.density }
     private val pullRefreshHintOffsetPx by lazy { 20f * resources.displayMetrics.density }
     // 首次解包完成后该文件存在，用来判断"曾经初始化过"，进而决定设置按钮是否可用。
     // 用 lazy 避免在 onCreate 之前访问 filesDir。
