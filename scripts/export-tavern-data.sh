@@ -227,7 +227,7 @@ main() {
     stage_root="$temp_root/payload"
     mkdir -p "$stage_root/config" "$stage_root/data" "$stage_root/plugins" "$stage_root/extensions"
 
-    trap 'rm -rf "$temp_root"' EXIT
+    trap '[[ -n "${temp_root:-}" ]] && rm -rf "$temp_root"' EXIT
 
     copy_config_payload "$install_root" "$stage_root/config"
     copy_or_create_empty_dir "$data_root" "$stage_root/data"
