@@ -216,7 +216,7 @@ internal class BootstrapSettingsScreenController(
             }
         } else {
             logsScrollView.post {
-                logsScrollView.scrollTo(0, Int.MAX_VALUE)
+                logsScrollView.fullScroll(android.view.View.FOCUS_DOWN)
             }
         }
     }
