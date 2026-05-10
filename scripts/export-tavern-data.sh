@@ -33,7 +33,7 @@ log() {
 }
 
 STEP=0
-TOTAL_STEPS=11
+TOTAL_STEPS=6
 step() {
     # 在 set -e 下避免 ((STEP++)) 初始值为 0 时返回 1 导致脚本提前退出
     STEP=$((STEP + 1))
@@ -234,19 +234,15 @@ main() {
     done
 
     log "开始导出 SillyTavern 数据"
-    step "检测 Termux 环境"
     if ! is_termux_environment; then
         log "当前环境不是 Termux，脚本终止。"
         exit 1
     fi
 
-    step "检查 zip 可用性"
     ensure_zip_available
 
-    step "检查存储授权"
     ensure_storage_access "$output_dir"
 
-    step "解析安装目录"
     local install_root
     if ! install_root="$(detect_install_root "$install_root_arg")"; then
         log "未找到 SillyTavern 安装目录。请使用 --install-root 指定安装路径，或在 Termux 中确保 SillyTavern 已安装。脚本中止。"
@@ -265,6 +261,20 @@ main() {
     if [[ -n "$output_dir" && "$resolved_output_dir" != "$(canonical_path "$output_dir" 2>/dev/null || printf '%s' "$output_dir")" ]]; then
         log "指定输出目录不可写，已回退到：$resolved_output_dir"
     fi
+
+    # 在导出进度开始前先打印关键路径信息
+    log "安装目录：$install_root"
+    if [[ -d "$config_root" ]]; then
+        log "配置目录：$config_root"
+    elif [[ -f "$install_root/config.yaml" ]]; then
+        log "配置文件：$install_root/config.yaml"
+    fi
+    log "数据目录：$data_root"
+    log "插件目录：$plugins_root"
+    if [[ -n "$extensions_sources" && "$extensions_sources" != "未检测到（已按空目录导出）" ]]; then
+        log "扩展来源：$extensions_sources"
+    fi
+    log "输出目录：$resolved_output_dir"
 
     local timestamp archive_name archive_path
     timestamp="$(date +%Y%m%d-%H%M%S)"
@@ -300,18 +310,6 @@ main() {
     step "导出完成"
     printf '\n'
     log "导出文件已保存到：$archive_path"
-
-    printf 'SillyTavern 安装目录：%s\n' "$install_root"
-    if [[ -d "$config_root" ]]; then
-        printf '配置目录：%s\n' "$config_root"
-    elif [[ -f "$install_root/config.yaml" ]]; then
-        printf '配置文件：%s\n' "$install_root/config.yaml"
-    fi
-    printf '数据目录：%s\n' "$data_root"
-    printf '插件目录：%s\n' "$plugins_root"
-    if [[ -n "$extensions_sources" && "$extensions_sources" != "未检测到（已按空目录导出）" ]]; then
-        printf '扩展来源（导出到 public/scripts/extensions）：%s\n' "$extensions_sources"
-    fi
     printf '导出结果：成功\n'
     printf 'ZIP 路径：%s\n' "$archive_path"
 }
