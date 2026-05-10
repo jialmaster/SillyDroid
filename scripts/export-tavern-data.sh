@@ -82,57 +82,37 @@ copy_extensions_payload() {
     local target_dir="$2"
 
     local legacy_extensions_dir="$install_root/extensions"
-    local public_extensions_dir="$install_root/public/scripts/extensions"
-    local third_party_dir="$public_extensions_dir/third-party"
-    local copied_any=0
+    local third_party_dir="$install_root/public/scripts/extensions/third-party"
 
     mkdir -p "$target_dir"
 
     if [[ -d "$legacy_extensions_dir" ]]; then
         cp -a "$legacy_extensions_dir"/. "$target_dir"/
-        copied_any=1
-    fi
-
-    if [[ -d "$public_extensions_dir" ]]; then
-        while IFS= read -r entry; do
-            if [[ "$(basename "$entry")" == "third-party" ]]; then
-                continue
-            fi
-            cp -a "$entry" "$target_dir"/
-            copied_any=1
-        done < <(find "$public_extensions_dir" -mindepth 1 -maxdepth 1 -print 2>/dev/null)
+        return 0
     fi
 
     if [[ -d "$third_party_dir" ]]; then
         cp -a "$third_party_dir"/. "$target_dir"/
-        copied_any=1
+        return 0
     fi
 
-    if [[ "$copied_any" != "1" ]]; then
-        mkdir -p "$target_dir"
-    fi
+    mkdir -p "$target_dir"
 }
 
 describe_extensions_sources() {
     local install_root="$1"
-    local sources=''
 
     if [[ -d "$install_root/extensions" ]]; then
-        sources="$install_root/extensions"
+        printf '%s\n' "$install_root/extensions"
+        return 0
     fi
 
-    if [[ -d "$install_root/public/scripts/extensions" ]]; then
-        if [[ -n "$sources" ]]; then
-            sources+=" + "
-        fi
-        sources+="$install_root/public/scripts/extensions"
+    if [[ -d "$install_root/public/scripts/extensions/third-party" ]]; then
+        printf '%s\n' "$install_root/public/scripts/extensions/third-party"
+        return 0
     fi
 
-    if [[ -z "$sources" ]]; then
-        sources="未检测到（已按空目录导出）"
-    fi
-
-    printf '%s\n' "$sources"
+    printf '%s\n' "未检测到（已按空目录导出）"
 }
 
 detect_output_dir() {
