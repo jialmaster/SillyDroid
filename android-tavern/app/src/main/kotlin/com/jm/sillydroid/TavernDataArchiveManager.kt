@@ -40,20 +40,11 @@ internal class TavernDataArchiveManager(context: Context) {
         fun managedDirectory(directoryName: String): File = when (layout) {
             ArchiveLayout.MANAGED_ROOT -> File(sourceRoot, directoryName)
             ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> when (directoryName) {
-                "extensions" -> resolvePublicExtensionsDirectory(sourceRoot)
+                "extensions" -> File(sourceRoot, "public/scripts/extensions/third-party")
                 else -> File(sourceRoot, directoryName)
             }
 
             ArchiveLayout.UPSTREAM_USER_ROOT -> File(sourceRoot, directoryName)
-        }
-
-        private fun resolvePublicExtensionsDirectory(root: File): File {
-            val fullExtensionsDirectory = File(root, "public/scripts/extensions")
-            if (fullExtensionsDirectory.isDirectory) {
-                return fullExtensionsDirectory
-            }
-
-            return File(root, "public/scripts/extensions/third-party")
         }
     }
 
@@ -347,7 +338,7 @@ internal class TavernDataArchiveManager(context: Context) {
 
         val fullExtensionsRoot = File(publicRoot, "scripts/extensions")
         val thirdPartyRoot = File(fullExtensionsRoot, "third-party")
-        if (!fullExtensionsRoot.isDirectory && !thirdPartyRoot.isDirectory) {
+        if (!thirdPartyRoot.isDirectory) {
             return false
         }
 
@@ -362,7 +353,7 @@ internal class TavernDataArchiveManager(context: Context) {
             .filter { it != publicRoot }
             .all { child ->
                 child.invariantSeparatorsPath in normalizedExpectedPaths ||
-                    child.toPath().startsWith(fullExtensionsRoot.toPath())
+                    child.toPath().startsWith(thirdPartyRoot.toPath())
             }
     }
 
