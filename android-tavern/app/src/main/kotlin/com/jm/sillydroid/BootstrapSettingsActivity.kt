@@ -75,6 +75,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var extensionsProgressIndicator: LinearProgressIndicator
     private lateinit var extensionsProgressLabel: TextView
     private lateinit var logsPanelView: View
+    private lateinit var logsScrollView: NestedScrollView
+    private lateinit var logsScrollToBottomButton: android.widget.ImageButton
     private lateinit var logsMetaView: TextView
     private lateinit var logsEmptyView: TextView
     private lateinit var logsContentView: TextView
@@ -127,7 +129,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     }
 
     private var pendingLogExportFileName: String? = null
-    private val exportLogLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { targetUri ->
+    private val exportLogLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { targetUri ->
         val requestedFileName = pendingLogExportFileName
         pendingLogExportFileName = null
         if (targetUri != null && requestedFileName != null) {
@@ -253,6 +255,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         extensionsProgressIndicator = findViewById(R.id.bootstrapSettingsExtensionsProgress)
         extensionsProgressLabel = findViewById(R.id.bootstrapSettingsExtensionsProgressLabel)
         logsPanelView = findViewById(R.id.bootstrapSettingsLogsPanel)
+        logsScrollView = findViewById(R.id.bootstrapSettingsLogsScrollView)
+        logsScrollToBottomButton = findViewById(R.id.bootstrapSettingsLogsScrollToBottomButton)
         logsMetaView = findViewById(R.id.bootstrapSettingsLogsMeta)
         logsEmptyView = findViewById(R.id.bootstrapSettingsLogsEmpty)
         logsContentView = findViewById(R.id.bootstrapSettingsLogsContent)
@@ -285,6 +289,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             dataPanelView = dataPanelView,
             extensionsPanelView = extensionsPanelView,
             logsPanelView = logsPanelView,
+            logsScrollView = logsScrollView,
             settingsPanelView = settingsPanelView,
             aboutPanelView = aboutPanelView,
             configPathView = configPathView,
@@ -376,6 +381,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             metaView = logsMetaView,
             emptyView = logsEmptyView,
             contentView = logsContentView,
+            logsScrollView = logsScrollView,
+            scrollToBottomButton = logsScrollToBottomButton,
             selectButton = logsSelectButton,
             exportButton = logsExportButton,
             reloadButton = logsReloadButton,

@@ -103,6 +103,14 @@
     <string name="bootstrap_settings_logs_load_failed">读取最新日志失败。</string>
     <string name="bootstrap_settings_logs_export_failed">导出日志失败。</string>
     <string name="bootstrap_settings_logs_export_success">已导出日志“%1$s”。</string>
+    <string name="bootstrap_settings_logs_scroll_to_bottom">滚动到底部</string>
+    <string name="bootstrap_settings_logs_download">下载日志</string>
+    <string name="bootstrap_settings_logs_download_success">已下载日志 ZIP“%1$s”。</string>
+    <string name="bootstrap_settings_logs_download_failed">下载日志失败。</string>
+    <string name="floating_logs_scroll_to_bottom">滚动到底部</string>
+    <string name="floating_logs_download">下载实时日志</string>
+    <string name="floating_logs_download_success">已下载实时日志 ZIP。</string>
+    <string name="floating_logs_download_failed">下载实时日志失败。</string>
     <string name="bootstrap_settings_logs_select_title">选择要查看的日志</string>
     <string name="bootstrap_settings_logs_select_auto">自动选择（启动中看最新，启动后看酒馆日志）</string>
     <string name="bootstrap_settings_logs_select_item">%1$s · 更新时间 %2$s</string>
