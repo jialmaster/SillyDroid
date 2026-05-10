@@ -33,6 +33,7 @@ internal class BootstrapSettingsScreenController(
     private val dataPanelView: android.view.View,
     private val extensionsPanelView: android.view.View,
     private val logsPanelView: android.view.View,
+    private val logsScrollView: NestedScrollView,
     private val settingsPanelView: android.view.View,
     private val aboutPanelView: android.view.View,
     private val configPathView: TextView,
@@ -200,15 +201,23 @@ internal class BootstrapSettingsScreenController(
 
     private fun switchTab(index: Int) {
         selectedTabIndex = index
+        val isLogsTab = index == 2
+        scrollView.isVisible = !isLogsTab
         dataPanelView.isVisible = index == 0
         extensionsPanelView.isVisible = index == 1
-        logsPanelView.isVisible = index == 2
+        logsPanelView.isVisible = isLogsTab
         settingsPanelView.isVisible = index == 3
         aboutPanelView.isVisible = index == 4
         searchLayout.isVisible = index == 3
         onTabChanged(index)
-        scrollView.post {
-            scrollView.scrollTo(0, 0)
+        if (!isLogsTab) {
+            scrollView.post {
+                scrollView.scrollTo(0, 0)
+            }
+        } else {
+            logsScrollView.post {
+                logsScrollView.scrollTo(0, Int.MAX_VALUE)
+            }
         }
     }
 

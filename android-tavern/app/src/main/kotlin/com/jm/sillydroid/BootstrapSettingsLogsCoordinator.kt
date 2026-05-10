@@ -1,21 +1,27 @@
 package com.jm.sillydroid
 
 import android.net.Uri
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
+import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 internal class BootstrapSettingsLogsCoordinator(
     private val activity: AppCompatActivity,
     private val metaView: TextView,
     private val emptyView: TextView,
     private val contentView: TextView,
+    private val logsScrollView: NestedScrollView,
+    private val scrollToBottomButton: ImageButton,
     private val selectButton: MaterialButton,
     private val exportButton: MaterialButton,
     private val reloadButton: MaterialButton,
@@ -35,10 +41,17 @@ internal class BootstrapSettingsLogsCoordinator(
         }
         exportButton.setOnClickListener {
             val snapshot = currentSnapshot ?: return@setOnClickListener
-            requestExport(snapshot.fileName)
+            val zipName = snapshot.fileName.removeSuffix(".log") + "-log.zip"
+            requestExport(zipName)
         }
         reloadButton.setOnClickListener {
             reloadLatestLog()
+        }
+        scrollToBottomButton.setOnClickListener {
+            scrollToBottom()
+        }
+        logsScrollView.setOnScrollChangeListener { _, _, _, _, _ ->
+            updateScrollToBottomButtonVisibility()
         }
         renderSnapshot()
     }
@@ -54,8 +67,12 @@ internal class BootstrapSettingsLogsCoordinator(
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     activity.contentResolver.openOutputStream(targetUri)?.use { output ->
-                        snapshot.sourceFile.inputStream().use { input ->
-                            input.copyTo(output)
+                        ZipOutputStream(output).use { zipOut ->
+                            zipOut.putNextEntry(ZipEntry(snapshot.fileName))
+                            snapshot.sourceFile.inputStream().use { input ->
+                                input.copyTo(zipOut)
+                            }
+                            zipOut.closeEntry()
                         }
                     } ?: throw IllegalStateException("Failed to open export target.")
                 }
@@ -87,6 +104,7 @@ internal class BootstrapSettingsLogsCoordinator(
             result.onSuccess { snapshot ->
                 currentSnapshot = snapshot
                 renderSnapshot()
+                scrollToBottom()
             }.onFailure { exception ->
                 showError(exception.message ?: activity.getString(R.string.bootstrap_settings_logs_load_failed))
             }
@@ -130,11 +148,34 @@ internal class BootstrapSettingsLogsCoordinator(
         if (snapshot == null) {
             metaView.text = ""
             contentView.text = ""
+            scrollToBottomButton.isVisible = false
             return
         }
 
         metaView.text = activity.getString(R.string.bootstrap_settings_logs_meta, snapshot.displayName, snapshot.updatedAt)
         contentView.text = snapshot.content.ifBlank { activity.getString(R.string.bootstrap_settings_logs_empty_content) }
+        updateScrollToBottomButtonVisibility()
+    }
+
+    private fun scrollToBottom() {
+        contentView.post {
+            logsScrollView.scrollTo(0, Int.MAX_VALUE)
+            logsScrollView.post { updateScrollToBottomButtonVisibility() }
+        }
+    }
+
+    private fun updateScrollToBottomButtonVisibility() {
+        if (currentSnapshot == null) {
+            scrollToBottomButton.isVisible = false
+            return
+        }
+        val child = logsScrollView.getChildAt(0) ?: run {
+            scrollToBottomButton.isVisible = false
+            return
+        }
+        val tolerancePx = (8 * activity.resources.displayMetrics.density).toInt()
+        val atBottom = child.bottom - (logsScrollView.height + logsScrollView.scrollY) <= tolerancePx
+        scrollToBottomButton.isVisible = !atBottom
     }
 
     private fun showLogSelectionDialog() {

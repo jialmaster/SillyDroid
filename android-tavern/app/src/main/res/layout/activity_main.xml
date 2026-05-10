@@ -159,6 +159,18 @@
                     android:textColor="@color/floating_logs_panel_title"
                     android:textAppearance="@style/TextAppearance.SillyDroid.SettingsSectionTitle" />
 
+                <ImageButton
+                    android:id="@+id/floatingLogsDownloadButton"
+                    android:layout_width="@dimen/sillydroid_compact_icon_button_size"
+                    android:layout_height="@dimen/sillydroid_compact_icon_button_size"
+                    android:layout_marginStart="@dimen/sillydroid_space_sm"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/floating_logs_download"
+                    android:padding="@dimen/sillydroid_compact_icon_button_padding"
+                    android:scaleType="center"
+                    android:src="@drawable/ic_download"
+                    android:tint="@color/floating_logs_panel_secondary_text" />
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/floatingLogsSelectButton"
                     style="@style/Widget.SillyDroid.FloatingLogsCompactButton"
@@ -220,29 +232,48 @@
                 android:textAppearance="@style/TextAppearance.SillyDroid.SettingsBody"
                 android:visibility="gone" />
 
-            <androidx.core.widget.NestedScrollView
-                android:id="@+id/floatingLogsScroll"
+            <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_marginTop="@dimen/sillydroid_space_sm"
-                android:layout_weight="1"
-                android:background="@drawable/bg_floating_logs_panel_surface"
-                android:fadeScrollbars="false"
-                android:fillViewport="true"
-                android:scrollbarSize="14dp"
-                android:scrollbars="vertical">
-                <TextView
-                    android:id="@+id/floatingLogsContent"
+                android:layout_weight="1">
+
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/floatingLogsScroll"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="monospace"
-                    android:lineSpacingExtra="1dp"
-                    android:padding="@dimen/sillydroid_space_md"
-                    android:textColor="@color/floating_logs_panel_content"
-                    android:textIsSelectable="true"
-                    android:textAppearance="@style/TextAppearance.SillyDroid.SettingsMeta"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/bg_floating_logs_panel_surface"
+                    android:fadeScrollbars="false"
+                    android:fillViewport="true"
+                    android:scrollbarSize="14dp"
+                    android:scrollbars="vertical">
+                    <TextView
+                        android:id="@+id/floatingLogsContent"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:lineSpacingExtra="1dp"
+                        android:padding="@dimen/sillydroid_space_md"
+                        android:textColor="@color/floating_logs_panel_content"
+                        android:textIsSelectable="true"
+                        android:textAppearance="@style/TextAppearance.SillyDroid.SettingsMeta"
+                        android:visibility="gone" />
+                </androidx.core.widget.NestedScrollView>
+
+                <ImageButton
+                    android:id="@+id/floatingLogsScrollToBottomButton"
+                    android:layout_width="@dimen/sillydroid_compact_icon_button_size"
+                    android:layout_height="@dimen/sillydroid_compact_icon_button_size"
+                    android:layout_gravity="bottom|end"
+                    android:layout_margin="6dp"
+                    android:background="@drawable/bg_floating_logs_panel_surface"
+                    android:contentDescription="@string/floating_logs_scroll_to_bottom"
+                    android:padding="@dimen/sillydroid_compact_icon_button_padding"
+                    android:scaleType="center"
+                    android:src="@drawable/ic_scroll_to_bottom"
+                    android:tint="@color/floating_logs_panel_secondary_text"
                     android:visibility="gone" />
-            </androidx.core.widget.NestedScrollView>
+            </FrameLayout>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 

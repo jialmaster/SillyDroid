@@ -74,7 +74,6 @@ internal class AppUpdateCoordinator(
         File(activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "updates").apply { mkdirs() }
     }
     private var receiverRegistered = false
-    private var hasCheckedForUpdates = false
     private var syncJob: Job? = null
 
     private val downloadCompleteReceiver = object : BroadcastReceiver() {
@@ -109,10 +108,6 @@ internal class AppUpdateCoordinator(
         registerDownloadReceiver()
         activity.lifecycleScope.launch {
             syncDownloadState(showErrors = false, openInstallerIfReady = false)
-            if (!hasCheckedForUpdates) {
-                hasCheckedForUpdates = true
-                checkForUpdates(silent = true)
-            }
         }
     }
 
