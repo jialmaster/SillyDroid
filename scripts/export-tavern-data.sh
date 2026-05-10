@@ -191,22 +191,6 @@ copy_extensions_payload() {
     fi
 }
 
-describe_extensions_sources() {
-    local install_root="$1"
-
-    if [[ -d "$install_root/public/scripts/extensions" ]]; then
-        printf '%s\n' "$install_root/public/scripts/extensions"
-        return 0
-    fi
-
-    if [[ -d "$install_root/extensions" ]]; then
-        printf '%s\n' "$install_root/extensions (legacy; exported as public/scripts/extensions/third-party)"
-        return 0
-    fi
-
-    printf '%s\n' "未检测到（已按空目录导出）"
-}
-
 main() {
     local output_dir=''
     local install_root_arg=''
@@ -249,12 +233,6 @@ main() {
         exit 1
     fi
 
-    local config_root data_root plugins_root extensions_sources
-    config_root="$install_root/config"
-    data_root="$install_root/data"
-    plugins_root="$install_root/plugins"
-    extensions_sources="$(describe_extensions_sources "$install_root")"
-
     local resolved_output_dir
     resolved_output_dir="$(detect_output_dir "$output_dir")"
 
@@ -264,16 +242,6 @@ main() {
 
     # 在导出进度开始前先打印关键路径信息
     log "安装目录：$install_root"
-    if [[ -d "$config_root" ]]; then
-        log "配置目录：$config_root"
-    elif [[ -f "$install_root/config.yaml" ]]; then
-        log "配置文件：$install_root/config.yaml"
-    fi
-    log "数据目录：$data_root"
-    log "插件目录：$plugins_root"
-    if [[ -n "$extensions_sources" && "$extensions_sources" != "未检测到（已按空目录导出）" ]]; then
-        log "扩展来源：$extensions_sources"
-    fi
     log "输出目录：$resolved_output_dir"
 
     local timestamp archive_name archive_path
