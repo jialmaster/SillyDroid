@@ -43,9 +43,7 @@ is_sillytavern_root() {
     local candidate="$1"
     [[ -d "$candidate" ]] || return 1
     [[ -f "$candidate/package.json" ]] || return 1
-    [[ -d "$candidate/config" ]] || return 1
-    [[ -d "$candidate/data" ]] || return 1
-    [[ -f "$candidate/start.sh" || -d "$candidate/public" ]]
+    [[ -f "$candidate/start.sh" || -d "$candidate/public" || -d "$candidate/src" ]]
 }
 
 detect_install_root() {
@@ -147,6 +145,25 @@ copy_or_create_empty_dir() {
     fi
 }
 
+copy_config_payload() {
+    local install_root="$1"
+    local target_dir="$2"
+
+    local config_dir="$install_root/config"
+    local config_file="$install_root/config.yaml"
+
+    mkdir -p "$target_dir"
+    if [[ -d "$config_dir" ]]; then
+        cp -a "$config_dir"/. "$target_dir"/
+        return 0
+    fi
+
+    if [[ -f "$config_file" ]]; then
+        cp -a "$config_file" "$target_dir/config.yaml"
+        return 0
+    fi
+}
+
 main() {
     local output_dir=''
     local install_root_arg=''
@@ -212,7 +229,7 @@ main() {
 
     trap 'rm -rf "$temp_root"' EXIT
 
-    copy_or_create_empty_dir "$config_root" "$stage_root/config"
+    copy_config_payload "$install_root" "$stage_root/config"
     copy_or_create_empty_dir "$data_root" "$stage_root/data"
     copy_or_create_empty_dir "$plugins_root" "$stage_root/plugins"
     copy_or_create_empty_dir "$extensions_root" "$stage_root/extensions"
@@ -224,7 +241,13 @@ main() {
 
     printf '环境检查：%s\n' "$(bool_to_text 1 | tr -d '\n')"
     printf 'SillyTavern 安装目录：%s\n' "$install_root"
-    printf '配置目录：%s\n' "$config_root"
+    if [[ -d "$config_root" ]]; then
+        printf '配置目录：%s\n' "$config_root"
+    elif [[ -f "$install_root/config.yaml" ]]; then
+        printf '配置文件：%s\n' "$install_root/config.yaml"
+    else
+        printf '配置目录：未检测到（已按空目录导出）\n'
+    fi
     printf '数据目录：%s\n' "$data_root"
     printf '插件目录：%s\n' "$plugins_root"
     printf '扩展目录：%s\n' "$extensions_root"
