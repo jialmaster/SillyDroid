@@ -285,7 +285,10 @@ main() {
 
     log "开始导出 SillyTavern 数据"
     step "检测 Termux 环境"
-    if ! is_termux_environment; then
+    if is_termux_environment; then
+        log "is_termux_environment: true"
+    else
+        log "is_termux_environment: false"
         log "当前环境不是 Termux，脚本终止。"
         exit 1
     fi
