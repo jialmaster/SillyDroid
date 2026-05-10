@@ -160,8 +160,12 @@
     <string name="bootstrap_settings_extensions_bundled_missing_title">仓库内置扩展</string>
     <string name="bootstrap_settings_extensions_bundled_missing_summary">以下仓库内置扩展还没有安装到当前宿主，可直接点右侧按钮安装。</string>
     <string name="bootstrap_settings_extensions_bundled_missing_badge">未安装，目标目录：%1$s</string>
-    <string name="bootstrap_settings_extensions_installed_title">当前已安装扩展</string>
-    <string name="bootstrap_settings_extensions_installed_summary">这里列出当前宿主 extensions 目录中的扩展，可直接删除或重新拉取。</string>
+    <string name="bootstrap_settings_extensions_installed_title">全局扩展</string>
+    <string name="bootstrap_settings_extensions_installed_summary">这里列出当前宿主 extensions 目录中的全局扩展，对所有用户可见。可直接删除或重新拉取。</string>
+    <string name="bootstrap_settings_extensions_user_title">用户扩展</string>
+    <string name="bootstrap_settings_extensions_user_summary">这里列出 data/default-user/extensions 目录中的用户扩展，仅当前用户可见。</string>
+    <string name="bootstrap_settings_extensions_kind_global">全局</string>
+    <string name="bootstrap_settings_extensions_kind_user">用户</string>
     <string name="bootstrap_settings_extensions_install_prompt_hint">输入扩展仓库地址，一行一个，例如 https://github.com/owner/repo；如 GitHub 不通，也可尝试 https://gitclone.com/github.com/owner/repo.git</string>
     <string name="bootstrap_settings_extensions_install_empty">请至少输入一个扩展仓库地址。</string>
     <string name="bootstrap_settings_extensions_install_prompt_action">校验并安装</string>

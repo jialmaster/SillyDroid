@@ -466,6 +466,10 @@ internal class TavernDataArchiveManager(context: Context) {
             targetRoot.copyRecursively(backupRoot, overwrite = true)
         }
         if (builtinExtensionsTargetRoot.exists()) {
+            // serverDir/public/scripts/extensions/ 下可能存在 third-party 符号链接，
+            // 指向 serverDataDir/extensions/。copyRecursively 会跟随符号链接，
+            // 必须确保目标目录存在否则会报 Source file does not exist。
+            File(paths.serverDataDir, "extensions").mkdirs()
             builtinExtensionsTargetRoot.copyRecursively(builtinExtensionsBackupRoot, overwrite = true)
         }
 
