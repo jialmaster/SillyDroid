@@ -40,11 +40,20 @@ internal class TavernDataArchiveManager(context: Context) {
         fun managedDirectory(directoryName: String): File = when (layout) {
             ArchiveLayout.MANAGED_ROOT -> File(sourceRoot, directoryName)
             ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> when (directoryName) {
-                "extensions" -> File(sourceRoot, "public/scripts/extensions/third-party")
+                "extensions" -> resolvePublicExtensionsDirectory(sourceRoot)
                 else -> File(sourceRoot, directoryName)
             }
 
             ArchiveLayout.UPSTREAM_USER_ROOT -> File(sourceRoot, directoryName)
+        }
+
+        private fun resolvePublicExtensionsDirectory(root: File): File {
+            val fullExtensionsDirectory = File(root, "public/scripts/extensions")
+            if (fullExtensionsDirectory.isDirectory) {
+                return fullExtensionsDirectory
+            }
+
+            return File(root, "public/scripts/extensions/third-party")
         }
     }
 
@@ -336,22 +345,24 @@ internal class TavernDataArchiveManager(context: Context) {
             return false
         }
 
-        val extensionsRoot = File(publicRoot, "scripts/extensions/third-party")
-        if (!extensionsRoot.isDirectory) {
+        val fullExtensionsRoot = File(publicRoot, "scripts/extensions")
+        val thirdPartyRoot = File(fullExtensionsRoot, "third-party")
+        if (!fullExtensionsRoot.isDirectory && !thirdPartyRoot.isDirectory) {
             return false
         }
 
         val normalizedExpectedPaths = setOf(
             publicRoot.invariantSeparatorsPath,
             File(publicRoot, "scripts").invariantSeparatorsPath,
-            File(publicRoot, "scripts/extensions").invariantSeparatorsPath,
-            extensionsRoot.invariantSeparatorsPath
+            fullExtensionsRoot.invariantSeparatorsPath,
+            thirdPartyRoot.invariantSeparatorsPath
         )
 
         return publicRoot.walkTopDown()
             .filter { it != publicRoot }
             .all { child ->
-                child.invariantSeparatorsPath in normalizedExpectedPaths || child.toPath().startsWith(extensionsRoot.toPath())
+                child.invariantSeparatorsPath in normalizedExpectedPaths ||
+                    child.toPath().startsWith(fullExtensionsRoot.toPath())
             }
     }
 
