@@ -249,6 +249,10 @@ main() {
     archive_name="sillytavern-termux-backup-${timestamp}.zip"
     archive_path="$resolved_output_dir/$archive_name"
 
+    local data_root plugins_root
+    data_root="$install_root/data"
+    plugins_root="$install_root/plugins"
+
     step "准备临时目录"
     local temp_root stage_root
     temp_root="$(mktemp -d "${TMPDIR:-${PREFIX:-/tmp}}/st-export.XXXXXX")"
