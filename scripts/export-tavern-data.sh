@@ -35,7 +35,8 @@ log() {
 STEP=0
 TOTAL_STEPS=11
 step() {
-    ((STEP++))
+    # 在 set -e 下避免 ((STEP++)) 初始值为 0 时返回 1 导致脚本提前退出
+    STEP=$((STEP + 1))
     log "Step ${STEP}/${TOTAL_STEPS}: $*"
 }
 
@@ -59,7 +60,15 @@ count_files() {
 }
 
 is_termux_environment() {
-    [[ -n "${TERMUX_VERSION:-}" ]] || [[ "${PREFIX:-}" == */data/data/com.termux/files/usr ]]
+    # 打印最小调试信息以便追踪为何函数返回
+    log "is_termux_environment: TERMUX_VERSION='${TERMUX_VERSION:-<unset>}' PREFIX='${PREFIX:-<unset>}'"
+    if [[ -n "${TERMUX_VERSION:-}" ]]; then
+        return 0
+    fi
+    if [[ "${PREFIX:-}" == */data/data/com.termux/files/usr ]]; then
+        return 0
+    fi
+    return 1
 }
 
 canonical_path() {
