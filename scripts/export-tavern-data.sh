@@ -27,6 +27,27 @@ ensure_zip_available() {
     fi
 }
 
+# 简单日志与分步提示函数
+log() {
+    printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"
+}
+
+STEP=0
+TOTAL_STEPS=11
+step() {
+    ((STEP++))
+    log "Step ${STEP}/${TOTAL_STEPS}: $*"
+}
+
+count_files() {
+    local dir="$1"
+    if [[ -d "$dir" ]]; then
+        find "$dir" -type f 2>/dev/null | wc -l
+    else
+        echo 0
+    fi
+}
+
 is_termux_environment() {
     [[ -n "${TERMUX_VERSION:-}" ]] || [[ "${PREFIX:-}" == */data/data/com.termux/files/usr ]]
 }
@@ -88,13 +109,21 @@ copy_extensions_payload() {
     mkdir -p "$target_public_root/scripts/extensions"
 
     if [[ -d "$full_extensions_dir" ]]; then
+        local n_files
+        n_files=$(count_files "$full_extensions_dir")
+        log "检测到扩展目录：$full_extensions_dir （$n_files 个文件），开始复制到 public/scripts/extensions..."
         cp -a "$full_extensions_dir"/. "$target_public_root/scripts/extensions"/
+        log "扩展复制完成。"
         return 0
     fi
 
     if [[ -d "$legacy_extensions_dir" ]]; then
+        local n_files
+        n_files=$(count_files "$legacy_extensions_dir")
+        log "检测到 legacy 扩展目录：$legacy_extensions_dir （$n_files 个文件），开始复制到 third-party..."
         mkdir -p "$third_party_target"
         cp -a "$legacy_extensions_dir"/. "$third_party_target"/
+        log "legacy 扩展复制完成。"
         return 0
     fi
 }
@@ -162,8 +191,14 @@ copy_or_create_empty_dir() {
     local source_dir="$1"
     local target_dir="$2"
     if [[ -d "$source_dir" ]]; then
+        local n_files
+        n_files=$(count_files "$source_dir")
+        log "拷贝目录：$source_dir → $target_dir （$n_files 个文件）"
+        mkdir -p "$target_dir"
         cp -a "$source_dir"/. "$target_dir"/
+        log "目录拷贝完成：$target_dir"
     else
+        log "源目录不存在，创建空目录：$target_dir"
         mkdir -p "$target_dir"
     fi
 }
@@ -177,12 +212,18 @@ copy_config_payload() {
 
     mkdir -p "$target_dir"
     if [[ -d "$config_dir" ]]; then
+        local n_files
+        n_files=$(count_files "$config_dir")
+        log "检测到配置目录：$config_dir （$n_files 个文件），开始复制..."
         cp -a "$config_dir"/. "$target_dir"/
+        log "配置目录复制完成。"
         return 0
     fi
 
     if [[ -f "$config_file" ]]; then
+        log "检测到配置文件：$config_file，复制到导出目录..."
         cp -a "$config_file" "$target_dir/config.yaml"
+        log "配置文件复制完成。"
         return 0
     fi
 }
@@ -213,14 +254,20 @@ main() {
         esac
     done
 
+    log "开始导出 SillyTavern 数据"
+    step "检测 Termux 环境"
     if ! is_termux_environment; then
-        echo "当前环境不是 Termux，脚本终止。" >&2
+        log "当前环境不是 Termux，脚本终止。"
         exit 1
     fi
 
+    step "检查 zip 可用性"
     ensure_zip_available
+
+    step "检查存储授权"
     ensure_storage_access "$output_dir"
 
+    step "解析安装目录"
     local install_root
     install_root="$(detect_install_root "$install_root_arg")"
 
@@ -245,6 +292,7 @@ main() {
     archive_name="sillytavern-termux-backup-${timestamp}.zip"
     archive_path="$resolved_output_dir/$archive_name"
 
+    step "准备临时目录"
     local temp_root stage_root
     temp_root="$(mktemp -d "${TMPDIR:-${PREFIX:-/tmp}}/st-export.XXXXXX")"
     stage_root="$temp_root/payload"
@@ -252,15 +300,27 @@ main() {
 
     trap '[[ -n "${temp_root:-}" ]] && rm -rf "$temp_root"' EXIT
 
+    step "拷贝配置"
     copy_config_payload "$install_root" "$stage_root/config"
+
+    step "拷贝数据"
     copy_or_create_empty_dir "$data_root" "$stage_root/data"
+
+    step "拷贝插件"
     copy_or_create_empty_dir "$plugins_root" "$stage_root/plugins"
+
+    step "拷贝扩展"
     copy_extensions_payload "$install_root" "$stage_root/public"
 
+    step "正在打包为 zip"
     (
         cd "$stage_root"
-        zip -qr "$archive_path" config data plugins public
+        log "开始打包到：$archive_path"
+        zip -r "$archive_path" config data plugins public
     )
+
+    step "导出完成"
+    log "导出文件已保存到：$archive_path"
 
     printf '环境检查：%s\n' "$(bool_to_text 1 | tr -d '\n')"
     printf 'SillyTavern 安装目录：%s\n' "$install_root"
