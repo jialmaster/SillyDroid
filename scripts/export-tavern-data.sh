@@ -77,19 +77,62 @@ detect_install_root() {
     return 1
 }
 
-detect_extensions_root() {
+copy_extensions_payload() {
     local install_root="$1"
+    local target_dir="$2"
+
+    local legacy_extensions_dir="$install_root/extensions"
+    local public_extensions_dir="$install_root/public/scripts/extensions"
+    local third_party_dir="$public_extensions_dir/third-party"
+    local copied_any=0
+
+    mkdir -p "$target_dir"
+
+    if [[ -d "$legacy_extensions_dir" ]]; then
+        cp -a "$legacy_extensions_dir"/. "$target_dir"/
+        copied_any=1
+    fi
+
+    if [[ -d "$public_extensions_dir" ]]; then
+        while IFS= read -r entry; do
+            if [[ "$(basename "$entry")" == "third-party" ]]; then
+                continue
+            fi
+            cp -a "$entry" "$target_dir"/
+            copied_any=1
+        done < <(find "$public_extensions_dir" -mindepth 1 -maxdepth 1 -print 2>/dev/null)
+    fi
+
+    if [[ -d "$third_party_dir" ]]; then
+        cp -a "$third_party_dir"/. "$target_dir"/
+        copied_any=1
+    fi
+
+    if [[ "$copied_any" != "1" ]]; then
+        mkdir -p "$target_dir"
+    fi
+}
+
+describe_extensions_sources() {
+    local install_root="$1"
+    local sources=''
+
     if [[ -d "$install_root/extensions" ]]; then
-        printf '%s\n' "$install_root/extensions"
-        return 0
+        sources="$install_root/extensions"
     fi
 
-    if [[ -d "$install_root/public/scripts/extensions/third-party" ]]; then
-        printf '%s\n' "$install_root/public/scripts/extensions/third-party"
-        return 0
+    if [[ -d "$install_root/public/scripts/extensions" ]]; then
+        if [[ -n "$sources" ]]; then
+            sources+=" + "
+        fi
+        sources+="$install_root/public/scripts/extensions"
     fi
 
-    printf '%s\n' "$install_root/public/scripts/extensions/third-party"
+    if [[ -z "$sources" ]]; then
+        sources="未检测到（已按空目录导出）"
+    fi
+
+    printf '%s\n' "$sources"
 }
 
 detect_output_dir() {
@@ -201,11 +244,11 @@ main() {
     local install_root
     install_root="$(detect_install_root "$install_root_arg")"
 
-    local config_root data_root plugins_root extensions_root
+    local config_root data_root plugins_root extensions_sources
     config_root="$install_root/config"
     data_root="$install_root/data"
     plugins_root="$install_root/plugins"
-    extensions_root="$(detect_extensions_root "$install_root")"
+    extensions_sources="$(describe_extensions_sources "$install_root")"
 
     local resolved_output_dir
     resolved_output_dir="$(detect_output_dir "$output_dir")"
@@ -232,7 +275,7 @@ main() {
     copy_config_payload "$install_root" "$stage_root/config"
     copy_or_create_empty_dir "$data_root" "$stage_root/data"
     copy_or_create_empty_dir "$plugins_root" "$stage_root/plugins"
-    copy_or_create_empty_dir "$extensions_root" "$stage_root/extensions"
+    copy_extensions_payload "$install_root" "$stage_root/extensions"
 
     (
         cd "$stage_root"
@@ -250,7 +293,7 @@ main() {
     fi
     printf '数据目录：%s\n' "$data_root"
     printf '插件目录：%s\n' "$plugins_root"
-    printf '扩展目录：%s\n' "$extensions_root"
+    printf '扩展来源：%s\n' "$extensions_sources"
     printf '可直接保存到手机共享存储：%s\n' "$(bool_to_text "$direct_save_available" | tr -d '\n')"
     if [[ "$direct_save_available" != '1' ]]; then
         printf '提示：未检测到已授权的共享存储目录；如需直接导出到手机文件管理器可先执行 termux-setup-storage。\n'
