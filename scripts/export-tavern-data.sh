@@ -147,33 +147,52 @@ describe_extensions_sources() {
 detect_output_dir() {
     local explicit_dir="${1:-}"
     if [[ -n "$explicit_dir" ]]; then
-        mkdir -p "$explicit_dir"
-        canonical_path "$explicit_dir"
-        return 0
-    fi
-
-    local candidate
+        log "detect_install_root: explicit root requested: $explicit_root"
+        if is_sillytavern_root "$explicit_root"; then
+            log "detect_install_root: explicit root valid: $explicit_root"
+            canonical_path "$explicit_root"
+            return 0
+        fi
+        log "detect_install_root: explicit root invalid: $explicit_root"
+        echo "指定的安装目录不是有效的 SillyTavern 根目录：$explicit_root" >&2
+        return 1
     for candidate in "$HOME/storage/shared/Download" "$HOME/storage/downloads" "$HOME/storage/shared"; do
         if [[ -d "$candidate" && -w "$candidate" ]]; then
+    local candidate
+
+    # 检查常见候选路径
+    for candidate in "$HOME/SillyTavern" "$HOME/sillytavern"; do
+        log "detect_install_root: checking candidate: $candidate"
+        if is_sillytavern_root "$candidate"; then
+            log "detect_install_root: found at $candidate"
             canonical_path "$candidate"
             return 0
         fi
     done
 
-    canonical_path "$HOME"
-}
-
-ensure_storage_access() {
-    local explicit_dir="${1:-}"
-    if [[ -n "$explicit_dir" ]]; then
-        return 0
-    fi
-
-    if [[ -d "$HOME/storage/shared" ]]; then
-        return 0
-    fi
-
+    # 扫描 $HOME 下的 package.json（深度 4），并显示前若干匹配以便排查
+    log "detect_install_root: scanning $HOME for package.json (maxdepth=4)"
+    local matches
+    matches=$(find "$HOME" -maxdepth 4 -type f -name package.json 2>/dev/null || true)
+    if [[ -n "$matches" ]]; then
+        log "detect_install_root: find returned matches (showing up to 10):"
+        printf '%s
     if command -v termux-setup-storage >/dev/null 2>&1; then
+        while IFS= read -r match; do
+            candidate="$(dirname "$match")"
+            log "detect_install_root: checking find-candidate: $candidate"
+            if is_sillytavern_root "$candidate"; then
+                log "detect_install_root: found at $candidate"
+                canonical_path "$candidate"
+                return 0
+            fi
+        done <<< "$matches"
+    else
+        log "detect_install_root: no package.json found in $HOME (maxdepth=4)"
+    fi
+
+    echo "未找到 SillyTavern 安装目录。可用 --install-root 手工指定。" >&2
+    return 1
         echo "未检测到已授权的共享存储目录，正在尝试请求 Termux 存储权限..."
         termux-setup-storage >/dev/null 2>&1 || true
     fi
@@ -269,7 +288,10 @@ main() {
 
     step "解析安装目录"
     local install_root
-    install_root="$(detect_install_root "$install_root_arg")"
+    if ! install_root="$(detect_install_root "$install_root_arg")"; then
+        log "未找到 SillyTavern 安装目录。请使用 --install-root 指定安装路径，或在 Termux 中确保 SillyTavern 已安装。脚本中止。"
+        exit 1
+    fi
 
     local config_root data_root plugins_root extensions_sources
     config_root="$install_root/config"
