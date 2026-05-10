@@ -40,28 +40,7 @@ step() {
     log "Step ${STEP}/${TOTAL_STEPS}: $*"
 }
 
-# 当出错时打印行号与退出码，便于诊断无输出或静默退出的问题
-on_error() {
-    local code=$?
-    printf '[%s] ERROR: 脚本在第 %s 行遇到错误，退出码=%s\n' "$(date +%H:%M:%S)" "${BASH_LINENO[0]:-unknown}" "$code"
-}
-trap on_error ERR
-
-# 最小环境调试信息（不会打印敏感变量）
-log "ENV DEBUG: TERMUX_VERSION=${TERMUX_VERSION:-<unset>} PREFIX=${PREFIX:-<unset>} HOME=${HOME:-<unset>}"
-
-count_files() {
-    local dir="$1"
-    if [[ -d "$dir" ]]; then
-        find "$dir" -type f 2>/dev/null | wc -l
-    else
-        echo 0
-    fi
-}
-
 is_termux_environment() {
-    # 打印最小调试信息以便追踪为何函数返回
-    log "is_termux_environment: TERMUX_VERSION='${TERMUX_VERSION:-<unset>}' PREFIX='${PREFIX:-<unset>}'"
     if [[ -n "${TERMUX_VERSION:-}" ]]; then
         return 0
     fi
@@ -89,47 +68,29 @@ is_sillytavern_root() {
 detect_install_root() {
     local explicit_root="${1:-}"
     if [[ -n "$explicit_root" ]]; then
-        log "detect_install_root: explicit root requested: $explicit_root"
         if is_sillytavern_root "$explicit_root"; then
-            log "detect_install_root: explicit root valid: $explicit_root"
             canonical_path "$explicit_root"
             return 0
         fi
-        log "detect_install_root: explicit root invalid: $explicit_root"
         echo "指定的安装目录不是有效的 SillyTavern 根目录：$explicit_root" >&2
         return 1
     fi
 
     local candidate
-    # 检查常见候选路径
     for candidate in "$HOME/SillyTavern" "$HOME/sillytavern"; do
-        log "detect_install_root: checking candidate: $candidate"
         if is_sillytavern_root "$candidate"; then
-            log "detect_install_root: found at $candidate"
             canonical_path "$candidate"
             return 0
         fi
     done
 
-    # 扫描 $HOME 下的 package.json（深度 4），并显示前若干匹配以便排查
-    log "detect_install_root: scanning $HOME for package.json (maxdepth=4)"
-    local matches
-    matches=$(find "$HOME" -maxdepth 4 -type f -name package.json 2>/dev/null || true)
-    if [[ -n "$matches" ]]; then
-        log "detect_install_root: find returned matches (showing up to 10):"
-        printf '%s\n' "$matches" | head -n 10 | sed 's/^/  - /' | while IFS= read -r m; do log "$m"; done
-        while IFS= read -r match; do
-            candidate="$(dirname "$match")"
-            log "detect_install_root: checking find-candidate: $candidate"
-            if is_sillytavern_root "$candidate"; then
-                log "detect_install_root: found at $candidate"
-                canonical_path "$candidate"
-                return 0
-            fi
-        done <<< "$matches"
-    else
-        log "detect_install_root: no package.json found in $HOME (maxdepth=4)"
-    fi
+    while IFS= read -r candidate; do
+        candidate="$(dirname "$candidate")"
+        if is_sillytavern_root "$candidate"; then
+            canonical_path "$candidate"
+            return 0
+        fi
+    done < <(find "$HOME" -maxdepth 4 -type f -name package.json 2>/dev/null)
 
     echo "未找到 SillyTavern 安装目录。可用 --install-root 手工指定。" >&2
     return 1
@@ -138,8 +99,12 @@ detect_install_root() {
 detect_output_dir() {
     local explicit_dir="${1:-}"
     if [[ -n "$explicit_dir" ]]; then
-        mkdir -p "$explicit_dir"
-        canonical_path "$explicit_dir"
+        if mkdir -p "$explicit_dir" >/dev/null 2>&1; then
+            canonical_path "$explicit_dir"
+            return 0
+        fi
+        # 指定目录无权限时回退到 HOME，避免中断导出流程
+        canonical_path "$HOME"
         return 0
     fi
 
@@ -183,14 +148,9 @@ copy_or_create_empty_dir() {
     local source_dir="$1"
     local target_dir="$2"
     if [[ -d "$source_dir" ]]; then
-        local n_files
-        n_files=$(count_files "$source_dir")
-        log "拷贝目录：$source_dir → $target_dir （$n_files 个文件）"
         mkdir -p "$target_dir"
         cp -a "$source_dir"/. "$target_dir"/
-        log "目录拷贝完成：$target_dir"
     else
-        log "源目录不存在，创建空目录：$target_dir"
         mkdir -p "$target_dir"
     fi
 }
@@ -204,18 +164,12 @@ copy_config_payload() {
 
     mkdir -p "$target_dir"
     if [[ -d "$config_dir" ]]; then
-        local n_files
-        n_files=$(count_files "$config_dir")
-        log "检测到配置目录：$config_dir （$n_files 个文件），开始复制..."
         cp -a "$config_dir"/. "$target_dir"/
-        log "配置目录复制完成。"
         return 0
     fi
 
     if [[ -f "$config_file" ]]; then
-        log "检测到配置文件：$config_file，复制到导出目录..."
         cp -a "$config_file" "$target_dir/config.yaml"
-        log "配置文件复制完成。"
         return 0
     fi
 }
@@ -231,21 +185,13 @@ copy_extensions_payload() {
     mkdir -p "$target_public_root/scripts/extensions"
 
     if [[ -d "$full_extensions_dir" ]]; then
-        local n_files
-        n_files=$(count_files "$full_extensions_dir")
-        log "检测到扩展目录：$full_extensions_dir （$n_files 个文件），开始复制到 public/scripts/extensions..."
         cp -a "$full_extensions_dir"/. "$target_public_root/scripts/extensions"/
-        log "扩展复制完成。"
         return 0
     fi
 
     if [[ -d "$legacy_extensions_dir" ]]; then
-        local n_files
-        n_files=$(count_files "$legacy_extensions_dir")
-        log "检测到 legacy 扩展目录：$legacy_extensions_dir （$n_files 个文件），开始复制到 third-party..."
         mkdir -p "$third_party_target"
         cp -a "$legacy_extensions_dir"/. "$third_party_target"/
-        log "legacy 扩展复制完成。"
         return 0
     fi
 }
@@ -294,10 +240,7 @@ main() {
 
     log "开始导出 SillyTavern 数据"
     step "检测 Termux 环境"
-    if is_termux_environment; then
-        log "is_termux_environment: true"
-    else
-        log "is_termux_environment: false"
+    if ! is_termux_environment; then
         log "当前环境不是 Termux，脚本终止。"
         exit 1
     fi
@@ -323,6 +266,10 @@ main() {
 
     local resolved_output_dir
     resolved_output_dir="$(detect_output_dir "$output_dir")"
+
+    if [[ -n "$output_dir" && "$resolved_output_dir" != "$(canonical_path "$output_dir" 2>/dev/null || printf '%s' "$output_dir")" ]]; then
+        log "指定输出目录不可写，已回退到：$resolved_output_dir"
+    fi
 
     local direct_save_available=0
     case "$resolved_output_dir" in
