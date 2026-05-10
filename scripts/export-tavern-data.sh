@@ -39,6 +39,16 @@ step() {
     log "Step ${STEP}/${TOTAL_STEPS}: $*"
 }
 
+# 当出错时打印行号与退出码，便于诊断无输出或静默退出的问题
+on_error() {
+    local code=$?
+    printf '[%s] ERROR: 脚本在第 %s 行遇到错误，退出码=%s\n' "$(date +%H:%M:%S)" "${BASH_LINENO[0]:-unknown}" "$code"
+}
+trap on_error ERR
+
+# 最小环境调试信息（不会打印敏感变量）
+log "ENV DEBUG: TERMUX_VERSION=${TERMUX_VERSION:-<unset>} PREFIX=${PREFIX:-<unset>} HOME=${HOME:-<unset>}"
+
 count_files() {
     local dir="$1"
     if [[ -d "$dir" ]]; then
@@ -70,83 +80,6 @@ is_sillytavern_root() {
 detect_install_root() {
     local explicit_root="${1:-}"
     if [[ -n "$explicit_root" ]]; then
-        if is_sillytavern_root "$explicit_root"; then
-            canonical_path "$explicit_root"
-            return 0
-        fi
-        echo "指定的安装目录不是有效的 SillyTavern 根目录：$explicit_root" >&2
-        return 1
-    fi
-
-    local candidate
-    for candidate in "$HOME/SillyTavern" "$HOME/sillytavern"; do
-        if is_sillytavern_root "$candidate"; then
-            canonical_path "$candidate"
-            return 0
-        fi
-    done
-
-    while IFS= read -r candidate; do
-        candidate="$(dirname "$candidate")"
-        if is_sillytavern_root "$candidate"; then
-            canonical_path "$candidate"
-            return 0
-        fi
-    done < <(find "$HOME" -maxdepth 4 -type f -name package.json 2>/dev/null)
-
-    echo "未找到 SillyTavern 安装目录。可用 --install-root 手工指定。" >&2
-    return 1
-}
-
-copy_extensions_payload() {
-    local install_root="$1"
-    local target_public_root="$2"
-
-    local legacy_extensions_dir="$install_root/extensions"
-    local full_extensions_dir="$install_root/public/scripts/extensions"
-    local third_party_target="$target_public_root/scripts/extensions/third-party"
-
-    mkdir -p "$target_public_root/scripts/extensions"
-
-    if [[ -d "$full_extensions_dir" ]]; then
-        local n_files
-        n_files=$(count_files "$full_extensions_dir")
-        log "检测到扩展目录：$full_extensions_dir （$n_files 个文件），开始复制到 public/scripts/extensions..."
-        cp -a "$full_extensions_dir"/. "$target_public_root/scripts/extensions"/
-        log "扩展复制完成。"
-        return 0
-    fi
-
-    if [[ -d "$legacy_extensions_dir" ]]; then
-        local n_files
-        n_files=$(count_files "$legacy_extensions_dir")
-        log "检测到 legacy 扩展目录：$legacy_extensions_dir （$n_files 个文件），开始复制到 third-party..."
-        mkdir -p "$third_party_target"
-        cp -a "$legacy_extensions_dir"/. "$third_party_target"/
-        log "legacy 扩展复制完成。"
-        return 0
-    fi
-}
-
-describe_extensions_sources() {
-    local install_root="$1"
-
-    if [[ -d "$install_root/public/scripts/extensions" ]]; then
-        printf '%s\n' "$install_root/public/scripts/extensions"
-        return 0
-    fi
-
-    if [[ -d "$install_root/extensions" ]]; then
-        printf '%s\n' "$install_root/extensions (legacy; exported as public/scripts/extensions/third-party)"
-        return 0
-    fi
-
-    printf '%s\n' "未检测到（已按空目录导出）"
-}
-
-detect_output_dir() {
-    local explicit_dir="${1:-}"
-    if [[ -n "$explicit_dir" ]]; then
         log "detect_install_root: explicit root requested: $explicit_root"
         if is_sillytavern_root "$explicit_root"; then
             log "detect_install_root: explicit root valid: $explicit_root"
@@ -156,10 +89,9 @@ detect_output_dir() {
         log "detect_install_root: explicit root invalid: $explicit_root"
         echo "指定的安装目录不是有效的 SillyTavern 根目录：$explicit_root" >&2
         return 1
-    for candidate in "$HOME/storage/shared/Download" "$HOME/storage/downloads" "$HOME/storage/shared"; do
-        if [[ -d "$candidate" && -w "$candidate" ]]; then
-    local candidate
+    fi
 
+    local candidate
     # 检查常见候选路径
     for candidate in "$HOME/SillyTavern" "$HOME/sillytavern"; do
         log "detect_install_root: checking candidate: $candidate"
@@ -176,8 +108,7 @@ detect_output_dir() {
     matches=$(find "$HOME" -maxdepth 4 -type f -name package.json 2>/dev/null || true)
     if [[ -n "$matches" ]]; then
         log "detect_install_root: find returned matches (showing up to 10):"
-        printf '%s
-    if command -v termux-setup-storage >/dev/null 2>&1; then
+        printf '%s\n' "$matches" | head -n 10 | sed 's/^/  - /' | while IFS= read -r m; do log "$m"; done
         while IFS= read -r match; do
             candidate="$(dirname "$match")"
             log "detect_install_root: checking find-candidate: $candidate"
@@ -193,8 +124,41 @@ detect_output_dir() {
 
     echo "未找到 SillyTavern 安装目录。可用 --install-root 手工指定。" >&2
     return 1
-        echo "未检测到已授权的共享存储目录，正在尝试请求 Termux 存储权限..."
-        termux-setup-storage >/dev/null 2>&1 || true
+}
+
+detect_output_dir() {
+    local explicit_dir="${1:-}"
+    if [[ -n "$explicit_dir" ]]; then
+        mkdir -p "$explicit_dir"
+        canonical_path "$explicit_dir"
+        return 0
+    fi
+
+    local candidate
+    for candidate in "$HOME/storage/shared/Download" "$HOME/storage/downloads" "$HOME/storage/shared"; do
+        if [[ -d "$candidate" && -w "$candidate" ]]; then
+            canonical_path "$candidate"
+            return 0
+        fi
+    done
+
+    canonical_path "$HOME"
+}
+
+ensure_storage_access() {
+    local explicit_dir="${1:-}"
+    if [[ -n "$explicit_dir" ]]; then
+        return 0
+    fi
+
+    if [[ -d "$HOME/storage/shared" ]]; then
+        return 0
+    fi
+
+    if command -v termux-setup-storage >/dev/null 2>&1; then
+        log "未检测到已授权的共享存储目录，正在尝试请求 Termux 存储权限（如果出现授权提示，请选择允许）..."
+        # 不重定向，让 termux-setup-storage 的交互/提示可见，以免脚本静默挂起
+        termux-setup-storage || true
     fi
 }
 
@@ -245,6 +209,52 @@ copy_config_payload() {
         log "配置文件复制完成。"
         return 0
     fi
+}
+
+copy_extensions_payload() {
+    local install_root="$1"
+    local target_public_root="$2"
+
+    local legacy_extensions_dir="$install_root/extensions"
+    local full_extensions_dir="$install_root/public/scripts/extensions"
+    local third_party_target="$target_public_root/scripts/extensions/third-party"
+
+    mkdir -p "$target_public_root/scripts/extensions"
+
+    if [[ -d "$full_extensions_dir" ]]; then
+        local n_files
+        n_files=$(count_files "$full_extensions_dir")
+        log "检测到扩展目录：$full_extensions_dir （$n_files 个文件），开始复制到 public/scripts/extensions..."
+        cp -a "$full_extensions_dir"/. "$target_public_root/scripts/extensions"/
+        log "扩展复制完成。"
+        return 0
+    fi
+
+    if [[ -d "$legacy_extensions_dir" ]]; then
+        local n_files
+        n_files=$(count_files "$legacy_extensions_dir")
+        log "检测到 legacy 扩展目录：$legacy_extensions_dir （$n_files 个文件），开始复制到 third-party..."
+        mkdir -p "$third_party_target"
+        cp -a "$legacy_extensions_dir"/. "$third_party_target"/
+        log "legacy 扩展复制完成。"
+        return 0
+    fi
+}
+
+describe_extensions_sources() {
+    local install_root="$1"
+
+    if [[ -d "$install_root/public/scripts/extensions" ]]; then
+        printf '%s\n' "$install_root/public/scripts/extensions"
+        return 0
+    fi
+
+    if [[ -d "$install_root/extensions" ]]; then
+        printf '%s\n' "$install_root/extensions (legacy; exported as public/scripts/extensions/third-party)"
+        return 0
+    fi
+
+    printf '%s\n' "未检测到（已按空目录导出）"
 }
 
 main() {
