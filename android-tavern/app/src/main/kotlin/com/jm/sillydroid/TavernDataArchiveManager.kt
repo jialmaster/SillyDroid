@@ -29,13 +29,24 @@ internal data class TavernDataArchivePreview(
 internal class TavernDataArchiveManager(context: Context) {
     private enum class ArchiveLayout {
         MANAGED_ROOT,
+        PUBLIC_EXTENSIONS_DATA_ROOT,
         UPSTREAM_USER_ROOT
     }
 
     private data class ArchiveImportPlan(
         val layout: ArchiveLayout,
         val sourceRoot: File
-    )
+    ) {
+        fun managedDirectory(directoryName: String): File = when (layout) {
+            ArchiveLayout.MANAGED_ROOT -> File(sourceRoot, directoryName)
+            ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> when (directoryName) {
+                "extensions" -> File(sourceRoot, "public/scripts/extensions/third-party")
+                else -> File(sourceRoot, directoryName)
+            }
+
+            ArchiveLayout.UPSTREAM_USER_ROOT -> File(sourceRoot, directoryName)
+        }
+    }
 
     companion object {
         private const val defaultUserHandle = "default-user"
@@ -120,7 +131,8 @@ internal class TavernDataArchiveManager(context: Context) {
     fun inspectDataArchive(sourceUri: Uri): TavernDataArchivePreview {
         return withExtractedArchive(sourceUri, "inspect") { extractRoot ->
             when (resolveImportPlan(extractRoot).layout) {
-                ArchiveLayout.MANAGED_ROOT -> TavernDataArchivePreview(
+                ArchiveLayout.MANAGED_ROOT,
+                ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> TavernDataArchivePreview(
                     archiveKind = TavernDataArchiveKind.HOST_FULL_SNAPSHOT
                 )
 
@@ -139,12 +151,17 @@ internal class TavernDataArchiveManager(context: Context) {
         return withExtractedArchive(sourceUri, "import") { extractRoot ->
             val importPlan = resolveImportPlan(extractRoot)
             when (importPlan.layout) {
-                ArchiveLayout.MANAGED_ROOT -> {
-                    replaceManagedData(paths, importPlan.sourceRoot)
+                ArchiveLayout.MANAGED_ROOT,
+                ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> {
+                    replaceManagedData(paths, importPlan)
                     TavernConfigRepository(appContext).syncStoredPortFromFile()
                     TavernDataImportResult(
                         importedFileCount = TavernConfigRepository.managedTopLevelDirectories.sumOf { directoryName ->
-                        File(importPlan.sourceRoot, directoryName).takeIf { it.exists() }?.walkTopDown()?.count { it.isFile } ?: 0
+                            importPlan.managedDirectory(directoryName)
+                                .takeIf { it.exists() }
+                                ?.walkTopDown()
+                                ?.count { it.isFile }
+                                ?: 0
                         },
                         archiveKind = TavernDataArchiveKind.HOST_FULL_SNAPSHOT
                     )
@@ -246,6 +263,10 @@ internal class TavernDataArchiveManager(context: Context) {
             return ArchiveImportPlan(ArchiveLayout.MANAGED_ROOT, root)
         }
 
+        if (isPublicExtensionsDataRoot(root, topLevelEntries)) {
+            return ArchiveImportPlan(ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT, root)
+        }
+
         if (topLevelEntries.all(::isUpstreamUserBackupEntry)) {
             return ArchiveImportPlan(ArchiveLayout.UPSTREAM_USER_ROOT, root)
         }
@@ -300,7 +321,41 @@ internal class TavernDataArchiveManager(context: Context) {
         return normalized.ifBlank { null }
     }
 
-    private fun replaceManagedData(paths: HostPaths, extractRoot: File) {
+    private fun isPublicExtensionsDataRoot(root: File, topLevelEntries: List<File>): Boolean {
+        val allowedTopLevelNames = setOf("config", "data", "plugins", "public")
+        if (!topLevelEntries.all { it.isDirectory && it.name in allowedTopLevelNames }) {
+            return false
+        }
+
+        if (!File(root, "config").isDirectory || !File(root, "data").isDirectory) {
+            return false
+        }
+
+        val publicRoot = File(root, "public")
+        if (!publicRoot.isDirectory) {
+            return false
+        }
+
+        val extensionsRoot = File(publicRoot, "scripts/extensions/third-party")
+        if (!extensionsRoot.isDirectory) {
+            return false
+        }
+
+        val normalizedExpectedPaths = setOf(
+            publicRoot.invariantSeparatorsPath,
+            File(publicRoot, "scripts").invariantSeparatorsPath,
+            File(publicRoot, "scripts/extensions").invariantSeparatorsPath,
+            extensionsRoot.invariantSeparatorsPath
+        )
+
+        return publicRoot.walkTopDown()
+            .filter { it != publicRoot }
+            .all { child ->
+                child.invariantSeparatorsPath in normalizedExpectedPaths || child.toPath().startsWith(extensionsRoot.toPath())
+            }
+    }
+
+    private fun replaceManagedData(paths: HostPaths, importPlan: ArchiveImportPlan) {
         val targetRoot = paths.serverDataDir
         val backupRoot = File(paths.dataRoot, "server-import-backup-${System.currentTimeMillis()}")
         if (targetRoot.exists()) {
@@ -311,7 +366,7 @@ internal class TavernDataArchiveManager(context: Context) {
             targetRoot.mkdirs()
             for (directoryName in TavernConfigRepository.managedTopLevelDirectories) {
                 File(targetRoot, directoryName).deleteRecursively()
-                val importedDirectory = File(extractRoot, directoryName)
+                val importedDirectory = importPlan.managedDirectory(directoryName)
                 if (importedDirectory.exists()) {
                     importedDirectory.copyRecursively(File(targetRoot, directoryName), overwrite = true)
                 } else {
