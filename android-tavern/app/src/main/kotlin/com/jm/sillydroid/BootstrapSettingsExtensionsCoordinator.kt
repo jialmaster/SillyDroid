@@ -837,7 +837,6 @@ internal class BootstrapSettingsExtensionsCoordinator(
             setBusyState(true)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    ensureRemoteSourcesReachable(listOf(normalizedRepository))
                     runExtensionReinstall(
                         extension.folderName,
                         normalizedRepository,
@@ -966,48 +965,27 @@ internal class BootstrapSettingsExtensionsCoordinator(
             return
         }
 
-        val checkedItems = BooleanArray(repositories.size) { true }
-        var validatedSelectionKey: String? = null
+        val repositoryUrls = repositories.map { repository -> repository.repositoryUrl }
         var githubCheckVersion = 0
-        var selectionDialog: androidx.appcompat.app.AlertDialog? = null
-        val labels = repositories.map { repository ->
-            repository.description?.takeIf { it.isNotBlank() }?.let { description ->
-                "${repository.displayName} | $description"
-            } ?: repository.displayName
-        }.toTypedArray()
-
+        val baseMessage = activity.getString(R.string.bootstrap_settings_extensions_default_picker_message)
         val dialog = MaterialAlertDialogBuilder(activity)
             .setTitle(R.string.bootstrap_settings_extensions_default_title)
-            .setMessage(" ")
-            .setMultiChoiceItems(labels, checkedItems) { _, which, isChecked ->
-                checkedItems[which] = isChecked
-                validatedSelectionKey = null
-                githubCheckVersion += 1
-                selectionDialog?.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)?.text = activity.getString(R.string.bootstrap_settings_extensions_install)
-                selectionDialog?.let { updateDialogMessage(it, baseMessage = null, statusMessage = null) }
-            }
+            .setMessage(baseMessage)
             .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
-            .setPositiveButton(R.string.bootstrap_settings_extensions_install, null)
+            .setPositiveButton(R.string.bootstrap_settings_extensions_github_check_action, null)
             .create()
 
-        selectionDialog = dialog
-
         dialog.setOnShowListener {
-            updateDialogMessage(dialog, baseMessage = null, statusMessage = null)
             val positiveButton = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
 
-            fun selectionKey(repositoryUrls: List<String>): String {
-                return repositoryUrls.joinToString(separator = "\n")
-            }
-
-            fun runGithubCheck(repositoryUrls: List<String>, autoContinueOnReachable: Boolean) {
-                val currentSelectionKey = selectionKey(repositoryUrls)
+            fun runGithubCheck() {
                 val checkVersion = githubCheckVersion + 1
                 githubCheckVersion = checkVersion
                 positiveButton.isEnabled = false
+                positiveButton.text = activity.getString(R.string.bootstrap_settings_extensions_github_check_action)
                 updateDialogMessage(
                     dialog,
-                    baseMessage = null,
+                    baseMessage = baseMessage,
                     statusMessage = activity.getString(R.string.bootstrap_settings_extensions_github_checking)
                 )
                 checkRepositoryUrlsGithubReachability(repositoryUrls) { reachable, failureMessage ->
@@ -1017,38 +995,55 @@ internal class BootstrapSettingsExtensionsCoordinator(
 
                     positiveButton.isEnabled = true
                     if (reachable) {
-                        validatedSelectionKey = currentSelectionKey
-                        positiveButton.text = activity.getString(R.string.bootstrap_settings_extensions_install)
-                        updateDialogMessage(dialog, baseMessage = null, statusMessage = null)
-                        if (autoContinueOnReachable) {
-                            dialog.dismiss()
-                            promptDefaultRepositoryInstallMode(repositoryUrls)
-                        }
+                        dialog.dismiss()
+                        promptDefaultRepositorySelectionDialog(repositories)
                     } else {
-                        validatedSelectionKey = null
                         positiveButton.text = activity.getString(R.string.bootstrap_settings_extensions_github_check_action)
-                        updateDialogMessage(dialog, baseMessage = null, statusMessage = failureMessage)
+                        updateDialogMessage(dialog, baseMessage = baseMessage, statusMessage = failureMessage)
                     }
                 }
             }
 
             positiveButton.setOnClickListener {
+                runGithubCheck()
+            }
+
+            runGithubCheck()
+        }
+
+        dialog.show()
+    }
+
+    private fun promptDefaultRepositorySelectionDialog(repositories: List<DefaultExtensionRepository>) {
+        val checkedItems = BooleanArray(repositories.size) { true }
+        val labels = repositories.map { repository ->
+            repository.description?.takeIf { it.isNotBlank() }?.let { description ->
+                "${repository.displayName} | $description"
+            } ?: repository.displayName
+        }.toTypedArray()
+        val baseMessage = activity.getString(R.string.bootstrap_settings_extensions_default_picker_message)
+
+        val dialog = MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.bootstrap_settings_extensions_default_title)
+            .setMessage(baseMessage)
+            .setMultiChoiceItems(labels, checkedItems) { _, which, isChecked ->
+                checkedItems[which] = isChecked
+            }
+            .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
+            .setPositiveButton(R.string.bootstrap_settings_extensions_install, null)
+            .create()
+
+        dialog.setOnShowListener {
+            updateDialogMessage(dialog, baseMessage = baseMessage, statusMessage = null)
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val selectedRepositories = repositories.filterIndexed { index, _ -> checkedItems[index] }
                 if (selectedRepositories.isEmpty()) {
                     showError(activity.getString(R.string.bootstrap_settings_extensions_default_select_required))
                     return@setOnClickListener
                 }
 
-                val repositoryUrls = selectedRepositories.map { repository -> repository.repositoryUrl }
-                val currentSelectionKey = selectionKey(repositoryUrls)
-                if (validatedSelectionKey == currentSelectionKey) {
-                    dialog.dismiss()
-                    promptDefaultRepositoryInstallMode(repositoryUrls)
-                    return@setOnClickListener
-                }
-
-                val requestedByDetectAction = positiveButton.text?.toString() == activity.getString(R.string.bootstrap_settings_extensions_github_check_action)
-                runGithubCheck(repositoryUrls, autoContinueOnReachable = !requestedByDetectAction)
+                dialog.dismiss()
+                promptDefaultRepositoryInstallMode(selectedRepositories.map { repository -> repository.repositoryUrl })
             }
         }
 
@@ -1466,9 +1461,11 @@ internal class BootstrapSettingsExtensionsCoordinator(
             setBusyState(true)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    ensureRemoteSourcesReachable(repositoryUrls.mapNotNull(::normalizeRepositoryUrl))
                     val previews = mutableListOf<ExtensionInstallPreview>()
                     val failures = mutableListOf<BatchExtensionFailure>()
+                    val installCandidates = mutableListOf<Pair<String, NormalizedExtensionRepository>>()
+
+                    // Phase 1: validate manifest for all repositories before starting any clone.
                     repositoryUrls.forEachIndexed { index, repositoryUrl ->
                         val normalizedRepository = normalizeRepositoryUrl(repositoryUrl)
                         val batchProgress = BatchProgressDescriptor(
@@ -1500,9 +1497,54 @@ internal class BootstrapSettingsExtensionsCoordinator(
                         }
 
                         runCatching {
+                            validateRemoteManifestBeforeClone(normalizedRepository)
+                        }.onSuccess {
+                            installCandidates += repositoryUrl to normalizedRepository
+                            publishBatchProgress(
+                                actionLabel = previewActionLabel,
+                                descriptor = batchProgress,
+                                stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_completed),
+                                itemPercent = 100,
+                                indeterminate = false
+                            )
+                        }.onFailure { exception ->
+                            failures += toBatchExtensionFailure(
+                                input = repositoryUrl,
+                                fallbackMessage = activity.getString(R.string.bootstrap_settings_extensions_install_failed),
+                                exceptionMessage = exception.message
+                            )
+                            publishBatchProgress(
+                                actionLabel = previewActionLabel,
+                                descriptor = batchProgress,
+                                stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_completed),
+                                itemPercent = 100,
+                                indeterminate = false
+                            )
+                        }
+                    }
+
+                    // Phase 2: clone only repositories that passed manifest precheck.
+                    installCandidates.forEachIndexed { index, candidate ->
+                        val repositoryUrl = candidate.first
+                        val normalizedRepository = candidate.second
+                        val batchProgress = BatchProgressDescriptor(
+                            currentIndex = index + 1,
+                            totalCount = installCandidates.size,
+                            itemLabel = repositoryDisplayLabel(repositoryUrl, normalizedRepository)
+                        )
+                        publishBatchProgress(
+                            actionLabel = previewActionLabel,
+                            descriptor = batchProgress,
+                            stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_prepare),
+                            itemPercent = 0,
+                            indeterminate = false
+                        )
+
+                        runCatching {
                             runExtensionInstallPreview(
                                 repositoryUrl,
                                 normalizedRepository,
+                                skipManifestPrecheck = true,
                                 onProgress = { runtimeProgress ->
                                     publishBatchRuntimeProgress(
                                         actionLabel = previewActionLabel,
@@ -1568,7 +1610,6 @@ internal class BootstrapSettingsExtensionsCoordinator(
             setBusyState(true)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    ensureRemoteSourcesReachable(listOf(normalizedRepository))
                     runExtensionInstallPreview(
                         repositoryUrl,
                         normalizedRepository,
@@ -1928,9 +1969,12 @@ internal class BootstrapSettingsExtensionsCoordinator(
     private fun runExtensionInstallPreview(
         repositoryUrl: String,
         normalizedRepository: NormalizedExtensionRepository,
+        skipManifestPrecheck: Boolean = false,
         onProgress: ((ExtensionRuntimeProgress) -> Unit)? = null
     ): ExtensionInstallPreview {
-        validateRemoteManifestBeforeClone(normalizedRepository)
+        if (!skipManifestPrecheck) {
+            validateRemoteManifestBeforeClone(normalizedRepository)
+        }
         val previewId = System.currentTimeMillis()
         val requestName = "extension-install-preview-$previewId"
         val maintenanceRoot = File(paths.serverDataDir, ".sillydroid-maintenance")
