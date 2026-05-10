@@ -214,12 +214,13 @@ class MainActivity : AppCompatActivity() {
     private var isOpeningBootstrapSettings = false
     private var pullGestureStartY = 0f
     private var isPullGestureTracking = false
+    private var isPullGestureActive = false
     private var isPullGestureArmed = false
     private var isPullGestureRefreshing = false
     private var pullRefreshArcDrawable: PullTopArcDrawable? = null
     // true 表示触点命中链上仍有节点可以继续向上滚动，此时不应触发下拉刷新。
     private var isTouchChainCanScrollUp = false
-    private val pullRefreshTriggerDistancePx by lazy { 192f * resources.displayMetrics.density }
+    private val pullRefreshTriggerDistancePx by lazy { 144f * resources.displayMetrics.density }
     private val pullRefreshHintOffsetPx by lazy { 20f * resources.displayMetrics.density }
     // 首次解包完成后该文件存在，用来判断"曾经初始化过"，进而决定设置按钮是否可用。
     // 用 lazy 避免在 onCreate 之前访问 filesDir。
@@ -238,7 +239,6 @@ class MainActivity : AppCompatActivity() {
     private var floatingLogsBubbleDockSide = FloatingLogsBubbleDockSide.RIGHT
     private val floatingLogsBubbleTouchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop }
     private val floatingLogsPanelGapPx by lazy { 12f * resources.displayMetrics.density }
-    private val floatingLogsBubbleHiddenWidthPx by lazy { floatingLogsBubble.width / 2f }
     private val floatingLogsBubbleRevealInterpolator = OvershootInterpolator(0.9f)
     private val floatingLogsBubbleDockInterpolator = OvershootInterpolator(0.55f)
 
@@ -691,9 +691,10 @@ class MainActivity : AppCompatActivity() {
     private fun resolveDockedBubbleX(side: FloatingLogsBubbleDockSide): Float {
         val minX = contentRoot.paddingLeft.toFloat()
         val maxX = (contentRoot.width - contentRoot.paddingRight - floatingLogsBubble.width).toFloat().coerceAtLeast(minX)
+        val hiddenWidthPx = (floatingLogsBubble.width / 2f).coerceAtLeast(1f)
         return when (side) {
-            FloatingLogsBubbleDockSide.LEFT -> minX - floatingLogsBubbleHiddenWidthPx
-            FloatingLogsBubbleDockSide.RIGHT -> maxX + floatingLogsBubbleHiddenWidthPx
+            FloatingLogsBubbleDockSide.LEFT -> minX - hiddenWidthPx
+            FloatingLogsBubbleDockSide.RIGHT -> maxX + hiddenWidthPx
         }
     }
 
@@ -1142,6 +1143,7 @@ class MainActivity : AppCompatActivity() {
                 MotionEvent.ACTION_DOWN -> {
                     pullGestureStartY = event.y
                     isPullGestureTracking = true
+                    isPullGestureActive = false
                     isPullGestureArmed = false
                     // 默认先禁止触发，等待 DOM 命中链检测结果，避免内部滚动组件误触发刷新。
                     isTouchChainCanScrollUp = true
@@ -1153,9 +1155,12 @@ class MainActivity : AppCompatActivity() {
                     if (!isPullGestureTracking) {
                         return@setOnTouchListener false
                     }
-                    val canPull = !webView.canScrollVertically(-1) && !isTouchChainCanScrollUp
                     val dragDistance = (event.y - pullGestureStartY).coerceAtLeast(0f)
-                    if (!canPull || dragDistance <= 0f) {
+                    val canPullNow = !webView.canScrollVertically(-1) && !isTouchChainCanScrollUp
+                    if (canPullNow && dragDistance > 0f) {
+                        isPullGestureActive = true
+                    }
+                    if (!isPullGestureActive || dragDistance <= 0f) {
                         isPullGestureArmed = false
                         updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
                         return@setOnTouchListener false
@@ -1171,6 +1176,7 @@ class MainActivity : AppCompatActivity() {
                         !isTouchChainCanScrollUp &&
                         !webView.canScrollVertically(-1)
                     isPullGestureTracking = false
+                    isPullGestureActive = false
                     isPullGestureArmed = false
                     if (shouldRefresh) {
                         triggerPullRefresh()
@@ -2271,6 +2277,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun updatePullRefreshHint(progress: Float, armed: Boolean, dragging: Boolean) {
         if (!webView.isVisible || bootstrapOverlay.isVisible) {
+            webViewPullRefreshHint.animate().cancel()
+            webViewPullRefreshHintArc.animate().cancel()
             webViewPullRefreshHint.isVisible = false
             webViewPullRefreshHintArc.isVisible = false
             webViewPullRefreshHint.alpha = 0f
@@ -2279,6 +2287,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (!dragging && !isPullGestureRefreshing) {
+            if (!webViewPullRefreshHint.isVisible && !webViewPullRefreshHintArc.isVisible) {
+                return
+            }
+            webViewPullRefreshHint.animate().cancel()
+            webViewPullRefreshHintArc.animate().cancel()
             webViewPullRefreshHint.animate()
                 .alpha(0f)
                 .translationY(-46f * resources.displayMetrics.density)
@@ -2293,6 +2306,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        webViewPullRefreshHint.animate().cancel()
+        webViewPullRefreshHintArc.animate().cancel()
         val clamped = progress.coerceIn(0f, 1f)
         val pullDistancePx = progress.coerceAtLeast(0f) * pullRefreshTriggerDistancePx
         val cappedDistancePx = pullDistancePx.coerceAtMost(pullRefreshTriggerDistancePx)
