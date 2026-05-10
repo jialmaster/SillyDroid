@@ -2,6 +2,8 @@
 
 [![APK Action](https://img.shields.io/github/actions/workflow/status/jialmaster/SillyDroid/sillydroid-upstream-apk.yml?label=SillyDroid%20APK)](https://github.com/jialmaster/SillyDroid/actions/workflows/sillydroid-upstream-apk.yml)
 [![Runtime Action](https://img.shields.io/github/actions/workflow/status/jialmaster/SillyDroid/sillydroid-runtime-image-release.yml?label=SillyDroid%20Runtime)](https://github.com/jialmaster/SillyDroid/actions/workflows/sillydroid-runtime-image-release.yml)
+[![Runtime Image](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjialmaster%2FSillyDroid%2Fmaster%2Fartifacts%2Fandroid-runtime-images%2Ftavern-android-runtime-linux-arm64.metadata.json&query=%24.imageFileName&label=Runtime%20Image)](https://github.com/jialmaster/SillyDroid/blob/master/artifacts/android-runtime-images/tavern-android-runtime-linux-arm64.metadata.json)
+[![Runtime Generated](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjialmaster%2FSillyDroid%2Fmaster%2Fartifacts%2Fandroid-runtime-images%2Ftavern-android-runtime-linux-arm64.metadata.json&query=%24.generatedAtUtc&label=Runtime%20Generated)](https://github.com/jialmaster/SillyDroid/blob/master/artifacts/android-runtime-images/tavern-android-runtime-linux-arm64.metadata.json)
 [![Latest Release](https://img.shields.io/github/v/release/jialmaster/SillyDroid?display_name=tag&label=SillyDroid%20Version)](https://github.com/jialmaster/SillyDroid/releases/latest)
 [![Release Time](https://img.shields.io/github/release-date/jialmaster/SillyDroid?label=SillyDroid%20Release%20Time)](https://github.com/jialmaster/SillyDroid/releases/latest)
 
@@ -10,6 +12,12 @@
 上游 SillyTavern 源码不会长期作为主工程保存在仓库里；构建时会同步指定 tag，先生成 stage 3 的 server source，再由 stage 4 组合宿主使用的最终 server payload。
 
 README 保留常用说明；更细的构建语义、阶段边界和脚本职责，以 scripts 下对应脚本开头的 Contract 注释为准。
+
+## 构建状态说明
+
+- APK Action / Runtime Action 徽章会显示 GitHub Actions 当前状态：成功（success）、失败（failure）和进行中（in progress）。
+- Runtime 目前没有单独的语义版本号字段，README 顶部显示的是 runtime image 文件名与生成时间（来自 metadata）。
+- 若后续需要展示固定 runtime 版本号，可在 runtime metadata 增加 `runtimeVersion` 字段后再接入徽章。
 
 ## 宿主当前能力
 
