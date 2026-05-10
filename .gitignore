@@ -1,6 +1,8 @@
 artifacts/
 .vs/
 .vscode/
+.qoder/
+docs/
 tmp/
 __pycache__/
 *.pyc

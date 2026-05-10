@@ -12,6 +12,13 @@ import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PixelFormat
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -33,6 +40,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -49,6 +57,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.lifecycle.Lifecycle
@@ -68,6 +77,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.math.absoluteValue
@@ -104,6 +114,61 @@ class MainActivity : AppCompatActivity() {
         val tag: String
     )
 
+    private class PullTopArcDrawable : Drawable() {
+        private val path = Path()
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+        }
+        private var color = 0xFF374151.toInt()
+        private var depthPx = 0f
+
+        fun update(depthPx: Float, armed: Boolean, color: Int) {
+            this.depthPx = depthPx
+            this.color = color
+            invalidateSelf()
+        }
+
+        override fun draw(canvas: Canvas) {
+            val width = bounds.width().toFloat()
+            val height = bounds.height().toFloat()
+            if (width <= 0f || height <= 0f) {
+                return
+            }
+
+            val clampedDepth = depthPx.coerceIn(0f, height * 0.68f)
+            paint.color = Color.argb(255, Color.red(color), Color.green(color), Color.blue(color))
+
+            path.reset()
+            path.moveTo(0f, 0f)
+            val depthRatio = (clampedDepth / height).coerceIn(0f, 1f)
+            val sideCtrlX = width * (0.05f + 0.11f * depthRatio)
+            val sideCtrlY = clampedDepth * (0.82f + 0.14f * depthRatio)
+            path.cubicTo(
+                sideCtrlX,
+                sideCtrlY,
+                width - sideCtrlX,
+                sideCtrlY,
+                width,
+                0f
+            )
+            path.lineTo(0f, 0f)
+            path.close()
+            canvas.drawPath(path, paint)
+        }
+
+        override fun setAlpha(alpha: Int) {
+            paint.alpha = alpha
+            invalidateSelf()
+        }
+
+        override fun setColorFilter(colorFilter: ColorFilter?) {
+            paint.colorFilter = colorFilter
+            invalidateSelf()
+        }
+
+        override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+    }
+
     companion object {
         private const val downloadBridgeName = "AndroidDownloadBridge"
         private const val webViewStateKey = "tavern.webview.state"
@@ -116,7 +181,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var contentRoot: View
+    private lateinit var webViewRefreshLayout: SwipeRefreshLayout
     private lateinit var webView: WebView
+    private lateinit var webViewPullRefreshHint: LinearLayout
+    private lateinit var webViewPullRefreshHintArc: View
+    private lateinit var webViewPullRefreshHintIcon: ImageView
+    private lateinit var webViewPullRefreshHintText: TextView
     private lateinit var bootstrapOverlay: View
     private lateinit var bootstrapStatus: TextView
     private lateinit var bootstrapRetry: Button
@@ -142,6 +212,15 @@ class MainActivity : AppCompatActivity() {
     private var loadedUrl = ""
     private var hasRestoredWebViewState = false
     private var isOpeningBootstrapSettings = false
+    private var pullGestureStartY = 0f
+    private var isPullGestureTracking = false
+    private var isPullGestureArmed = false
+    private var isPullGestureRefreshing = false
+    private var pullRefreshArcDrawable: PullTopArcDrawable? = null
+    // true 表示触点命中链上仍有节点可以继续向上滚动，此时不应触发下拉刷新。
+    private var isTouchChainCanScrollUp = false
+    private val pullRefreshTriggerDistancePx by lazy { 96f * resources.displayMetrics.density }
+    private val pullRefreshHintOffsetPx by lazy { 20f * resources.displayMetrics.density }
     // 首次解包完成后该文件存在，用来判断"曾经初始化过"，进而决定设置按钮是否可用。
     // 用 lazy 避免在 onCreate 之前访问 filesDir。
     private val isBootstrapPreviouslyCompleted: Boolean by lazy {
@@ -201,6 +280,7 @@ class MainActivity : AppCompatActivity() {
             hasRestoredWebViewState = false
             loadedUrl = ""
             bootstrapOverlay.isVisible = true
+            webViewRefreshLayout.isVisible = false
             webView.isVisible = false
             startBootstrap(true)
             return@registerForActivityResult
@@ -299,7 +379,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun bindViews() {
         contentRoot = findViewById(R.id.contentRoot)
+        webViewRefreshLayout = findViewById(R.id.webViewRefreshLayout)
         webView = findViewById(R.id.webView)
+        webViewPullRefreshHint = findViewById(R.id.webViewPullRefreshHint)
+        webViewPullRefreshHintArc = findViewById(R.id.webViewPullRefreshHintArc)
+        webViewPullRefreshHintIcon = findViewById(R.id.webViewPullRefreshHintIcon)
+        webViewPullRefreshHintText = findViewById(R.id.webViewPullRefreshHintText)
+        pullRefreshArcDrawable = PullTopArcDrawable()
+        webViewPullRefreshHintArc.background = pullRefreshArcDrawable
         bootstrapOverlay = findViewById(R.id.bootstrapOverlay)
         bootstrapStatus = findViewById(R.id.bootstrapStatus)
         bootstrapRetry = findViewById(R.id.bootstrapRetry)
@@ -1045,6 +1132,56 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun configureWebView() {
+        webViewRefreshLayout.isEnabled = false
+        webView.setOnTouchListener { _, event ->
+            if (!webView.isVisible || bootstrapOverlay.isVisible || isPullGestureRefreshing) {
+                return@setOnTouchListener false
+            }
+
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    pullGestureStartY = event.y
+                    isPullGestureTracking = true
+                    isPullGestureArmed = false
+                    // 默认先禁止触发，等待 DOM 命中链检测结果，避免内部滚动组件误触发刷新。
+                    isTouchChainCanScrollUp = true
+                    updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
+                    detectTouchChainCanScrollUp(event.x, event.y)
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    if (!isPullGestureTracking) {
+                        return@setOnTouchListener false
+                    }
+                    val canPull = !webView.canScrollVertically(-1) && !isTouchChainCanScrollUp
+                    val dragDistance = (event.y - pullGestureStartY).coerceAtLeast(0f)
+                    if (!canPull || dragDistance <= 0f) {
+                        isPullGestureArmed = false
+                        updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
+                        return@setOnTouchListener false
+                    }
+                    val progress = (dragDistance / pullRefreshTriggerDistancePx).coerceAtMost(2.4f)
+                    isPullGestureArmed = dragDistance >= pullRefreshTriggerDistancePx
+                    updatePullRefreshHint(progress = progress, armed = isPullGestureArmed, dragging = true)
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val shouldRefresh = event.actionMasked == MotionEvent.ACTION_UP &&
+                        isPullGestureArmed &&
+                        !isTouchChainCanScrollUp &&
+                        !webView.canScrollVertically(-1)
+                    isPullGestureTracking = false
+                    isPullGestureArmed = false
+                    if (shouldRefresh) {
+                        triggerPullRefresh()
+                    } else {
+                        updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
+                    }
+                }
+            }
+            false
+        }
+
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
         webView.settings.allowFileAccess = false
@@ -1082,6 +1219,8 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                isPullGestureRefreshing = false
+                updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
                 // 冷启动后主动把 WebView 新写入的 cookie 落盘，避免后台回收前只保存在内存里。
                 CookieManager.getInstance().flush()
                 installBlobDownloadBridge()
@@ -1979,6 +2118,10 @@ class MainActivity : AppCompatActivity() {
             maybePromptDefaultExtensionsAfterBootstrapReady()
         } else {
             bootstrapOverlay.isVisible = true
+            webViewRefreshLayout.isVisible = false
+            webViewRefreshLayout.isEnabled = false
+            isPullGestureRefreshing = false
+            updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
             webView.isVisible = false
         }
     }
@@ -2108,6 +2251,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun showWebView(baseUrl: String) {
         bootstrapOverlay.isVisible = false
+        webViewRefreshLayout.isVisible = true
+        webViewRefreshLayout.isEnabled = false
         webView.isVisible = true
         if (hasRestoredWebViewState) {
             // 已恢复出原来的 WebView 会话时，不再重新 load baseUrl，避免把前端状态重置到首页。
@@ -2122,6 +2267,139 @@ class MainActivity : AppCompatActivity() {
         val targetUrl = buildInitialWebViewUrl(baseUrl)
         loadedUrl = targetUrl
         webView.loadUrl(targetUrl)
+    }
+
+    private fun updatePullRefreshHint(progress: Float, armed: Boolean, dragging: Boolean) {
+        if (!webView.isVisible || bootstrapOverlay.isVisible) {
+            webViewPullRefreshHint.isVisible = false
+            webViewPullRefreshHintArc.isVisible = false
+            webViewPullRefreshHint.alpha = 0f
+            webViewPullRefreshHintText.alpha = 0f
+            return
+        }
+
+        if (!dragging && !isPullGestureRefreshing) {
+            webViewPullRefreshHint.animate()
+                .alpha(0f)
+                .translationY(-46f * resources.displayMetrics.density)
+                .setDuration(120)
+                .withEndAction {
+                    webViewPullRefreshHint.isVisible = false
+                    webViewPullRefreshHintArc.isVisible = false
+                    webViewPullRefreshHintArc.alpha = 0f
+                    webViewPullRefreshHintText.alpha = 0f
+                }
+                .start()
+            return
+        }
+
+        val clamped = progress.coerceIn(0f, 1f)
+        val pullDistancePx = progress.coerceAtLeast(0f) * pullRefreshTriggerDistancePx
+        val cappedDistancePx = pullDistancePx.coerceAtMost(pullRefreshTriggerDistancePx)
+        val extraDistancePx = (pullDistancePx - pullRefreshTriggerDistancePx).coerceAtLeast(0f)
+        val tensionPercent = (extraDistancePx / (pullRefreshTriggerDistancePx * 2.4f)).coerceIn(0f, 1f)
+        val tensionMovePx = pullRefreshTriggerDistancePx *
+            (tensionPercent - (tensionPercent * tensionPercent) / 2f) * 1.95f
+        val visualOffsetPx = cappedDistancePx + tensionMovePx
+
+        webViewPullRefreshHint.isVisible = true
+        webViewPullRefreshHintArc.isVisible = true
+        webViewPullRefreshHint.alpha = (0.35f + clamped * 0.65f).coerceIn(0f, 1f)
+
+        val iconBaseOffscreenY = -56f * resources.displayMetrics.density
+        webViewPullRefreshHint.translationY = iconBaseOffscreenY + visualOffsetPx * 0.9f
+
+        val hintColor = runCatching {
+            Color.parseColor(if (isNightModeEnabled()) "#E5E7EB" else "#374151")
+        }.getOrDefault(0xFF374151.toInt())
+        updatePullRefreshArc(depthPx = visualOffsetPx * 0.48f, armed = armed, color = hintColor)
+        val arcAlphaProgress = (visualOffsetPx / (pullRefreshTriggerDistancePx * 1.35f)).coerceIn(0f, 1f)
+        webViewPullRefreshHintArc.alpha = arcAlphaProgress * 0.42f
+
+        webViewPullRefreshHintText.text = getString(R.string.webview_pull_refresh_release)
+        webViewPullRefreshHintText.alpha = if (armed) {
+            ((progress - 0.92f) / 0.35f).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+        val rotationProgress = clamped + tensionPercent * 0.9f
+        webViewPullRefreshHintIcon.rotation = 320f * rotationProgress
+        webViewPullRefreshHintIcon.alpha = if (armed) 1f else (0.38f + 0.52f * clamped).coerceIn(0f, 1f)
+    }
+
+    private fun updatePullRefreshArc(depthPx: Float, armed: Boolean, color: Int) {
+        val arcDrawable = pullRefreshArcDrawable ?: return
+        arcDrawable.update(depthPx = depthPx, armed = armed, color = color)
+    }
+
+    private fun triggerPullRefresh() {
+        if (!webView.isVisible || isPullGestureRefreshing) {
+            return
+        }
+
+        val density = resources.displayMetrics.density
+        isPullGestureRefreshing = true
+        webViewPullRefreshHint.isVisible = true
+        webViewPullRefreshHintArc.isVisible = true
+        webViewPullRefreshHint.alpha = 1f
+        webViewPullRefreshHint.translationY = pullRefreshHintOffsetPx * 0.9f
+        webViewPullRefreshHintText.alpha = 0f
+        webViewPullRefreshHintIcon.rotation = 320f
+        webViewPullRefreshHintIcon.alpha = 1f
+        updatePullRefreshArc(depthPx = pullRefreshTriggerDistancePx * 0.42f, armed = true, color = Color.parseColor(if (isNightModeEnabled()) "#E5E7EB" else "#374151"))
+        webViewPullRefreshHintArc.alpha = 0.42f
+        webViewPullRefreshHint.animate()
+            .translationY(-18f * density)
+            .alpha(0f)
+            .setDuration(220)
+            .start()
+        webViewPullRefreshHintArc.animate()
+            .alpha(0f)
+            .setDuration(220)
+            .withEndAction {
+                webViewPullRefreshHint.isVisible = false
+                webViewPullRefreshHintArc.isVisible = false
+            }
+            .start()
+        webView.reload()
+    }
+
+    private fun isNightModeEnabled(): Boolean {
+        return (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+    }
+
+    private fun detectTouchChainCanScrollUp(rawX: Float, rawY: Float) {
+                val scriptTemplate = """
+                        (function(rawX, rawY) {
+                            try {
+                                const dpr = window.devicePixelRatio || 1;
+                                const x = rawX / dpr;
+                                const y = rawY / dpr;
+                                let node = document.elementFromPoint(x, y);
+                                while (node && node !== document.body && node !== document.documentElement) {
+                                    const style = window.getComputedStyle(node);
+                                    const overflowY = style ? style.overflowY : '';
+                                    const canScroll = node.scrollHeight > node.clientHeight + 1;
+                                    const scrollable = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
+                                    if (canScroll && scrollable && node.scrollTop > 0) return true;
+
+                                    const tag = (node.tagName || '').toUpperCase();
+                                    if ((tag === 'TEXTAREA' || node.isContentEditable) && node.scrollTop > 0) return true;
+
+                                    node = node.parentElement;
+                                }
+                                return false;
+                            } catch (e) {
+                                return false;
+                            }
+                        })(%1$.3f, %2$.3f);
+                """.trimIndent()
+
+        val script = String.format(Locale.US, scriptTemplate, rawX, rawY)
+        webView.evaluateJavascript(script) { result ->
+            isTouchChainCanScrollUp = result.equals("true", ignoreCase = true)
+        }
     }
 
     private fun startBootstrap(forceRestart: Boolean) {
