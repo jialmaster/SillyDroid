@@ -35,6 +35,8 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import com.google.android.material.R as MaterialR
 
+internal enum class ExtensionKind { GLOBAL, USER }
+
 internal interface ExtensionInstallProgressHost {
     fun show(message: String, percent: Int?, indeterminate: Boolean)
 
@@ -141,7 +143,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
         val author: String?,
         val homePage: String?,
         val manifestHealthy: Boolean,
-        val manifestMessage: String?
+        val manifestMessage: String?,
+        val kind: ExtensionKind = ExtensionKind.GLOBAL
     )
 
     private data class BundledExtension(
@@ -291,14 +294,28 @@ internal class BootstrapSettingsExtensionsCoordinator(
         )
     }
 
+    private fun extensionRoot(kind: ExtensionKind): File = when (kind) {
+        ExtensionKind.GLOBAL -> File(paths.serverDataDir, "extensions")
+        ExtensionKind.USER -> File(File(paths.serverDataDir, "data"), "default-user/extensions")
+    }
+
     private fun loadInstalledExtensionsFromDisk(): List<ManagedExtension> {
         paths.ensureWorkingDirectories()
-        val extensionsRoot = File(paths.serverDataDir, "extensions")
-        if (!extensionsRoot.exists()) {
+        val globalExtensions = readExtensionsFromDirectory(File(paths.serverDataDir, "extensions"), ExtensionKind.GLOBAL)
+        val userExtensions = readExtensionsFromDirectory(
+            File(File(paths.serverDataDir, "data"), "default-user/extensions"),
+            ExtensionKind.USER
+        )
+        return (globalExtensions + userExtensions)
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.displayName })
+    }
+
+    private fun readExtensionsFromDirectory(root: File, kind: ExtensionKind): List<ManagedExtension> {
+        if (!root.exists()) {
             return emptyList()
         }
 
-        return extensionsRoot.listFiles()
+        return root.listFiles()
             .orEmpty()
             .filter { it.isDirectory }
             .map { directory ->
@@ -311,7 +328,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
                         author = null,
                         homePage = null,
                         manifestHealthy = false,
-                        manifestMessage = activity.getString(R.string.bootstrap_settings_extensions_manifest_missing)
+                        manifestMessage = activity.getString(R.string.bootstrap_settings_extensions_manifest_missing),
+                        kind = kind
                     )
                 }
 
@@ -324,7 +342,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
                         author = manifest.optString("author").ifBlank { null },
                         homePage = manifest.optString("homePage").ifBlank { null },
                         manifestHealthy = true,
-                        manifestMessage = null
+                        manifestMessage = null,
+                        kind = kind
                     )
                 }.getOrElse {
                     ManagedExtension(
@@ -334,11 +353,11 @@ internal class BootstrapSettingsExtensionsCoordinator(
                         author = null,
                         homePage = null,
                         manifestHealthy = false,
-                        manifestMessage = activity.getString(R.string.bootstrap_settings_extensions_manifest_missing)
+                        manifestMessage = activity.getString(R.string.bootstrap_settings_extensions_manifest_missing),
+                        kind = kind
                     )
                 }
             }
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.displayName })
     }
 
     private fun renderExtensions() {
@@ -347,6 +366,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
         renderProgress()
         listContainer.removeAllViews()
         val missingBundledExtensions = bundledExtensions.filterNot { it.targetExists }
+        val globalExtensions = extensions.filter { it.kind == ExtensionKind.GLOBAL }
+        val userExtensions = extensions.filter { it.kind == ExtensionKind.USER }
         emptyView.isVisible = extensions.isEmpty() && missingBundledExtensions.isEmpty()
         if (extensions.isEmpty() && missingBundledExtensions.isEmpty()) {
             return
@@ -371,7 +392,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             }
         }
 
-        if (extensions.isNotEmpty()) {
+        if (globalExtensions.isNotEmpty()) {
             listContainer.addView(createSectionHeader(
                 title = activity.getString(R.string.bootstrap_settings_extensions_installed_title),
                 summary = activity.getString(R.string.bootstrap_settings_extensions_installed_summary)
@@ -383,7 +404,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             })
         }
 
-        extensions.forEachIndexed { index, extension ->
+        globalExtensions.forEachIndexed { index, extension ->
             listContainer.addView(createExtensionCard(extension), LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -391,6 +412,28 @@ internal class BootstrapSettingsExtensionsCoordinator(
                 if (index > 0 || itemIndex > 0) {
                     topMargin = dp(8)
                 }
+            })
+        }
+
+        if (userExtensions.isNotEmpty()) {
+            itemIndex += globalExtensions.size
+            listContainer.addView(createSectionHeader(
+                title = activity.getString(R.string.bootstrap_settings_extensions_user_title),
+                summary = activity.getString(R.string.bootstrap_settings_extensions_user_summary)
+            ), LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(12)
+            })
+        }
+
+        userExtensions.forEachIndexed { index, extension ->
+            listContainer.addView(createExtensionCard(extension), LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(8)
             })
         }
     }
@@ -507,7 +550,11 @@ internal class BootstrapSettingsExtensionsCoordinator(
         })
 
         infoColumn.addView(TextView(activity).apply {
-            text = activity.getString(R.string.bootstrap_settings_extensions_folder, extension.folderName)
+            val kindLabel = when (extension.kind) {
+                ExtensionKind.GLOBAL -> activity.getString(R.string.bootstrap_settings_extensions_kind_global)
+                ExtensionKind.USER -> activity.getString(R.string.bootstrap_settings_extensions_kind_user)
+            }
+            text = "$kindLabel  ·  ${activity.getString(R.string.bootstrap_settings_extensions_folder, extension.folderName)}"
             TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsBody)
             setTextColor(resolveColor(MaterialR.attr.colorOnSurfaceVariant))
             setPadding(0, dimen(R.dimen.sillydroid_space_sm), 0, 0)
@@ -677,7 +724,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             setBusyState(true)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val targetDir = File(File(paths.serverDataDir, "extensions"), extension.folderName)
+                    val targetDir = File(extensionRoot(extension.kind), extension.folderName)
                     if (!targetDir.deleteRecursively() && targetDir.exists()) {
                         throw BootstrapException(activity.getString(R.string.bootstrap_settings_extensions_delete_failed))
                     }
@@ -712,7 +759,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
                     val removed = mutableListOf<String>()
                     val failed = mutableListOf<String>()
                     selectedExtensions.forEach { extension ->
-                        val targetDir = File(File(paths.serverDataDir, "extensions"), extension.folderName)
+                        val targetDir = File(extensionRoot(extension.kind), extension.folderName)
                         if (!targetDir.exists() || targetDir.deleteRecursively()) {
                             removed += extension.displayName
                         } else {
@@ -786,6 +833,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
                     runExtensionReinstall(
                         extension.folderName,
                         normalizedRepository,
+                        kind = extension.kind,
                         onProgress = { runtimeProgress ->
                             publishRuntimeProgress(
                                 activity.getString(R.string.bootstrap_settings_extensions_progress_action_reinstall),
@@ -822,7 +870,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             setBusyState(true)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val extensionsRoot = File(paths.serverDataDir, "extensions")
+                    val extensionsRoot = extensionRoot(extension.kind)
                     val targetDirectory = File(extensionsRoot, bundledSource.folderName)
                     extensionsRoot.mkdirs()
                     if (extension.folderName != bundledSource.folderName) {
@@ -1373,7 +1421,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             setBusyState(true)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val extensionsRoot = File(paths.serverDataDir, "extensions")
+                    val extensionsRoot = extensionRoot(ExtensionKind.GLOBAL)
                     val targetDirectory = File(extensionsRoot, extension.folderName)
                     extensionsRoot.mkdirs()
                     if (targetDirectory.exists()) {
@@ -1567,9 +1615,13 @@ internal class BootstrapSettingsExtensionsCoordinator(
             .setTitle(R.string.bootstrap_settings_extensions_install_confirm_title)
             .setMessage(message)
             .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
-            .setPositiveButton(R.string.bootstrap_settings_extensions_install) { _, _ ->
+            .setNeutralButton(R.string.bootstrap_settings_extensions_kind_user) { _, _ ->
                 confirmed = true
-                installPreviewedExtension(preview)
+                installPreviewedExtension(preview, ExtensionKind.USER)
+            }
+            .setPositiveButton(R.string.bootstrap_settings_extensions_kind_global) { _, _ ->
+                confirmed = true
+                installPreviewedExtension(preview, ExtensionKind.GLOBAL)
             }
             .setOnDismissListener {
                 if (!confirmed) {
@@ -1636,7 +1688,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             .show()
     }
 
-    private fun installPreviewedExtension(preview: ExtensionInstallPreview) {
+    private fun installPreviewedExtension(preview: ExtensionInstallPreview, kind: ExtensionKind = ExtensionKind.GLOBAL) {
         activity.lifecycleScope.launch {
             setProgressState(
                 actionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_install),
@@ -1647,7 +1699,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
             setBusyState(true)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    finalizeInstallPreview(preview)
+                    finalizeInstallPreview(preview, kind)
                 }
             }
             setBusyState(false)
@@ -1666,7 +1718,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
         }
     }
 
-    private fun installPreviewedExtensionsBatch(batchPreview: BatchExtensionPreview) {
+    private fun installPreviewedExtensionsBatch(batchPreview: BatchExtensionPreview, kind: ExtensionKind = ExtensionKind.GLOBAL) {
         activity.lifecycleScope.launch {
             val installActionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_install)
             setProgressState(
@@ -1694,7 +1746,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
                             indeterminate = false
                         )
                         runCatching {
-                            finalizeInstallPreview(preview)
+                            finalizeInstallPreview(preview, kind)
                         }.onSuccess {
                             successes += preview
                             publishBatchProgress(
@@ -1756,6 +1808,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
     private fun runExtensionReinstall(
         folderName: String,
         repository: NormalizedExtensionRepository,
+        kind: ExtensionKind = ExtensionKind.GLOBAL,
         onProgress: ((ExtensionRuntimeProgress) -> Unit)? = null
     ) {
         validateRemoteManifestBeforeClone(repository)
@@ -1764,9 +1817,13 @@ internal class BootstrapSettingsExtensionsCoordinator(
         maintenanceRoot.mkdirs()
         val tempHostDir = File(maintenanceRoot, "$requestName-repo")
         val tempGuestDir = "/tavern/data/.sillydroid-maintenance/${tempHostDir.name}"
+        val guestTargetDir = when (kind) {
+            ExtensionKind.GLOBAL -> "/tavern/data/extensions/$folderName"
+            ExtensionKind.USER -> "/tavern/data/data/default-user/extensions/$folderName"
+        }
         val environment = mutableMapOf(
             "APP_DATA_ROOT" to paths.serverDataDir.absolutePath,
-            "SILLYDROID_EXTENSION_TARGET_DIR" to "/tavern/data/extensions/$folderName",
+            "SILLYDROID_EXTENSION_TARGET_DIR" to guestTargetDir,
             "SILLYDROID_EXTENSION_REPO_URL" to repository.cloneUrl,
             "SILLYDROID_EXTENSION_TEMP_DIR" to tempGuestDir
         )
@@ -1906,7 +1963,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
         val folderName = previewJson.optString("folderName").ifBlank {
             throw BootstrapException(activity.getString(R.string.bootstrap_settings_extensions_install_preview_failed, logPath))
         }
-        val targetExists = File(File(paths.serverDataDir, "extensions"), folderName).exists()
+        val targetExists = File(File(paths.serverDataDir, "extensions"), folderName).exists() ||
+            File(File(File(paths.serverDataDir, "data"), "default-user/extensions"), folderName).exists()
         return ExtensionInstallPreview(
             repositoryUrl = repositoryUrl,
             folderName = folderName,
@@ -1921,8 +1979,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
         )
     }
 
-    private fun finalizeInstallPreview(preview: ExtensionInstallPreview) {
-        val extensionsRoot = File(paths.serverDataDir, "extensions")
+    private fun finalizeInstallPreview(preview: ExtensionInstallPreview, kind: ExtensionKind = ExtensionKind.GLOBAL) {
+        val extensionsRoot = extensionRoot(kind)
         val targetDir = File(extensionsRoot, preview.folderName)
         val backupDir = File(extensionsRoot, "${preview.folderName}.sillydroid-backup-${System.currentTimeMillis()}")
         var backupCreated = false
@@ -2085,15 +2143,19 @@ internal class BootstrapSettingsExtensionsCoordinator(
     }
 
     private fun findBrokenExtensionDirectories(): List<File> {
-        val extensionsRoot = File(paths.serverDataDir, "extensions")
-        if (!extensionsRoot.isDirectory) {
-            return emptyList()
+        val brokenDirs = mutableListOf<File>()
+        for (kind in ExtensionKind.values()) {
+            val extensionsRoot = extensionRoot(kind)
+            if (!extensionsRoot.isDirectory) {
+                continue
+            }
+            brokenDirs.addAll(
+                extensionsRoot.listFiles()
+                    .orEmpty()
+                    .filter { directory -> directory.isDirectory && !File(directory, "manifest.json").isFile }
+            )
         }
-
-        return extensionsRoot.listFiles()
-            .orEmpty()
-            .filter { directory -> directory.isDirectory && !File(directory, "manifest.json").isFile }
-            .sortedBy { directory -> directory.name.lowercase() }
+        return brokenDirs.sortedBy { directory -> directory.name.lowercase() }
     }
 
     private fun parseRepositoryUrls(rawInput: String): List<String> {
