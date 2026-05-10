@@ -71,6 +71,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var extensionsListContainer: LinearLayout
     private lateinit var extensionsEmptyView: TextView
     private lateinit var extensionsInstallButton: ImageButton
+    private lateinit var extensionsBatchDeleteButton: ImageButton
     private lateinit var extensionsReloadButton: ImageButton
     private lateinit var extensionsProgressIndicator: LinearProgressIndicator
     private lateinit var extensionsProgressLabel: TextView
@@ -251,6 +252,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         extensionsListContainer = findViewById(R.id.bootstrapSettingsExtensionsListContainer)
         extensionsEmptyView = findViewById(R.id.bootstrapSettingsExtensionsEmpty)
         extensionsInstallButton = findViewById(R.id.bootstrapSettingsExtensionsInstallButton)
+        extensionsBatchDeleteButton = findViewById(R.id.bootstrapSettingsExtensionsBatchDeleteButton)
         extensionsReloadButton = findViewById(R.id.bootstrapSettingsExtensionsReloadButton)
         extensionsProgressIndicator = findViewById(R.id.bootstrapSettingsExtensionsProgress)
         extensionsProgressLabel = findViewById(R.id.bootstrapSettingsExtensionsProgressLabel)
@@ -353,7 +355,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             showMessage = screenController::showMessage,
             updateDirtyState = settingsCoordinator::refreshDirtyState,
             onBootstrapRestartRequired = {
-                updateResultFlags(shouldStartBootstrap = true)
+                processManager.restart()
                 finish()
             },
             onTavernUiReloadRequired = {
@@ -365,6 +367,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             listContainer = extensionsListContainer,
             emptyView = extensionsEmptyView,
             installButton = extensionsInstallButton,
+            batchDeleteButton = extensionsBatchDeleteButton,
             reloadButton = extensionsReloadButton,
             progressIndicator = extensionsProgressIndicator,
             progressLabel = extensionsProgressLabel,

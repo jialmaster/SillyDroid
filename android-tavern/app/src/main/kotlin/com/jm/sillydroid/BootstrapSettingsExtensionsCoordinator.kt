@@ -70,6 +70,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
     private val listContainer: LinearLayout,
     private val emptyView: TextView,
     private val installButton: ImageButton,
+    private val batchDeleteButton: ImageButton,
     private val reloadButton: ImageButton,
     private val progressHost: ExtensionInstallProgressHost,
     private val setBusy: (Boolean) -> Unit,
@@ -93,6 +94,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
                 listContainer = LinearLayout(activity),
                 emptyView = TextView(activity),
                 installButton = ImageButton(activity),
+                batchDeleteButton = ImageButton(activity),
                 reloadButton = ImageButton(activity),
                 progressHost = progressHost,
                 setBusy = setBusy,
@@ -109,6 +111,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
         listContainer: LinearLayout,
         emptyView: TextView,
         installButton: ImageButton,
+        batchDeleteButton: ImageButton,
         reloadButton: ImageButton,
         progressIndicator: LinearProgressIndicator,
         progressLabel: TextView,
@@ -122,6 +125,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
         listContainer = listContainer,
         emptyView = emptyView,
         installButton = installButton,
+        batchDeleteButton = batchDeleteButton,
         reloadButton = reloadButton,
         progressHost = ViewExtensionInstallProgressHost(activity, progressIndicator, progressLabel),
         setBusy = setBusy,
@@ -231,6 +235,9 @@ internal class BootstrapSettingsExtensionsCoordinator(
     fun initialize() {
         installButton.setOnClickListener {
             promptInstallExtension()
+        }
+        batchDeleteButton.setOnClickListener {
+            promptDeleteExtensionsBatch()
         }
         reloadButton.setOnClickListener {
             reloadExtensions()
@@ -362,6 +369,7 @@ internal class BootstrapSettingsExtensionsCoordinator(
 
     private fun renderExtensions() {
         installButton.isEnabled = !busy
+        batchDeleteButton.isEnabled = !busy
         reloadButton.isEnabled = !busy
         renderProgress()
         listContainer.removeAllViews()
@@ -933,11 +941,6 @@ internal class BootstrapSettingsExtensionsCoordinator(
         }
         actions += activity.getString(R.string.bootstrap_settings_extensions_action_install_repository) to {
             promptInstallRepositoryExtension()
-        }
-        if (extensions.isNotEmpty()) {
-            actions += activity.getString(R.string.bootstrap_settings_extensions_action_delete_batch) to {
-                promptDeleteExtensionsBatch()
-            }
         }
         if (bundledExtensions.isNotEmpty()) {
             actions += activity.getString(R.string.bootstrap_settings_extensions_action_install_bundled) to {

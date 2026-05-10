@@ -150,7 +150,8 @@ internal class TavernDataArchiveManager(context: Context) {
                             "serverDataDir/config",
                             "serverDataDir/data",
                             "serverDataDir/plugins",
-                            "serverDataDir/extensions（第三方扩展）"
+                            "serverDataDir/extensions（第三方扩展）",
+                            "serverDir/public/scripts/extensions（仅内置扩展覆盖文件，排除 third-party）"
                         )
 
                         ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> listOf(
@@ -158,7 +159,7 @@ internal class TavernDataArchiveManager(context: Context) {
                             "serverDataDir/data",
                             "serverDataDir/plugins",
                             "serverDataDir/extensions（第三方扩展）",
-                            "serverDir/public/scripts/extensions（内置扩展，排除 third-party）"
+                            "serverDir/public/scripts/extensions（仅内置扩展覆盖文件，排除 third-party）"
                         )
 
                         ArchiveLayout.UPSTREAM_USER_ROOT -> emptyList()
@@ -460,17 +461,8 @@ internal class TavernDataArchiveManager(context: Context) {
     private fun replaceManagedData(paths: HostPaths, importPlan: ArchiveImportPlan) {
         val targetRoot = paths.serverDataDir
         val backupRoot = File(paths.dataRoot, "server-import-backup-${System.currentTimeMillis()}")
-        val builtinExtensionsTargetRoot = File(paths.serverDir, "public/scripts/extensions")
-        val builtinExtensionsBackupRoot = File(paths.dataRoot, "server-import-builtin-extensions-backup-${System.currentTimeMillis()}")
         if (targetRoot.exists()) {
             targetRoot.copyRecursively(backupRoot, overwrite = true)
-        }
-        if (builtinExtensionsTargetRoot.exists()) {
-            // serverDir/public/scripts/extensions/ 下可能存在 third-party 符号链接，
-            // 指向 serverDataDir/extensions/。copyRecursively 会跟随符号链接，
-            // 必须确保目标目录存在否则会报 Source file does not exist。
-            File(paths.serverDataDir, "extensions").mkdirs()
-            builtinExtensionsTargetRoot.copyRecursively(builtinExtensionsBackupRoot, overwrite = true)
         }
 
         try {
@@ -493,14 +485,9 @@ internal class TavernDataArchiveManager(context: Context) {
             if (backupRoot.exists()) {
                 backupRoot.copyRecursively(targetRoot, overwrite = true)
             }
-            if (builtinExtensionsBackupRoot.exists()) {
-                builtinExtensionsTargetRoot.deleteRecursively()
-                builtinExtensionsBackupRoot.copyRecursively(builtinExtensionsTargetRoot, overwrite = true)
-            }
             throw exception
         } finally {
             backupRoot.deleteRecursively()
-            builtinExtensionsBackupRoot.deleteRecursively()
         }
     }
 
@@ -524,21 +511,22 @@ internal class TavernDataArchiveManager(context: Context) {
         }
 
         val thirdPartySource = File(importedDirectory, "third-party")
-        val builtinSource = File(importedDirectory, "builtin")
-        val hasStructuredLayout = thirdPartySource.isDirectory || builtinSource.isDirectory
+        val hasStructuredLayout = thirdPartySource.isDirectory || File(importedDirectory, "builtin").isDirectory
 
         if (!hasStructuredLayout) {
+            // 旧式平铺结构：整个 importedDirectory 就是 third-party 扩展
             importedDirectory.copyRecursively(thirdPartyTargetRoot, overwrite = true)
             return
         }
 
-        clearBuiltinEntriesExcludingThirdParty(builtinTargetRoot)
-
         if (thirdPartySource.isDirectory) {
             copyDirectoryChildren(thirdPartySource, thirdPartyTargetRoot)
         }
+
+        // 仅覆盖内置扩展目录中的文件，不触碰 third-party（它是 symlink）。
+        val builtinSource = File(importedDirectory, "builtin")
         if (builtinSource.isDirectory) {
-            copyDirectoryChildren(builtinSource, builtinTargetRoot) { it == "third-party" }
+            restoreBuiltinExtensionsOverlay(builtinSource, builtinTargetRoot)
         }
     }
 
@@ -552,14 +540,31 @@ internal class TavernDataArchiveManager(context: Context) {
             copyDirectoryChildren(thirdPartySource, thirdPartyTargetRoot)
         }
 
-        val builtinEntries = importedPublicExtensionsRoot
-            .listFiles()
-            .orEmpty()
-            .filter { it.name != "third-party" }
+        // public/scripts/extensions 下除 third-party 外的目录，按覆盖方式恢复到程序层。
+        restoreBuiltinExtensionsOverlay(importedPublicExtensionsRoot, builtinTargetRoot)
+    }
 
-        if (builtinEntries.isNotEmpty()) {
-            clearBuiltinEntriesExcludingThirdParty(builtinTargetRoot)
-            copyDirectoryChildren(importedPublicExtensionsRoot, builtinTargetRoot) { it == "third-party" }
+    private fun restoreBuiltinExtensionsOverlay(sourceRoot: File, builtinTargetRoot: File) {
+        if (!sourceRoot.isDirectory || !builtinTargetRoot.isDirectory) {
+            return
+        }
+
+        for (child in sourceRoot.listFiles().orEmpty()) {
+            if (child.name == "third-party") {
+                continue
+            }
+
+            val targetChild = File(builtinTargetRoot, child.name)
+            if (targetChild.exists()) {
+                targetChild.deleteRecursively()
+            }
+
+            if (child.isDirectory) {
+                child.copyRecursively(targetChild, overwrite = true)
+            } else {
+                targetChild.parentFile?.mkdirs()
+                child.copyTo(targetChild, overwrite = true)
+            }
         }
     }
 
@@ -581,19 +586,6 @@ internal class TavernDataArchiveManager(context: Context) {
                 targetChild.parentFile?.mkdirs()
                 child.copyTo(targetChild, overwrite = true)
             }
-        }
-    }
-
-    private fun clearBuiltinEntriesExcludingThirdParty(builtinRoot: File) {
-        if (!builtinRoot.isDirectory) {
-            return
-        }
-
-        for (child in builtinRoot.listFiles().orEmpty()) {
-            if (child.name == "third-party") {
-                continue
-            }
-            child.deleteRecursively()
         }
     }
 

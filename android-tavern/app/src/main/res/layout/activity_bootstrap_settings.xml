@@ -417,6 +417,20 @@
                                 android:tint="?attr/colorPrimary" />
 
                             <ImageButton
+                                android:id="@+id/bootstrapSettingsExtensionsBatchDeleteButton"
+                                android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
+                                android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
+                                android:layout_marginEnd="4dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="@string/bootstrap_settings_extensions_action_delete_batch"
+                                android:minWidth="0dp"
+                                android:minHeight="0dp"
+                                android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
+                                android:scaleType="centerInside"
+                                android:src="@drawable/ic_delete"
+                                android:tint="?attr/colorError" />
+
+                            <ImageButton
                                 android:id="@+id/bootstrapSettingsExtensionsReloadButton"
                                 android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
                                 android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
