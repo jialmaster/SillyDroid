@@ -836,6 +836,16 @@ jobs:
           fi
 
           {
+            echo '## 本次更新内容'
+            echo
+
+            if [ '${{ github.event_name }}' = 'push' ] && [ '${{ github.event.before }}' != '0000000000000000000000000000000000000000' ]; then
+              git log --pretty='- %h %s' '${{ github.event.before }}'..'${{ github.sha }}'
+            else
+              git log --pretty='- %h %s' -n 20 HEAD
+            fi
+
+            echo
             echo '## SillyDroid Android APK'
             echo
             echo '- Host version: ${{ needs.plan.outputs.host_version }}'
@@ -849,15 +859,6 @@ jobs:
             echo '- APK asset: ${{ needs.build.outputs.release_asset_name }}'
             echo '- APK SHA256: ${{ needs.build.outputs.apk_sha256 }}'
             echo '- APK size bytes: ${{ needs.build.outputs.apk_size_bytes }}'
-            echo
-            echo '## 本次更新内容'
-            echo
-
-            if [ '${{ github.event_name }}' = 'push' ] && [ '${{ github.event.before }}' != '0000000000000000000000000000000000000000' ]; then
-              git log --pretty='- %h %s' '${{ github.event.before }}'..'${{ github.sha }}'
-            else
-              git log --pretty='- %h %s' -n 20 HEAD
-            fi
           } > "$release_notes_file"
 
           if ! gh release view '${{ needs.plan.outputs.release_tag }}' --repo '${{ github.repository }}' > /dev/null 2>&1; then
