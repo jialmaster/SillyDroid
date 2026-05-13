@@ -27,7 +27,7 @@ readonly SILLYDROID_EXTRACT_PROGRESS_SCRIPT_PATH="$SILLYDROID_ANDROID_BUILD_SCRI
 declare -ag SILLYDROID_DOWNLOAD_QUEUE=()
 
 sillydroid_log() {
-    printf '[sillydroid-android][%s] %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$*" >&2
+    printf '%s\n' "$*" >&2
 }
 
 sillydroid_progress_stage() {
@@ -46,7 +46,7 @@ sillydroid_progress_stage() {
 }
 
 sillydroid_warn() {
-    printf '[sillydroid-android][%s][warn] %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$*" >&2
+    printf '[warn] %s\n' "$*" >&2
 }
 
 sillydroid_fail() {

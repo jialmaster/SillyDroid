@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
+import java.io.IOException
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -53,8 +54,8 @@ internal class TavernDataArchiveManager(context: Context) {
 
     companion object {
         private const val defaultUserHandle = "default-user"
-        private const val layoutLabelManaged = "Docker/宿主四目录（config,data,plugins,extensions）"
-        private const val layoutLabelPublic = "Linux/Termux public 结构（config,data,plugins,public/scripts/extensions）"
+        private const val layoutLabelManaged = "Docker 四目录（根目录为 config,data,plugins,extensions；Android 宿主导出同构）"
+        private const val layoutLabelPublic = "Linux/Termux public 结构（根目录为 config,data,plugins,public；第三方扩展位于 public/scripts/extensions/third-party）"
 
         private val upstreamUserBackupDirectories: Set<String> = setOf(
             "assets",
@@ -246,24 +247,34 @@ internal class TavernDataArchiveManager(context: Context) {
             }
     }
 
+    private fun countImportedFiles(importPlan: ArchiveImportPlan): Int {
+        return when (importPlan.layout) {
+            ArchiveLayout.MANAGED_ROOT,
+            ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> TavernConfigRepository.managedTopLevelDirectories.sumOf { directoryName ->
+                importPlan.managedDirectory(directoryName)
+                    .takeIf { it.exists() }
+                    ?.walkTopDown()
+                    ?.count { it.isFile }
+                    ?: 0
+            }
+
+            ArchiveLayout.UPSTREAM_USER_ROOT -> importPlan.sourceRoot.walkTopDown().count { it.isFile }
+        }
+    }
+
     fun importDataArchive(sourceUri: Uri): TavernDataImportResult {
         val paths = HostPaths.from(appContext)
         paths.ensureWorkingDirectories()
         return withExtractedArchive(sourceUri, "import") { extractRoot ->
             val importPlan = resolveImportPlan(extractRoot)
+            val importedFileCount = countImportedFiles(importPlan)
             when (importPlan.layout) {
                 ArchiveLayout.MANAGED_ROOT,
                 ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> {
                     replaceManagedData(paths, importPlan)
                     TavernConfigRepository(appContext).syncStoredPortFromFile()
                     TavernDataImportResult(
-                        importedFileCount = TavernConfigRepository.managedTopLevelDirectories.sumOf { directoryName ->
-                            importPlan.managedDirectory(directoryName)
-                                .takeIf { it.exists() }
-                                ?.walkTopDown()
-                                ?.count { it.isFile }
-                                ?: 0
-                        },
+                        importedFileCount = importedFileCount,
                         archiveKind = TavernDataArchiveKind.HOST_FULL_SNAPSHOT
                     )
                 }
@@ -271,7 +282,7 @@ internal class TavernDataArchiveManager(context: Context) {
                 ArchiveLayout.UPSTREAM_USER_ROOT -> {
                     replaceUpstreamUserBackup(paths, importPlan.sourceRoot)
                     TavernDataImportResult(
-                        importedFileCount = importPlan.sourceRoot.walkTopDown().count { it.isFile },
+                        importedFileCount = importedFileCount,
                         archiveKind = TavernDataArchiveKind.USER_BACKUP
                     )
                 }
@@ -461,33 +472,43 @@ internal class TavernDataArchiveManager(context: Context) {
     private fun replaceManagedData(paths: HostPaths, importPlan: ArchiveImportPlan) {
         val targetRoot = paths.serverDataDir
         val backupRoot = File(paths.dataRoot, "server-import-backup-${System.currentTimeMillis()}")
-        if (targetRoot.exists()) {
-            targetRoot.copyRecursively(backupRoot, overwrite = true)
-        }
+        val builtinTargetRoot = File(paths.serverDir, "public/scripts/extensions")
+        val builtinBackupRoot = File(paths.dataRoot, "server-import-builtin-extensions-backup-${System.currentTimeMillis()}")
+
+        targetRoot.mkdirs()
+        backupRoot.mkdirs()
+        backupBuiltinExtensionsOverlay(builtinTargetRoot, builtinBackupRoot)
 
         try {
-            targetRoot.mkdirs()
             for (directoryName in TavernConfigRepository.managedTopLevelDirectories) {
-                File(targetRoot, directoryName).deleteRecursively()
+                val targetDirectory = File(targetRoot, directoryName)
+                if (targetDirectory.exists()) {
+                    movePath(targetDirectory, File(backupRoot, directoryName))
+                }
                 val importedDirectory = importPlan.managedDirectory(directoryName)
                 if (directoryName == "extensions") {
                     restoreExtensionsWithLayout(paths, importedDirectory, importPlan.layout)
                 } else if (importedDirectory.exists()) {
-                    importedDirectory.copyRecursively(File(targetRoot, directoryName), overwrite = true)
+                    movePath(importedDirectory, targetDirectory)
                 } else {
-                    File(targetRoot, directoryName).mkdirs()
+                    targetDirectory.mkdirs()
                 }
             }
         } catch (exception: Exception) {
             for (directoryName in TavernConfigRepository.managedTopLevelDirectories) {
                 File(targetRoot, directoryName).deleteRecursively()
             }
-            if (backupRoot.exists()) {
-                backupRoot.copyRecursively(targetRoot, overwrite = true)
+            for (directoryName in TavernConfigRepository.managedTopLevelDirectories) {
+                val backupDirectory = File(backupRoot, directoryName)
+                if (backupDirectory.exists()) {
+                    movePath(backupDirectory, File(targetRoot, directoryName))
+                }
             }
+            restoreBuiltinExtensionsOverlayFromBackup(builtinBackupRoot, builtinTargetRoot)
             throw exception
         } finally {
             backupRoot.deleteRecursively()
+            builtinBackupRoot.deleteRecursively()
         }
     }
 
@@ -589,30 +610,77 @@ internal class TavernDataArchiveManager(context: Context) {
         }
     }
 
+    private fun backupBuiltinExtensionsOverlay(sourceRoot: File, backupRoot: File) {
+        backupRoot.deleteRecursively()
+        backupRoot.mkdirs()
+        copyDirectoryChildren(sourceRoot, backupRoot) { it == "third-party" }
+    }
+
+    private fun restoreBuiltinExtensionsOverlayFromBackup(backupRoot: File, targetRoot: File) {
+        if (!backupRoot.exists()) {
+            return
+        }
+
+        targetRoot.mkdirs()
+        for (child in targetRoot.listFiles().orEmpty()) {
+            if (child.name == "third-party") {
+                continue
+            }
+            child.deleteRecursively()
+        }
+        copyDirectoryChildren(backupRoot, targetRoot)
+    }
+
+    private fun movePath(source: File, target: File) {
+        if (!source.exists()) {
+            return
+        }
+
+        target.parentFile?.mkdirs()
+        if (target.exists()) {
+            target.deleteRecursively()
+        }
+        if (source.renameTo(target)) {
+            return
+        }
+
+        val copied = if (source.isDirectory) {
+            source.copyRecursively(target, overwrite = true)
+        } else {
+            source.copyTo(target, overwrite = true)
+            true
+        }
+        if (!copied) {
+            throw IOException("无法移动 ${source.absolutePath} 到 ${target.absolutePath}")
+        }
+
+        val deleted = if (source.isDirectory) {
+            source.deleteRecursively()
+        } else {
+            source.delete()
+        }
+        if (!deleted && source.exists()) {
+            throw IOException("无法删除已迁移的源路径：${source.absolutePath}")
+        }
+    }
+
     private fun replaceUpstreamUserBackup(paths: HostPaths, extractRoot: File) {
         val targetRoot = File(File(paths.serverDataDir, "data"), defaultUserHandle)
         val backupRoot = File(paths.dataRoot, "user-import-backup-${System.currentTimeMillis()}")
-        val hadExistingTarget = targetRoot.exists()
-
-        if (hadExistingTarget) {
-            targetRoot.copyRecursively(backupRoot, overwrite = true)
-        }
 
         try {
-            targetRoot.deleteRecursively()
+            if (targetRoot.exists()) {
+                movePath(targetRoot, backupRoot)
+            }
             targetRoot.mkdirs()
             for (entry in extractRoot.listFiles().orEmpty()) {
                 val targetEntry = File(targetRoot, entry.name)
-                if (entry.isDirectory) {
-                    entry.copyRecursively(targetEntry, overwrite = true)
-                } else {
-                    entry.copyTo(targetEntry, overwrite = true)
-                }
+                movePath(entry, targetEntry)
             }
         } catch (exception: Exception) {
             targetRoot.deleteRecursively()
             if (backupRoot.exists()) {
-                backupRoot.copyRecursively(targetRoot, overwrite = true)
+                movePath(backupRoot, targetRoot)
             }
             throw exception
         } finally {

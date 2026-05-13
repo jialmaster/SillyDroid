@@ -65,7 +65,51 @@ is_sillytavern_root() {
     local candidate="$1"
     [[ -d "$candidate" ]] || return 1
     [[ -f "$candidate/package.json" ]] || return 1
-    [[ -f "$candidate/start.sh" || -d "$candidate/public" || -d "$candidate/src" ]]
+    [[ -f "$candidate/start.sh" || -d "$candidate/public" || -d "$candidate/src" ]] || return 1
+    [[ -f "$candidate/config.yaml" || -d "$candidate/config" || -d "$candidate/data" || -d "$candidate/plugins" || -d "$candidate/extensions" || -d "$candidate/public/scripts/extensions/third-party" ]]
+}
+
+directory_has_entries() {
+    local directory="$1"
+    [[ -d "$directory" ]] || return 1
+    find "$directory" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .
+}
+
+score_install_root() {
+    local candidate="$1"
+    local score=0
+
+    if directory_has_entries "$candidate/data"; then
+        score=$((score + 8))
+    elif [[ -d "$candidate/data" ]]; then
+        score=$((score + 3))
+    fi
+
+    if [[ -f "$candidate/config.yaml" ]]; then
+        score=$((score + 4))
+    elif directory_has_entries "$candidate/config"; then
+        score=$((score + 4))
+    elif [[ -d "$candidate/config" ]]; then
+        score=$((score + 1))
+    fi
+
+    if directory_has_entries "$candidate/plugins"; then
+        score=$((score + 3))
+    elif [[ -d "$candidate/plugins" ]]; then
+        score=$((score + 1))
+    fi
+
+    if directory_has_entries "$candidate/extensions" || directory_has_entries "$candidate/public/scripts/extensions/third-party"; then
+        score=$((score + 3))
+    elif [[ -d "$candidate/extensions" || -d "$candidate/public/scripts/extensions/third-party" ]]; then
+        score=$((score + 1))
+    fi
+
+    if [[ -f "$candidate/start.sh" ]]; then
+        score=$((score + 1))
+    fi
+
+    printf '%s\n' "$score"
 }
 
 detect_install_root() {
@@ -79,21 +123,34 @@ detect_install_root() {
         return 1
     fi
 
-    local candidate
+    local candidate best_candidate='' best_score=-1
     for candidate in "$HOME/SillyTavern" "$HOME/sillytavern"; do
         if is_sillytavern_root "$candidate"; then
-            canonical_path "$candidate"
-            return 0
+            local score
+            score="$(score_install_root "$candidate")"
+            if (( score > best_score )); then
+                best_candidate="$candidate"
+                best_score="$score"
+            fi
         fi
     done
 
     while IFS= read -r candidate; do
         candidate="$(dirname "$candidate")"
         if is_sillytavern_root "$candidate"; then
-            canonical_path "$candidate"
-            return 0
+            local score
+            score="$(score_install_root "$candidate")"
+            if (( score > best_score )); then
+                best_candidate="$candidate"
+                best_score="$score"
+            fi
         fi
     done < <(find "$HOME" -maxdepth 4 -type f -name package.json 2>/dev/null)
+
+    if [[ -n "$best_candidate" ]]; then
+        canonical_path "$best_candidate"
+        return 0
+    fi
 
     echo "未找到 SillyTavern 安装目录。可用 --install-root 手工指定。" >&2
     return 1

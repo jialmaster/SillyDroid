@@ -44,7 +44,7 @@
     <string name="bootstrap_settings_tab_extensions">扩展</string>
     <string name="bootstrap_settings_tab_logs">日志</string>
     <string name="bootstrap_settings_tab_about">关于</string>
-    <string name="bootstrap_settings_data_summary">导入、导出和恢复默认放在这里。导入会自动识别官方用户备份 ZIP 和宿主全量数据 ZIP。</string>
+    <string name="bootstrap_settings_data_summary">导入、导出和恢复默认放在这里。导入会自动识别官方用户备份 ZIP，以及 Docker 四目录 ZIP、Linux/Termux public 结构 ZIP。</string>
     <string name="bootstrap_settings_host_options_title">宿主界面</string>
     <string name="bootstrap_settings_host_floating_logs_title">调试日志球</string>
     <string name="bootstrap_settings_host_floating_logs_summary">在主界面右下角显示悬浮球，点击后可实时查看最新酒馆日志。该开关立即生效，不需要重新保存配置。</string>
@@ -143,7 +143,7 @@
     <string name="bootstrap_settings_extensions_action_delete_batch">批量删除已安装扩展</string>
     <string name="bootstrap_settings_extensions_action_cleanup_broken">清理错误插件</string>
     <string name="bootstrap_settings_extensions_default_title">安装默认扩展</string>
-    <string name="bootstrap_settings_extensions_default_picker_message">请选择要安装的默认扩展源。安装前会先检测 GitHub 可访问性。</string>
+    <string name="bootstrap_settings_extensions_default_picker_message">请选择要安装的扩展</string>
     <string name="bootstrap_settings_extensions_default_empty">当前没有可安装的默认扩展列表。</string>
     <string name="bootstrap_settings_extensions_default_prompt_title">检测到默认扩展</string>
     <string name="bootstrap_settings_extensions_default_prompt_message">当前宿主已经解压完成，检测到 %1$d 个可选默认扩展源。是否现在自动安装默认扩展？</string>
@@ -225,10 +225,10 @@
     <string name="bootstrap_settings_restore_defaults">恢复默认设置</string>
     <string name="bootstrap_settings_import">导入数据压缩包</string>
     <string name="bootstrap_settings_export">导出数据压缩包</string>
-    <string name="bootstrap_settings_clear_data">清空数据并重新初始化</string>
-    <string name="bootstrap_settings_clear_data_warning">危险操作：会删除当前宿主下的 config、data、plugins、extensions 四个目录，然后按默认状态重新启动酒馆。</string>
+    <string name="bootstrap_settings_clear_data">清空宿主数据并重新初始化</string>
+    <string name="bootstrap_settings_clear_data_warning">危险操作：会删除当前宿主下的 config、data、plugins、extensions 四个目录，并重置程序层 Tavern server 资产与内置扩展覆盖文件。重启后会重新解包默认 server 资产并生成默认配置。</string>
     <string name="bootstrap_settings_clear_data_confirm_title">清空当前宿主数据？</string>
-    <string name="bootstrap_settings_clear_data_confirm_message">此操作会先停止当前本地 Tavern 服务，然后删除 config、data、plugins、extensions 四个目录。清空后会立即重新启动酒馆，并按默认状态重新初始化。该操作不可撤销，是否继续？</string>
+    <string name="bootstrap_settings_clear_data_confirm_message">此操作会先停止当前本地 Tavern 服务，然后删除 config、data、plugins、extensions 四个目录，并清空宿主维护临时目录，重置程序层 Tavern server 资产。随后会重新启动酒馆，并重新解包默认 server 资产、内置扩展覆盖文件与默认 config.yaml。该操作不可撤销，是否继续？</string>
     <string name="bootstrap_settings_clear_data_confirm_action">确认清空</string>
     <string name="bootstrap_settings_clear_data_failed">清空宿主数据失败。</string>
     <string name="bootstrap_settings_save_start">保存并启动</string>
@@ -252,8 +252,8 @@
     <string name="bootstrap_settings_discard_changes_message">当前表单里还有未保存修改。返回后将继续按现有已保存配置启动酒馆。</string>
     <string name="bootstrap_settings_discard_changes_confirm">放弃修改</string>
     <string name="bootstrap_settings_discard_changes_keep">继续编辑</string>
-    <string name="bootstrap_settings_import_success_user">已按官方用户备份导入，共恢复 %1$d 个文件。来源用户 ID：%2$s；当前宿主恢复槽位：%3$s。返回主界面后会自动 reload 当前 Tavern UI。</string>
-    <string name="bootstrap_settings_import_success_host">已按完整数据包导入，共恢复 %1$d 个文件。导入包仅包含 config、data、plugins、extensions 四个目录。现在会自动返回主界面，并按导入后的配置重新启动本地 Tavern 服务。</string>
+    <string name="bootstrap_settings_import_success_user">已按官方用户备份导入，共恢复 %1$d 个文件。来源用户 ID：%2$s；当前宿主恢复槽位：%3$s。现在会自动返回主界面，并重新启动本地 Tavern 服务后加载当前 Tavern UI。</string>
+    <string name="bootstrap_settings_import_success_host">已按完整数据包导入，共恢复 %1$d 个文件。已按识别到的目录结构恢复 config、data、plugins 与扩展目录。现在会自动返回主界面，并按导入后的配置重新启动本地 Tavern 服务。</string>
     <string name="bootstrap_settings_import_port_changed_suffix">并检测到启动端口从 %1$d 变为 %2$d。返回或保存后将按新端口启动。</string>
     <string name="bootstrap_settings_import_failed">导入压缩包失败。</string>
     <string name="bootstrap_settings_import_stop_timeout">停止本地 Tavern 服务超时，请稍后重试导入。</string>
@@ -263,13 +263,26 @@
     <string name="bootstrap_settings_export_failed">导出压缩包失败。</string>
     <string name="bootstrap_settings_validation_failed">配置校验失败。</string>
     <string name="bootstrap_settings_import_formats_title">导入前说明</string>
-    <string name="bootstrap_settings_import_formats_summary">支持自动识别两种 ZIP：1. 官方用户备份 ZIP，文件名通常包含用户 ID，例如 default-user-20260507-084016.zip。2. Android 宿主完整备份 ZIP，根目录包含 config、data、plugins、extensions 四个文件夹。导入前会先弹出覆盖确认。</string>
+    <string name="bootstrap_settings_import_formats_summary">支持自动识别两类来源：
+1. 官方用户备份 ZIP
+文件名通常包含用户 ID，例如 default-user-20260507-084016.zip。
+
+2. 完整数据 ZIP
+Docker/Android 宿主结构：根目录为 config、data、plugins、extensions。
+Linux/Termux 结构：根目录为 config、data、plugins、public；第三方扩展位于 public/scripts/extensions/third-party。
+
+3. 导入前会先弹出覆盖确认。</string>
     <string name="bootstrap_settings_backup_guide_title">如何完整备份</string>
-    <string name="bootstrap_settings_backup_guide_summary">当前“导出数据压缩包”导出的就是 Android 宿主完整备份格式，适合完整迁移和整包备份。它不是官方用户备份格式，根目录会直接打包 config、data、plugins、extensions 四个文件夹。</string>
+    <string name="bootstrap_settings_backup_guide_summary">当前“导出数据压缩包”导出的就是 Android 宿主完整备份：
+1. 根目录直接包含 config、data、plugins、extensions。
+2. 适合完整迁移和整包备份。
+3. 它不是官方用户备份格式。
+
+如果你从 Linux/Termux 手工准备导入包，则根目录应为 config、data、plugins、public；第三方扩展放在 public/scripts/extensions/third-party。</string>
     <string name="bootstrap_settings_import_confirm_title_user">按官方用户备份导入？</string>
-    <string name="bootstrap_settings_import_confirm_message_user">检测到官方用户备份 ZIP。来源用户 ID：%1$s。会把该备份恢复到用户槽位 %2$s，并覆盖该槽位现有数据。导入失败会自动回滚；完成后返回主界面会自动 reload 当前 Tavern UI。是否继续？</string>
+    <string name="bootstrap_settings_import_confirm_message_user">检测到官方用户备份 ZIP。来源用户 ID：%1$s。会把该备份恢复到用户槽位 %2$s，并覆盖该槽位现有数据。导入前会先短暂停止当前本地 Tavern 服务；导入失败会自动回滚；导入成功后会自动返回主界面并重新启动，再加载当前 Tavern UI。是否继续？</string>
     <string name="bootstrap_settings_import_confirm_title_host">按完整备份导入？</string>
-    <string name="bootstrap_settings_import_confirm_message_host">检测到完整备份 ZIP。该数据包仅包含 config、data、plugins、extensions 四个目录。导入前会先停止当前本地 Tavern 服务，再覆盖当前宿主的这四个目录。导入失败会自动回滚；导入成功后会自动返回主界面并重新启动。是否继续？</string>
+    <string name="bootstrap_settings_import_confirm_message_host">检测到完整备份 ZIP。导入前会先停止当前本地 Tavern 服务，再按识别到的目录结构覆盖当前宿主的 config、data、plugins 与扩展目录。导入失败会自动回滚；导入成功后会自动返回主界面并重新启动。是否继续？</string>
     <string name="bootstrap_settings_import_confirm_action">确认导入</string>
     <string name="bootstrap_settings_import_confirm_cancel">取消</string>
     <string name="bootstrap_settings_export_name">sillydroid-data-backup-%1$s.zip</string>

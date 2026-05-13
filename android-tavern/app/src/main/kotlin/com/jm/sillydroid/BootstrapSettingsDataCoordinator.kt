@@ -21,8 +21,7 @@ internal class BootstrapSettingsDataCoordinator(
     private val showBanner: (String) -> Unit,
     private val showMessage: (String) -> Unit,
     private val updateDirtyState: () -> Unit,
-    private val onBootstrapRestartRequired: () -> Unit,
-    private val onTavernUiReloadRequired: () -> Unit
+    private val onBootstrapRestartRequired: () -> Unit
 ) {
     private data class ImportArchiveOutcome(
         val importResult: TavernDataImportResult,
@@ -64,11 +63,11 @@ internal class BootstrapSettingsDataCoordinator(
         activity.lifecycleScope.launch {
             setBusy(true)
             val previousPort = hostConfigStore.servicePort
+            var serviceWasStopped = false
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    if (preview.archiveKind == TavernDataArchiveKind.HOST_FULL_SNAPSHOT) {
-                        processManager.stopForSettingsAndAwait(activity.getString(R.string.bootstrap_settings_import_stop_timeout))
-                    }
+                    processManager.stopForSettingsAndAwait(activity.getString(R.string.bootstrap_settings_import_stop_timeout))
+                    serviceWasStopped = true
                     val importResult = archiveManager.importDataArchive(sourceUri)
                     val loadedConfig = configRepository.loadConfig()
                     val importedPort = configRepository.readConfiguredPort(loadedConfig.root)
@@ -88,17 +87,12 @@ internal class BootstrapSettingsDataCoordinator(
                     outcome.loadedConfig,
                     successMessage
                 )
-                when (outcome.importResult.archiveKind) {
-                    TavernDataArchiveKind.USER_BACKUP -> {
-                        onTavernUiReloadRequired()
-                    }
-
-                    TavernDataArchiveKind.HOST_FULL_SNAPSHOT -> {
-                        showMessage(successMessage)
-                        onBootstrapRestartRequired()
-                    }
-                }
+                showMessage(successMessage)
+                onBootstrapRestartRequired()
             }.onFailure { exception ->
+                if (serviceWasStopped) {
+                    processManager.restart()
+                }
                 showDataError(exception.message ?: activity.getString(R.string.bootstrap_settings_import_failed))
             }
         }
@@ -110,7 +104,7 @@ internal class BootstrapSettingsDataCoordinator(
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     processManager.stopForSettingsAndAwait(activity.getString(R.string.bootstrap_settings_import_stop_timeout))
-                    clearManagedData()
+                    clearManagedBootstrapState()
                     hostConfigStore.servicePort = BootConfig.defaultServicePort
                 }
             }
@@ -175,9 +169,11 @@ internal class BootstrapSettingsDataCoordinator(
         }
     }
 
-    private fun clearManagedData() {
+    private fun clearManagedBootstrapState() {
         val paths = HostPaths.from(activity)
         paths.ensureWorkingDirectories()
+        File(paths.serverDataDir, ".sillydroid-maintenance").deleteRecursively()
+        paths.serverDir.deleteRecursively()
         for (directoryName in TavernConfigRepository.managedTopLevelDirectories) {
             File(paths.serverDataDir, directoryName).deleteRecursively()
         }

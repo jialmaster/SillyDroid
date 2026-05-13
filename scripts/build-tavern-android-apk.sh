@@ -342,23 +342,73 @@ input_path_newer_than() {
     [[ "$input_path" -nt "$reference_path" ]]
 }
 
+android_source_git() {
+    local source_root="$1"
+    shift
+
+    git -c safe.directory="$workspace_root" -C "$source_root" "$@"
+}
+
+assert_android_source_git() {
+    local source_root="$1"
+
+    if ! android_source_git "$source_root" rev-parse --is-inside-work-tree &>/dev/null; then
+        sillydroid_fail "Android 工程源码目录必须是 Git 工作树：$source_root"
+    fi
+}
+
+staged_android_project_satisfy_request() {
+    local source_root="$1"
+    local staged_root="$2"
+    local manifest_path="$staged_root/.sillydroid-source-export.list"
+    local current_manifest_path=''
+    local relative_path=''
+
+    [[ -d "$staged_root" && -f "$manifest_path" ]] || return 1
+    assert_android_source_git "$source_root"
+
+    current_manifest_path="$(mktemp)"
+    android_source_git "$source_root" ls-files --cached --others --exclude-standard -z > "$current_manifest_path"
+
+    if ! cmp -s "$current_manifest_path" "$manifest_path"; then
+        rm -f "$current_manifest_path"
+        return 1
+    fi
+    rm -f "$current_manifest_path"
+
+    while IFS= read -r -d '' relative_path; do
+        [[ -f "$source_root/$relative_path" && -f "$staged_root/$relative_path" ]] || return 1
+        if [[ "$source_root/$relative_path" -nt "$manifest_path" ]]; then
+            return 1
+        fi
+    done < "$manifest_path"
+
+    return 0
+}
+
 prepare_staged_android_project() {
     local source_root="$1"
     local staged_root="$2"
+    local manifest_path="$staged_root/.sillydroid-source-export.list"
+    local current_manifest_path=''
 
-    rm -rf "$staged_root"
-    mkdir -p "$staged_root"
+    assert_android_source_git "$source_root"
 
-    sillydroid_log "正在导出 Android 工程源码到缓存目录..."
-    if git -C "$source_root" rev-parse --is-inside-work-tree &>/dev/null; then
-        # 仅导出仓库源码文件（git tracked），并保留工作区当前内容（含未提交改动）。
+    if staged_android_project_satisfy_request "$source_root" "$staged_root"; then
+        sillydroid_log "复用已导出的缓存 Android 工程：$staged_root"
+    else
+        rm -rf "$staged_root"
+        mkdir -p "$staged_root"
+
+        sillydroid_log "正在导出 Android 工程源码到缓存目录..."
+        # 导出 git tracked 文件以及未被 .gitignore 排除的新增文件，保留工作区当前内容。
+        current_manifest_path="$(mktemp)"
         (
             cd "$source_root"
-            git ls-files -z | tar --null -T - -cf -
+            android_source_git "$source_root" ls-files --cached --others --exclude-standard -z > "$current_manifest_path"
+            tar --null -T "$current_manifest_path" -cf -
         ) | tar -xf - -C "$staged_root"
-    else
-        cp -R "$source_root" "$(dirname "$staged_root")/"
-        rm -rf "$staged_root/.git"
+        mv "$current_manifest_path" "$manifest_path"
     fi
 
     if [[ -f "$build_config_path" ]]; then

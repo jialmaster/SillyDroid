@@ -357,9 +357,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             onBootstrapRestartRequired = {
                 processManager.restart()
                 finish()
-            },
-            onTavernUiReloadRequired = {
-                updateResultFlags(shouldReloadTavernUi = true)
             }
         )
         extensionsCoordinator = BootstrapSettingsExtensionsCoordinator(
