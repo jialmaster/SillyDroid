@@ -130,7 +130,7 @@ internal class BootstrapSettingsLogsCoordinator(
         } else {
             HostLogReader.readPreferredSnapshot(
                 context = activity,
-                preferTavernServerLog = StartupRuntimeStore.state.value.isReady,
+                preferTavernServerLog = StartupRuntimeStore.state.value.shouldPreferTavernServerLog,
                 entries = currentEntries
             )
         }

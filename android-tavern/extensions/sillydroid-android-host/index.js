@@ -134,6 +134,21 @@ async function openSettingsCommand() {
     }
 }
 
+async function reloadTavernCommand() {
+    const bridge = getBridge();
+    if (!bridge || typeof bridge.reloadTavern !== 'function') {
+        toastr.warning('当前页面无法连接安卓宿主刷新桥。', popupTitle);
+        return;
+    }
+
+    const reloaded = bridge.reloadTavern() === true;
+    if (reloaded) {
+        toastr.success('正在刷新酒馆页面。', popupTitle);
+    } else {
+        toastr.warning('当前无法刷新酒馆页面。', popupTitle);
+    }
+}
+
 function handleMessageReceivedForPush() {
     const bridge = getNativeNotificationBridge();
     if (!bridge) {
@@ -227,8 +242,26 @@ async function setFloatingBubbleEnabled(enabled) {
     return { updated: true };
 }
 
+async function setWebViewPullRefreshEnabled(enabled) {
+    const bridge = getBridge();
+    if (!bridge || typeof bridge.setWebViewPullRefreshEnabled !== 'function') {
+        toastr.warning('安卓下拉刷新桥不可用，请确认应用版本。', popupTitle);
+        return { updated: false };
+    }
+
+    const updated = bridge.setWebViewPullRefreshEnabled(enabled) === true;
+    if (!updated) {
+        toastr.warning(enabled ? '暂时无法启用下拉刷新。' : '暂时无法关闭下拉刷新。', popupTitle);
+        return { updated: false };
+    }
+
+    toastr[enabled ? 'success' : 'info'](enabled ? '已启用下拉刷新。' : '已关闭下拉刷新。', popupTitle);
+    return { updated: true };
+}
+
 function buildSettingsPanel() {
     const settings = getExtensionSettings();
+    const hostInfo = getHostVersionInfo();
     const existingPanel = document.getElementById(settingsPanelId);
     if (existingPanel) {
         return existingPanel;
@@ -263,7 +296,7 @@ function buildSettingsPanel() {
     intro.appendChild(introTitle);
 
     const introText = document.createElement('span');
-    introText.textContent = '这里提供悬浮球、消息通知、打开设置和版本说明。';
+    introText.textContent = '这里提供悬浮球、下拉刷新、消息通知、打开设置和版本说明。';
     introText.style.opacity = '0.82';
     intro.appendChild(introText);
 
@@ -271,7 +304,7 @@ function buildSettingsPanel() {
     versionSummary.id = 'sillydroid_android_host_version_summary';
     versionSummary.style.marginBottom = '12px';
     versionSummary.style.opacity = '0.92';
-    versionSummary.textContent = formatVersionSummary(getHostVersionInfo());
+    versionSummary.textContent = formatVersionSummary(hostInfo);
 
     const bubbleRow = document.createElement('label');
     bubbleRow.classList.add('checkbox_label');
@@ -289,6 +322,23 @@ function buildSettingsPanel() {
     bubbleText.textContent = '启用悬浮球';
     bubbleRow.appendChild(bubbleToggle);
     bubbleRow.appendChild(bubbleText);
+
+    const pullRefreshRow = document.createElement('label');
+    pullRefreshRow.classList.add('checkbox_label');
+    pullRefreshRow.style.display = 'flex';
+    pullRefreshRow.style.alignItems = 'center';
+    pullRefreshRow.style.gap = '8px';
+    pullRefreshRow.style.marginBottom = '8px';
+
+    const pullRefreshToggle = document.createElement('input');
+    pullRefreshToggle.id = 'sillydroid_android_host_pull_refresh';
+    pullRefreshToggle.type = 'checkbox';
+    pullRefreshToggle.checked = hostInfo?.webViewPullRefreshEnabled === true;
+
+    const pullRefreshText = document.createElement('span');
+    pullRefreshText.textContent = '启用下拉刷新（会和悬浮小组件的拖动功能冲突，谨慎开启）';
+    pullRefreshRow.appendChild(pullRefreshToggle);
+    pullRefreshRow.appendChild(pullRefreshText);
 
     const notificationRow = document.createElement('label');
     notificationRow.classList.add('checkbox_label');
@@ -323,6 +373,16 @@ function buildSettingsPanel() {
     openSettingsButton.style.display = 'inline-flex';
     openSettingsButton.style.justifyContent = 'center';
 
+    const reloadButton = document.createElement('button');
+    reloadButton.classList.add('menu_button');
+    reloadButton.type = 'button';
+    reloadButton.id = 'sillydroid_android_host_reload_tavern';
+    reloadButton.textContent = '刷新页面';
+    reloadButton.style.whiteSpace = 'nowrap';
+    reloadButton.style.minWidth = '96px';
+    reloadButton.style.display = 'inline-flex';
+    reloadButton.style.justifyContent = 'center';
+
     const versionButton = document.createElement('button');
     versionButton.classList.add('menu_button');
     versionButton.type = 'button';
@@ -334,11 +394,13 @@ function buildSettingsPanel() {
     versionButton.style.justifyContent = 'center';
 
     actionRow.appendChild(openSettingsButton);
+    actionRow.appendChild(reloadButton);
     actionRow.appendChild(versionButton);
 
     content.appendChild(intro);
     content.appendChild(versionSummary);
     content.appendChild(bubbleRow);
+    content.appendChild(pullRefreshRow);
     content.appendChild(notificationRow);
     content.appendChild(actionRow);
 
@@ -349,7 +411,9 @@ function buildSettingsPanel() {
 
 function syncSettingsPanel() {
     const settings = getExtensionSettings();
+    const hostInfo = getHostVersionInfo();
     const bubbleToggle = document.getElementById('sillydroid_android_host_floating_bubble');
+    const pullRefreshToggle = document.getElementById('sillydroid_android_host_pull_refresh');
     const notificationToggle = document.getElementById('sillydroid_android_host_notification');
     const versionSummary = document.getElementById('sillydroid_android_host_version_summary');
 
@@ -357,19 +421,25 @@ function syncSettingsPanel() {
         bubbleToggle.checked = settings.enableFloatingBubble === true;
     }
 
+    if (pullRefreshToggle instanceof HTMLInputElement) {
+        pullRefreshToggle.checked = hostInfo?.webViewPullRefreshEnabled === true;
+    }
+
     if (notificationToggle instanceof HTMLInputElement) {
         notificationToggle.checked = settings.enableNotification === true;
     }
 
     if (versionSummary instanceof HTMLElement) {
-        versionSummary.textContent = formatVersionSummary(getHostVersionInfo());
+        versionSummary.textContent = formatVersionSummary(hostInfo);
     }
 }
 
 function bindSettingsPanelEvents() {
     const bubbleToggle = document.getElementById('sillydroid_android_host_floating_bubble');
+    const pullRefreshToggle = document.getElementById('sillydroid_android_host_pull_refresh');
     const notificationToggle = document.getElementById('sillydroid_android_host_notification');
     const openSettingsButton = document.getElementById('sillydroid_android_host_open_settings');
+    const reloadButton = document.getElementById('sillydroid_android_host_reload_tavern');
     const versionButton = document.getElementById('sillydroid_android_host_version_info');
 
     if (bubbleToggle instanceof HTMLInputElement && !bubbleToggle.dataset.sillydroidBound) {
@@ -378,6 +448,16 @@ function bindSettingsPanelEvents() {
             const result = await setFloatingBubbleEnabled(bubbleToggle.checked);
             if (!result.updated) {
                 bubbleToggle.checked = getExtensionSettings().enableFloatingBubble === true;
+            }
+        });
+    }
+
+    if (pullRefreshToggle instanceof HTMLInputElement && !pullRefreshToggle.dataset.sillydroidBound) {
+        pullRefreshToggle.dataset.sillydroidBound = 'true';
+        pullRefreshToggle.addEventListener('change', async () => {
+            const result = await setWebViewPullRefreshEnabled(pullRefreshToggle.checked);
+            if (!result.updated) {
+                pullRefreshToggle.checked = getHostVersionInfo()?.webViewPullRefreshEnabled === true;
             }
         });
     }
@@ -396,6 +476,13 @@ function bindSettingsPanelEvents() {
         openSettingsButton.dataset.sillydroidBound = 'true';
         openSettingsButton.addEventListener('click', () => {
             void openSettingsCommand();
+        });
+    }
+
+    if (reloadButton instanceof HTMLButtonElement && !reloadButton.dataset.sillydroidBound) {
+        reloadButton.dataset.sillydroidBound = 'true';
+        reloadButton.addEventListener('click', () => {
+            void reloadTavernCommand();
         });
     }
 

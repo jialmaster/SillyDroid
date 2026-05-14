@@ -41,6 +41,7 @@ internal class BootstrapSettingsScreenController(
     private val loadingIndicator: LinearProgressIndicator,
     private val searchLayout: TextInputLayout,
     private val floatingLogsSwitch: MaterialSwitch,
+    private val pullRefreshSwitch: MaterialSwitch,
     private val restoreDefaultsButton: ImageButton,
     private val importButton: MaterialButton,
     private val exportButton: MaterialButton,
@@ -64,6 +65,7 @@ internal class BootstrapSettingsScreenController(
         loadingIndicator.isVisible = busy
         searchLayout.isEnabled = !busy
         floatingLogsSwitch.isEnabled = !busy
+        pullRefreshSwitch.isEnabled = !busy
         restoreDefaultsButton.isEnabled = !busy
         importButton.isEnabled = !busy
         exportButton.isEnabled = !busy

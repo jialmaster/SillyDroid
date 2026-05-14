@@ -17,65 +17,6 @@
             android:layout_height="match_parent" />
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-    <View
-        android:id="@+id/webViewPullRefreshHintArc"
-        android:layout_width="match_parent"
-        android:layout_height="88dp"
-        android:layout_gravity="top"
-        android:alpha="0"
-        android:visibility="gone" />
-
-    <LinearLayout
-        android:id="@+id/webViewPullRefreshHint"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="0dp"
-        android:alpha="0"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:visibility="gone">
-
-        <FrameLayout
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="@drawable/bg_bootstrap_overlay_icon_button"
-            android:backgroundTint="?attr/colorSurface"
-            android:elevation="6dp"
-            android:outlineProvider="background"
-            android:translationZ="10dp"
-            android:foregroundGravity="center">
-
-            <ImageView
-                android:id="@+id/webViewPullRefreshHintIcon"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_gravity="center"
-                android:alpha="0.45"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_restore_defaults"
-                android:tint="?attr/colorOnSurface" />
-        </FrameLayout>
-
-        <TextView
-            android:id="@+id/webViewPullRefreshHintText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/sillydroid_space_xs"
-            android:alpha="0"
-            android:background="@drawable/bg_bootstrap_overlay_icon_button"
-            android:backgroundTint="?attr/colorSurface"
-            android:elevation="4dp"
-            android:outlineProvider="background"
-            android:paddingStart="@dimen/sillydroid_space_sm"
-            android:paddingTop="@dimen/sillydroid_space_xs"
-            android:paddingEnd="@dimen/sillydroid_space_sm"
-            android:paddingBottom="@dimen/sillydroid_space_xs"
-            android:text="@string/webview_pull_refresh_pull"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-            android:textColor="?attr/colorOnSurface" />
-    </LinearLayout>
-
     <LinearLayout
         android:id="@+id/bootstrapOverlay"
         android:layout_width="match_parent"
@@ -225,6 +166,18 @@
                     android:textAppearance="@style/TextAppearance.SillyDroid.SettingsSectionTitle" />
 
                 <ImageButton
+                    android:id="@+id/floatingLogsReloadWebViewButton"
+                    android:layout_width="@dimen/sillydroid_compact_icon_button_size"
+                    android:layout_height="@dimen/sillydroid_compact_icon_button_size"
+                    android:layout_marginStart="@dimen/sillydroid_space_sm"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/floating_logs_reload_webview"
+                    android:padding="@dimen/sillydroid_compact_icon_button_padding"
+                    android:scaleType="center"
+                    android:src="@drawable/ic_restore_defaults"
+                    android:tint="@color/floating_logs_panel_secondary_text" />
+
+                <ImageButton
                     android:id="@+id/floatingLogsDownloadButton"
                     android:layout_width="@dimen/sillydroid_compact_icon_button_size"
                     android:layout_height="@dimen/sillydroid_compact_icon_button_size"
@@ -342,7 +295,7 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <TextView
+    <ImageButton
         android:id="@+id/floatingLogsBubble"
         android:layout_width="56dp"
         android:layout_height="56dp"
@@ -352,15 +305,10 @@
         android:background="@drawable/bg_floating_logs_bubble"
         android:contentDescription="@string/floating_logs_bubble_description"
         android:elevation="14dp"
-        android:fontFamily="sans-serif-medium"
-        android:gravity="center"
-        android:includeFontPadding="false"
-        android:letterSpacing="0.04"
-        android:paddingBottom="1dp"
-        android:text="@string/floating_logs_bubble_label"
-        android:textColor="@color/floating_logs_bubble_text"
-        android:textSize="10sp"
-        android:textStyle="bold"
+        android:padding="15dp"
+        android:scaleType="center"
+        android:src="@drawable/ic_bootstrap_settings"
+        android:tint="@color/floating_logs_bubble_text"
         android:visibility="gone" />
 
 </FrameLayout>

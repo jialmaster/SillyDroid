@@ -11,6 +11,7 @@ internal class BootstrapHostConfigStore(context: Context) {
     companion object {
         private const val preferencesName = "bootstrap-host-config"
         private const val servicePortKey = "service-port"
+        private const val webViewPullRefreshEnabledKey = "webview-pull-refresh-enabled"
         private const val floatingLogBubbleEnabledKey = "floating-log-bubble-enabled"
         private const val floatingLogRefreshIntervalMillisKey = "floating-log-refresh-interval-millis"
         private const val floatingLogBubbleXKey = "floating-log-bubble-x"
@@ -37,6 +38,14 @@ internal class BootstrapHostConfigStore(context: Context) {
         set(value) {
             preferences.edit()
                 .putInt(servicePortKey, sanitizeServicePort(value))
+                .apply()
+        }
+
+    var webViewPullRefreshEnabled: Boolean
+        get() = preferences.getBoolean(webViewPullRefreshEnabledKey, false)
+        set(value) {
+            preferences.edit()
+                .putBoolean(webViewPullRefreshEnabledKey, value)
                 .apply()
         }
 
