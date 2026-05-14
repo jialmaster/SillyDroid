@@ -11,20 +11,47 @@ The script detects the install root, normalizes data into config/data/plugins/pu
 EOF
 }
 
-ensure_zip_available() {
-    if command -v zip >/dev/null 2>&1; then
+ensure_termux_package_installed() {
+    local package_name="$1"
+    local command_name="${2:-$1}"
+
+    if command -v "$command_name" >/dev/null 2>&1; then
         return 0
     fi
 
     if command -v pkg >/dev/null 2>&1; then
-        echo "未检测到 zip，正在自动安装：pkg install -y zip"
-        pkg install -y zip >/dev/null
+        log "未检测到 $command_name，正在自动安装：pkg install -y $package_name"
+        pkg install -y "$package_name" >/dev/null || true
     fi
 
-    if ! command -v zip >/dev/null 2>&1; then
+    command -v "$command_name" >/dev/null 2>&1
+}
+
+ensure_zip_available() {
+    if ! ensure_termux_package_installed zip zip; then
         echo "缺少 zip 命令，且自动安装失败。请手工执行：pkg install zip" >&2
         exit 1
     fi
+}
+
+ensure_termux_api_tools_available() {
+    if command -v termux-download >/dev/null 2>&1 && command -v termux-share >/dev/null 2>&1; then
+        return 0
+    fi
+
+    ensure_termux_package_installed termux-api termux-download || true
+
+    command -v termux-download >/dev/null 2>&1 || command -v termux-share >/dev/null 2>&1
+}
+
+ensure_python_available() {
+    if find_python_command >/dev/null 2>&1; then
+        return 0
+    fi
+
+    ensure_termux_package_installed python python || true
+
+    find_python_command >/dev/null 2>&1
 }
 
 # 简洁日志函数（不带时间戳）
@@ -284,6 +311,9 @@ resolve_archive_target() {
     local export_cache_dir="$HOME/.sillytavern/export-cache"
     mkdir -p "$export_cache_dir"
 
+    ensure_termux_api_tools_available || true
+    ensure_python_available || true
+
     if command -v termux-download >/dev/null 2>&1 && find_python_command >/dev/null 2>&1; then
         log "回退方案：使用 Android 系统下载服务。原因：$direct_failure_reason"
         if confirm_export_method "是否使用系统下载服务导出？选择 N 将继续尝试下一个回退方案。"; then
@@ -297,7 +327,7 @@ resolve_archive_target() {
         local missing_download_reasons=()
         command -v termux-download >/dev/null 2>&1 || missing_download_reasons+=("未检测到 termux-download")
         find_python_command >/dev/null 2>&1 || missing_download_reasons+=("未检测到 python/python3")
-        log "系统下载服务不可用：$(IFS='；'; printf '%s' "${missing_download_reasons[*]}")。"
+        log "系统下载服务不可用：$(IFS='；'; printf '%s' "${missing_download_reasons[*]}")。如果刚才自动安装 termux-api 成功但仍不可用，请确认已安装 Android 端 Termux:API 应用。"
     fi
 
     if command -v termux-share >/dev/null 2>&1; then
