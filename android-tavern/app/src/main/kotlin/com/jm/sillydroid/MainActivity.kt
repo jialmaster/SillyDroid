@@ -12,13 +12,6 @@ import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.ColorFilter
-import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.PixelFormat
-import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -77,7 +70,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
-import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.math.absoluteValue
@@ -114,61 +106,6 @@ class MainActivity : AppCompatActivity() {
         val tag: String
     )
 
-    private class PullTopArcDrawable : Drawable() {
-        private val path = Path()
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.FILL
-        }
-        private var color = 0xFF374151.toInt()
-        private var depthPx = 0f
-
-        fun update(depthPx: Float, armed: Boolean, color: Int) {
-            this.depthPx = depthPx
-            this.color = color
-            invalidateSelf()
-        }
-
-        override fun draw(canvas: Canvas) {
-            val width = bounds.width().toFloat()
-            val height = bounds.height().toFloat()
-            if (width <= 0f || height <= 0f) {
-                return
-            }
-
-            val clampedDepth = depthPx.coerceIn(0f, height * 0.68f)
-            paint.color = Color.argb(255, Color.red(color), Color.green(color), Color.blue(color))
-
-            path.reset()
-            path.moveTo(0f, 0f)
-            val depthRatio = (clampedDepth / height).coerceIn(0f, 1f)
-            val sideCtrlX = width * (0.05f + 0.11f * depthRatio)
-            val sideCtrlY = clampedDepth * (0.82f + 0.14f * depthRatio)
-            path.cubicTo(
-                sideCtrlX,
-                sideCtrlY,
-                width - sideCtrlX,
-                sideCtrlY,
-                width,
-                0f
-            )
-            path.lineTo(0f, 0f)
-            path.close()
-            canvas.drawPath(path, paint)
-        }
-
-        override fun setAlpha(alpha: Int) {
-            paint.alpha = alpha
-            invalidateSelf()
-        }
-
-        override fun setColorFilter(colorFilter: ColorFilter?) {
-            paint.colorFilter = colorFilter
-            invalidateSelf()
-        }
-
-        override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
-    }
-
     companion object {
         private const val downloadBridgeName = "AndroidDownloadBridge"
         private const val webViewStateKey = "tavern.webview.state"
@@ -183,10 +120,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var contentRoot: View
     private lateinit var webViewRefreshLayout: SwipeRefreshLayout
     private lateinit var webView: WebView
-    private lateinit var webViewPullRefreshHint: LinearLayout
-    private lateinit var webViewPullRefreshHintArc: View
-    private lateinit var webViewPullRefreshHintIcon: ImageView
-    private lateinit var webViewPullRefreshHintText: TextView
     private lateinit var bootstrapOverlay: View
     private lateinit var bootstrapStatus: TextView
     private lateinit var bootstrapRetry: Button
@@ -196,7 +129,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bootstrapSettingsButton: ImageButton
     private lateinit var bootstrapProgress: ProgressBar
     private lateinit var bootstrapProgressLabel: TextView
-    private lateinit var floatingLogsBubble: TextView
+    private lateinit var floatingLogsBubble: ImageButton
     private lateinit var floatingLogsPanel: View
     private lateinit var floatingLogsMeta: TextView
     private lateinit var floatingLogsEmpty: TextView
@@ -205,6 +138,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var floatingLogsSelectButton: MaterialButton
     private lateinit var floatingLogsIntervalButton: MaterialButton
     private lateinit var floatingLogsCloseButton: ImageButton
+    private lateinit var floatingLogsReloadWebViewButton: ImageButton
     private lateinit var floatingLogsDownloadButton: ImageButton
     private lateinit var floatingLogsScrollToBottomButton: ImageButton
     private lateinit var backPressCallback: OnBackPressedCallback
@@ -212,23 +146,17 @@ class MainActivity : AppCompatActivity() {
     private var loadedUrl = ""
     private var hasRestoredWebViewState = false
     private var isOpeningBootstrapSettings = false
-    private var pullGestureStartY = 0f
-    private var isPullGestureTracking = false
-    private var isPullGestureActive = false
-    private var isPullGestureArmed = false
     private var isPullGestureRefreshing = false
     private var isImeVisible = false
-    private var pullRefreshArcDrawable: PullTopArcDrawable? = null
-    // true 表示触点命中链上仍有节点可以继续向上滚动，此时不应触发下拉刷新。
-    private var isTouchChainCanScrollUp = false
-    private val pullRefreshTriggerDistancePx by lazy { 144f * resources.displayMetrics.density }
-    private val pullRefreshHintOffsetPx by lazy { 20f * resources.displayMetrics.density }
     // 首次解包完成后该文件存在，用来判断"曾经初始化过"，进而决定设置按钮是否可用。
     // 用 lazy 避免在 onCreate 之前访问 filesDir。
     private val isBootstrapPreviouslyCompleted: Boolean by lazy {
         File(HostPaths.from(this).serverDir, "bootstrap-manifest.json").isFile
     }
     private var pendingFileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private var currentBootstrapState = StartupState()
+    private var latestTavernServerLogLine = ""
+    private var bootstrapWaitingStatusRefreshJob: Job? = null
     private var floatingLogsRefreshJob: Job? = null
     private var floatingLogsRealtimeRenderJob: Job? = null
     private var floatingLogsRealtimeRenderPending = false
@@ -318,6 +246,7 @@ class MainActivity : AppCompatActivity() {
         registerBackPressHandler()
         restoreWebViewState(savedInstanceState)
         observeBootstrapState()
+        observeTavernServerLogTail()
         bootstrapRetry.setOnClickListener { startBootstrap(true) }
         bootstrapSettingsButton.setOnClickListener { openBootstrapSettings() }
         startBootstrap(false)
@@ -335,10 +264,12 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         appUpdateCoordinator.onResume()
         refreshFloatingLogsVisibility()
+        updateWebViewRefreshLayoutEnabled()
     }
 
     override fun onStop() {
         appUpdateCoordinator.onStop()
+        stopBootstrapWaitingStatusRefreshLoop()
         stopFloatingLogsRefreshLoop()
         super.onStop()
     }
@@ -359,6 +290,7 @@ class MainActivity : AppCompatActivity() {
         pendingFileChooserCallback = null
         defaultExtensionsProgressHost.hide()
         appUpdateCoordinator.onDestroy()
+        stopBootstrapWaitingStatusRefreshLoop()
         stopFloatingLogsRefreshLoop()
         super.onDestroy()
     }
@@ -382,12 +314,6 @@ class MainActivity : AppCompatActivity() {
         contentRoot = findViewById(R.id.contentRoot)
         webViewRefreshLayout = findViewById(R.id.webViewRefreshLayout)
         webView = findViewById(R.id.webView)
-        webViewPullRefreshHint = findViewById(R.id.webViewPullRefreshHint)
-        webViewPullRefreshHintArc = findViewById(R.id.webViewPullRefreshHintArc)
-        webViewPullRefreshHintIcon = findViewById(R.id.webViewPullRefreshHintIcon)
-        webViewPullRefreshHintText = findViewById(R.id.webViewPullRefreshHintText)
-        pullRefreshArcDrawable = PullTopArcDrawable()
-        webViewPullRefreshHintArc.background = pullRefreshArcDrawable
         bootstrapOverlay = findViewById(R.id.bootstrapOverlay)
         bootstrapStatus = findViewById(R.id.bootstrapStatus)
         bootstrapRetry = findViewById(R.id.bootstrapRetry)
@@ -406,6 +332,7 @@ class MainActivity : AppCompatActivity() {
         floatingLogsSelectButton = findViewById(R.id.floatingLogsSelectButton)
         floatingLogsIntervalButton = findViewById(R.id.floatingLogsIntervalButton)
         floatingLogsCloseButton = findViewById(R.id.floatingLogsCloseButton)
+        floatingLogsReloadWebViewButton = findViewById(R.id.floatingLogsReloadWebViewButton)
         floatingLogsDownloadButton = findViewById(R.id.floatingLogsDownloadButton)
         floatingLogsScrollToBottomButton = findViewById(R.id.floatingLogsScrollToBottomButton)
     }
@@ -513,6 +440,9 @@ class MainActivity : AppCompatActivity() {
         }
         floatingLogsCloseButton.setOnClickListener {
             setFloatingLogsPanelVisible(false)
+        }
+        floatingLogsReloadWebViewButton.setOnClickListener {
+            reloadTavernWebView()
         }
         floatingLogsScrollToBottomButton.setOnClickListener {
             floatingLogsAutoScrollEnabled = true
@@ -893,7 +823,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun renderFloatingLatestLog() {
-        val preferTavernServerLog = StartupRuntimeStore.state.value.isReady
+        val preferTavernServerLog = StartupRuntimeStore.state.value.shouldPreferTavernServerLog
         val result = withContext(Dispatchers.IO) {
             val entries = HostLogReader.listEntries(this@MainActivity)
             val selectedEntry = floatingLogsSelectedLogPath?.let { selectedPath ->
@@ -1118,11 +1048,9 @@ class MainActivity : AppCompatActivity() {
             if (imeVisibleNow != isImeVisible) {
                 isImeVisible = imeVisibleNow
                 if (imeVisibleNow) {
-                    isPullGestureTracking = false
-                    isPullGestureActive = false
-                    isPullGestureArmed = false
-                    updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
+                    webViewRefreshLayout.isRefreshing = false
                 }
+                updateWebViewRefreshLayoutEnabled()
             }
             val imeInsets = if (imeVisibleNow) {
                 insets.getInsets(WindowInsetsCompat.Type.ime())
@@ -1150,62 +1078,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun configureWebView() {
         webViewRefreshLayout.isEnabled = false
-        webView.setOnTouchListener { _, event ->
-            if (!webView.isVisible || bootstrapOverlay.isVisible || isPullGestureRefreshing || isImeVisible) {
-                isPullGestureTracking = false
-                isPullGestureActive = false
-                isPullGestureArmed = false
-                updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
-                return@setOnTouchListener false
+        webViewRefreshLayout.setOnChildScrollUpCallback { _, _ ->
+            !canStartSwipeRefresh() || webView.canScrollVertically(-1)
+        }
+        webViewRefreshLayout.setOnRefreshListener {
+            if (!canStartSwipeRefresh()) {
+                webViewRefreshLayout.isRefreshing = false
+                return@setOnRefreshListener
             }
-
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    pullGestureStartY = event.y
-                    isPullGestureTracking = true
-                    isPullGestureActive = false
-                    isPullGestureArmed = false
-                    // 默认先禁止触发，等待 DOM 命中链检测结果，避免内部滚动组件误触发刷新。
-                    isTouchChainCanScrollUp = true
-                    updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
-                    detectTouchChainCanScrollUp(event.x, event.y)
-                }
-
-                MotionEvent.ACTION_MOVE -> {
-                    if (!isPullGestureTracking) {
-                        return@setOnTouchListener false
-                    }
-                    val dragDistance = (event.y - pullGestureStartY).coerceAtLeast(0f)
-                    val canPullNow = !webView.canScrollVertically(-1) && !isTouchChainCanScrollUp
-                    if (canPullNow && dragDistance > 0f) {
-                        isPullGestureActive = true
-                    }
-                    if (!isPullGestureActive || dragDistance <= 0f) {
-                        isPullGestureArmed = false
-                        updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
-                        return@setOnTouchListener false
-                    }
-                    val progress = (dragDistance / pullRefreshTriggerDistancePx).coerceAtMost(2.4f)
-                    isPullGestureArmed = dragDistance >= pullRefreshTriggerDistancePx
-                    updatePullRefreshHint(progress = progress, armed = isPullGestureArmed, dragging = true)
-                }
-
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    val shouldRefresh = event.actionMasked == MotionEvent.ACTION_UP &&
-                        isPullGestureArmed &&
-                        !isTouchChainCanScrollUp &&
-                        !webView.canScrollVertically(-1)
-                    isPullGestureTracking = false
-                    isPullGestureActive = false
-                    isPullGestureArmed = false
-                    if (shouldRefresh) {
-                        triggerPullRefresh()
-                    } else {
-                        updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
-                    }
-                }
-            }
-            false
+            isPullGestureRefreshing = true
+            reloadTavernWebView()
         }
 
         webView.settings.javaScriptEnabled = true
@@ -1246,7 +1128,8 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 isPullGestureRefreshing = false
-                updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
+                webViewRefreshLayout.isRefreshing = false
+                updateWebViewRefreshLayoutEnabled()
                 // 冷启动后主动把 WebView 新写入的 cookie 落盘，避免后台回收前只保存在内存里。
                 CookieManager.getInstance().flush()
                 installBlobDownloadBridge()
@@ -1585,6 +1468,7 @@ class MainActivity : AppCompatActivity() {
               const blobStore = new Map();
               const originalCreateObjectUrl = URL.createObjectURL.bind(URL);
               const originalRevokeObjectUrl = URL.revokeObjectURL.bind(URL);
+              const originalAnchorClick = HTMLAnchorElement.prototype.click;
 
               URL.createObjectURL = function(object) {
                 const objectUrl = originalCreateObjectUrl(object);
@@ -1632,44 +1516,60 @@ class MainActivity : AppCompatActivity() {
                 return Promise.resolve(null);
               }
 
+                            function interceptAnchorDownload(anchor) {
+                                if (!anchor) {
+                                    return false;
+                                }
+
+                                const href = anchor.href || '';
+                                if (!href.startsWith('blob:') && !href.startsWith('data:')) {
+                                    return false;
+                                }
+
+                                const fileName = (anchor.getAttribute('download') || '').trim() || 'download';
+                                nativeBridge.onBlobDownloadPreparing(fileName);
+
+                                resolveBlob(href)
+                                    .then(function(blob) {
+                                        if (!blob) {
+                                            throw new Error('未找到导出数据');
+                                        }
+
+                                        return readBlobAsBase64(blob).then(function(base64) {
+                                            nativeBridge.saveBase64File(JSON.stringify({
+                                                fileName: fileName,
+                                                mimeType: blob.type || '',
+                                                base64: base64
+                                            }));
+                                        });
+                                    })
+                                    .catch(function(error) {
+                                        nativeBridge.reportDownloadFailure(JSON.stringify({
+                                            fileName: fileName,
+                                            message: error && error.message ? error.message : '导出失败'
+                                        }));
+                                    });
+
+                                return true;
+                            }
+
+                            HTMLAnchorElement.prototype.click = function() {
+                                if (interceptAnchorDownload(this)) {
+                                    return;
+                                }
+
+                                return originalAnchorClick.call(this);
+                            };
+
               document.addEventListener('click', function(event) {
                 const target = event.target;
                 const anchor = target && typeof target.closest === 'function' ? target.closest('a[href]') : null;
-                if (!anchor) {
-                  return;
-                }
-
-                const href = anchor.href || '';
-                if (!href.startsWith('blob:') && !href.startsWith('data:')) {
+                                if (!anchor || !interceptAnchorDownload(anchor)) {
                   return;
                 }
 
                 event.preventDefault();
                 event.stopPropagation();
-
-                const fileName = (anchor.getAttribute('download') || '').trim() || 'download';
-                nativeBridge.onBlobDownloadPreparing(fileName);
-
-                resolveBlob(href)
-                  .then(function(blob) {
-                    if (!blob) {
-                      throw new Error('未找到导出数据');
-                    }
-
-                    return readBlobAsBase64(blob).then(function(base64) {
-                      nativeBridge.saveBase64File(JSON.stringify({
-                        fileName: fileName,
-                        mimeType: blob.type || '',
-                        base64: base64
-                      }));
-                    });
-                  })
-                  .catch(function(error) {
-                    nativeBridge.reportDownloadFailure(JSON.stringify({
-                      fileName: fileName,
-                      message: error && error.message ? error.message : '导出失败'
-                    }));
-                  });
               }, true);
             })();
             """.trimIndent(),
@@ -1943,6 +1843,31 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun setWebViewPullRefreshEnabled(enabled: Boolean): Boolean {
+            if (isFinishing || isDestroyed) {
+                return false
+            }
+
+            runOnUiThread {
+                hostConfigStore.webViewPullRefreshEnabled = enabled
+                updateWebViewRefreshLayoutEnabled()
+            }
+            return true
+        }
+
+        @JavascriptInterface
+        fun reloadTavern(): Boolean {
+            if (isFinishing || isDestroyed) {
+                return false
+            }
+
+            runOnUiThread {
+                reloadTavernWebView()
+            }
+            return true
+        }
+
+        @JavascriptInterface
         fun getHostVersionInfo(): String {
             return buildAndroidHostVersionInfoJson()
         }
@@ -2057,7 +1982,25 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 StartupRuntimeStore.state.collect { state ->
+                    currentBootstrapState = state
                     renderBootstrapState(state)
+                }
+            }
+        }
+    }
+
+    private fun observeTavernServerLogTail() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                TavernServerLogTailStore.latestLine.collect { line ->
+                    latestTavernServerLogLine = line
+                    val state = currentBootstrapState
+                    if (state.phase == StartupPhase.STARTING_SERVER || state.phase == StartupPhase.WAITING_READY) {
+                        renderBootstrapStatusText(
+                            state = state,
+                            tavernLogLineOverride = line
+                        )
+                    }
                 }
             }
         }
@@ -2076,31 +2019,14 @@ class MainActivity : AppCompatActivity() {
             .put("apkVersionName", packageInfo.versionName.orEmpty().trim())
             .put("apkVersionCode", packageInfo.longVersionCode.toString())
             .put("floatingLogBubbleEnabled", hostConfigStore.floatingLogBubbleEnabled)
+            .put("webViewPullRefreshEnabled", hostConfigStore.webViewPullRefreshEnabled)
             .put("serverReady", StartupRuntimeStore.state.value.isReady)
             .toString()
     }
 
     private fun renderBootstrapState(state: StartupState) {
-        val displayMessage = if (state.phase == StartupPhase.CONFIGURING) {
-            getString(R.string.bootstrap_paused_message)
-        } else {
-            state.message
-        }
-        val displayDetails = if (state.phase == StartupPhase.CONFIGURING) {
-            getString(R.string.bootstrap_paused_details)
-        } else {
-            state.details
-        }
-        val details = displayDetails.takeIf { it.isNotBlank() }
-        bootstrapStatus.text = if (details == null) {
-            displayMessage
-        } else {
-            buildString {
-                append(displayMessage)
-                append('\n')
-                append(details)
-            }
-        }
+        renderBootstrapStatusText(state)
+        syncBootstrapWaitingStatusRefresh(state)
 
         bootstrapRetry.isVisible = state.canRetry || state.phase == StartupPhase.CONFIGURING
         bootstrapRetry.text = if (state.phase == StartupPhase.CONFIGURING) {
@@ -2146,10 +2072,123 @@ class MainActivity : AppCompatActivity() {
             bootstrapOverlay.isVisible = true
             webViewRefreshLayout.isVisible = false
             webViewRefreshLayout.isEnabled = false
+            webViewRefreshLayout.isRefreshing = false
             isPullGestureRefreshing = false
-            updatePullRefreshHint(progress = 0f, armed = false, dragging = false)
             webView.isVisible = false
         }
+    }
+
+    private fun renderBootstrapStatusText(
+        state: StartupState,
+        elapsedSecondsOverride: Int? = null,
+        tavernLogLineOverride: String? = null
+    ) {
+        val displayMessage = if (state.phase == StartupPhase.CONFIGURING) {
+            getString(R.string.bootstrap_paused_message)
+        } else {
+            state.message
+        }
+        val baseDetails = if (state.phase == StartupPhase.CONFIGURING) {
+            getString(R.string.bootstrap_paused_details)
+        } else {
+            state.details
+        }
+        val displayDetails = buildBootstrapDisplayDetails(
+            state = state,
+            baseDetails = baseDetails,
+            elapsedSecondsOverride = elapsedSecondsOverride,
+            tavernLogLineOverride = tavernLogLineOverride
+        )
+
+        bootstrapStatus.text = if (displayDetails.isBlank()) {
+            displayMessage
+        } else {
+            buildString {
+                append(displayMessage)
+                append('\n')
+                append(displayDetails)
+            }
+        }
+    }
+
+    private fun buildBootstrapDisplayDetails(
+        state: StartupState,
+        baseDetails: String,
+        elapsedSecondsOverride: Int? = null,
+        tavernLogLineOverride: String? = null
+    ): String {
+        val sections = mutableListOf<String>()
+        if (baseDetails.isNotBlank()) {
+            sections += baseDetails
+        }
+
+        if (state.phase == StartupPhase.STARTING_SERVER || state.phase == StartupPhase.WAITING_READY) {
+            val elapsedSeconds = elapsedSecondsOverride ?: resolveBootstrapPhaseElapsedSeconds(state)
+            if (elapsedSeconds != null) {
+                sections += getString(R.string.bootstrap_startup_elapsed, elapsedSeconds)
+            }
+
+            val tavernLogLine = tavernLogLineOverride?.takeIf { it.isNotBlank() }
+            if (tavernLogLine != null) {
+                sections += getString(R.string.bootstrap_startup_tavern_log_tail, tavernLogLine)
+            }
+        }
+
+        return sections.joinToString(separator = "\n")
+    }
+
+    private fun syncBootstrapWaitingStatusRefresh(state: StartupState) {
+        val shouldRefresh = state.phase == StartupPhase.STARTING_SERVER || state.phase == StartupPhase.WAITING_READY
+        if (!shouldRefresh) {
+            stopBootstrapWaitingStatusRefreshLoop()
+            return
+        }
+
+        TavernServerLogTailStore.start(applicationContext)
+        if (bootstrapWaitingStatusRefreshJob?.isActive == true) {
+            return
+        }
+
+        bootstrapWaitingStatusRefreshJob = lifecycleScope.launch {
+            while (isActive) {
+                renderBootstrapWaitingStatusSnapshot()
+                delay(1_000L)
+            }
+        }
+    }
+
+    private fun stopBootstrapWaitingStatusRefreshLoop() {
+        bootstrapWaitingStatusRefreshJob?.cancel()
+        bootstrapWaitingStatusRefreshJob = null
+        latestTavernServerLogLine = ""
+        TavernServerLogTailStore.stop()
+    }
+
+    private fun renderBootstrapWaitingStatusSnapshot() {
+        val state = currentBootstrapState
+        if (state.phase != StartupPhase.STARTING_SERVER && state.phase != StartupPhase.WAITING_READY) {
+            return
+        }
+
+        val elapsedSeconds = resolveBootstrapPhaseElapsedSeconds(state)
+        if (currentBootstrapState.phase != state.phase || currentBootstrapState.phaseStartedAtMillis != state.phaseStartedAtMillis) {
+            return
+        }
+
+        renderBootstrapStatusText(
+            state = state,
+            elapsedSecondsOverride = elapsedSeconds,
+            tavernLogLineOverride = latestTavernServerLogLine
+        )
+    }
+
+    private fun resolveBootstrapPhaseElapsedSeconds(state: StartupState): Int? {
+        if (state.phaseStartedAtMillis <= 0L) {
+            return null
+        }
+
+        val elapsedMillis = (System.currentTimeMillis() - state.phaseStartedAtMillis).coerceAtLeast(0L)
+        return (elapsedMillis / 1_000L).toInt()
     }
 
     private fun maybePromptDefaultExtensionsAfterBootstrapReady() {
@@ -2208,8 +2247,8 @@ class MainActivity : AppCompatActivity() {
     private fun showWebView(baseUrl: String) {
         bootstrapOverlay.isVisible = false
         webViewRefreshLayout.isVisible = true
-        webViewRefreshLayout.isEnabled = false
         webView.isVisible = true
+        updateWebViewRefreshLayoutEnabled()
         if (hasRestoredWebViewState) {
             // 已恢复出原来的 WebView 会话时，不再重新 load baseUrl，避免把前端状态重置到首页。
             hasRestoredWebViewState = false
@@ -2225,146 +2264,30 @@ class MainActivity : AppCompatActivity() {
         webView.loadUrl(targetUrl)
     }
 
-    private fun updatePullRefreshHint(progress: Float, armed: Boolean, dragging: Boolean) {
+    private fun canStartSwipeRefresh(): Boolean {
+        return webViewRefreshLayout.isVisible &&
+            webView.isVisible &&
+            hostConfigStore.webViewPullRefreshEnabled &&
+            !bootstrapOverlay.isVisible &&
+            !isPullGestureRefreshing &&
+            !isImeVisible
+    }
+
+    private fun updateWebViewRefreshLayoutEnabled() {
+        webViewRefreshLayout.isEnabled = webViewRefreshLayout.isVisible &&
+            webView.isVisible &&
+            hostConfigStore.webViewPullRefreshEnabled &&
+            !bootstrapOverlay.isVisible &&
+            !isImeVisible
+    }
+
+    private fun reloadTavernWebView(): Boolean {
         if (!webView.isVisible || bootstrapOverlay.isVisible) {
-            webViewPullRefreshHint.animate().cancel()
-            webViewPullRefreshHintArc.animate().cancel()
-            webViewPullRefreshHint.isVisible = false
-            webViewPullRefreshHintArc.isVisible = false
-            webViewPullRefreshHint.alpha = 0f
-            webViewPullRefreshHintText.alpha = 0f
-            return
+            return false
         }
 
-        if (!dragging && !isPullGestureRefreshing) {
-            if (!webViewPullRefreshHint.isVisible && !webViewPullRefreshHintArc.isVisible) {
-                return
-            }
-            webViewPullRefreshHint.animate().cancel()
-            webViewPullRefreshHintArc.animate().cancel()
-            webViewPullRefreshHint.animate()
-                .alpha(0f)
-                .translationY(-46f * resources.displayMetrics.density)
-                .setDuration(120)
-                .withEndAction {
-                    webViewPullRefreshHint.isVisible = false
-                    webViewPullRefreshHintArc.isVisible = false
-                    webViewPullRefreshHintArc.alpha = 0f
-                    webViewPullRefreshHintText.alpha = 0f
-                }
-                .start()
-            return
-        }
-
-        webViewPullRefreshHint.animate().cancel()
-        webViewPullRefreshHintArc.animate().cancel()
-        val clamped = progress.coerceIn(0f, 1f)
-        val pullDistancePx = progress.coerceAtLeast(0f) * pullRefreshTriggerDistancePx
-        val cappedDistancePx = pullDistancePx.coerceAtMost(pullRefreshTriggerDistancePx)
-        val extraDistancePx = (pullDistancePx - pullRefreshTriggerDistancePx).coerceAtLeast(0f)
-        val tensionPercent = (extraDistancePx / (pullRefreshTriggerDistancePx * 2.4f)).coerceIn(0f, 1f)
-        val tensionMovePx = pullRefreshTriggerDistancePx *
-            (tensionPercent - (tensionPercent * tensionPercent) / 2f) * 1.95f
-        val visualOffsetPx = cappedDistancePx + tensionMovePx
-
-        webViewPullRefreshHint.isVisible = true
-        webViewPullRefreshHintArc.isVisible = true
-        webViewPullRefreshHint.alpha = (0.35f + clamped * 0.65f).coerceIn(0f, 1f)
-
-        val iconBaseOffscreenY = -56f * resources.displayMetrics.density
-        webViewPullRefreshHint.translationY = iconBaseOffscreenY + visualOffsetPx * 0.9f
-
-        val hintColor = runCatching {
-            Color.parseColor(if (isNightModeEnabled()) "#E5E7EB" else "#374151")
-        }.getOrDefault(0xFF374151.toInt())
-        updatePullRefreshArc(depthPx = visualOffsetPx * 0.48f, armed = armed, color = hintColor)
-        val arcAlphaProgress = (visualOffsetPx / (pullRefreshTriggerDistancePx * 1.35f)).coerceIn(0f, 1f)
-        webViewPullRefreshHintArc.alpha = arcAlphaProgress * 0.42f
-
-        webViewPullRefreshHintText.text = getString(R.string.webview_pull_refresh_release)
-        webViewPullRefreshHintText.alpha = if (armed) {
-            ((progress - 0.92f) / 0.35f).coerceIn(0f, 1f)
-        } else {
-            0f
-        }
-        val rotationProgress = clamped + tensionPercent * 0.9f
-        webViewPullRefreshHintIcon.rotation = 320f * rotationProgress
-        webViewPullRefreshHintIcon.alpha = if (armed) 1f else (0.38f + 0.52f * clamped).coerceIn(0f, 1f)
-    }
-
-    private fun updatePullRefreshArc(depthPx: Float, armed: Boolean, color: Int) {
-        val arcDrawable = pullRefreshArcDrawable ?: return
-        arcDrawable.update(depthPx = depthPx, armed = armed, color = color)
-    }
-
-    private fun triggerPullRefresh() {
-        if (!webView.isVisible || isPullGestureRefreshing) {
-            return
-        }
-
-        val density = resources.displayMetrics.density
-        isPullGestureRefreshing = true
-        webViewPullRefreshHint.isVisible = true
-        webViewPullRefreshHintArc.isVisible = true
-        webViewPullRefreshHint.alpha = 1f
-        webViewPullRefreshHint.translationY = pullRefreshHintOffsetPx * 0.9f
-        webViewPullRefreshHintText.alpha = 0f
-        webViewPullRefreshHintIcon.rotation = 320f
-        webViewPullRefreshHintIcon.alpha = 1f
-        updatePullRefreshArc(depthPx = pullRefreshTriggerDistancePx * 0.42f, armed = true, color = Color.parseColor(if (isNightModeEnabled()) "#E5E7EB" else "#374151"))
-        webViewPullRefreshHintArc.alpha = 0.42f
-        webViewPullRefreshHint.animate()
-            .translationY(-18f * density)
-            .alpha(0f)
-            .setDuration(220)
-            .start()
-        webViewPullRefreshHintArc.animate()
-            .alpha(0f)
-            .setDuration(220)
-            .withEndAction {
-                webViewPullRefreshHint.isVisible = false
-                webViewPullRefreshHintArc.isVisible = false
-            }
-            .start()
         webView.reload()
-    }
-
-    private fun isNightModeEnabled(): Boolean {
-        return (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-            android.content.res.Configuration.UI_MODE_NIGHT_YES
-    }
-
-    private fun detectTouchChainCanScrollUp(rawX: Float, rawY: Float) {
-                val scriptTemplate = """
-                        (function(rawX, rawY) {
-                            try {
-                                const dpr = window.devicePixelRatio || 1;
-                                const x = rawX / dpr;
-                                const y = rawY / dpr;
-                                let node = document.elementFromPoint(x, y);
-                                while (node && node !== document.body && node !== document.documentElement) {
-                                    const style = window.getComputedStyle(node);
-                                    const overflowY = style ? style.overflowY : '';
-                                    const canScroll = node.scrollHeight > node.clientHeight + 1;
-                                    const scrollable = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
-                                    if (canScroll && scrollable && node.scrollTop > 0) return true;
-
-                                    const tag = (node.tagName || '').toUpperCase();
-                                    if ((tag === 'TEXTAREA' || node.isContentEditable) && node.scrollTop > 0) return true;
-
-                                    node = node.parentElement;
-                                }
-                                return false;
-                            } catch (e) {
-                                return false;
-                            }
-                        })(%1$.3f, %2$.3f);
-                """.trimIndent()
-
-        val script = String.format(Locale.US, scriptTemplate, rawX, rawY)
-        webView.evaluateJavascript(script) { result ->
-            isTouchChainCanScrollUp = result.equals("true", ignoreCase = true)
-        }
+        return true
     }
 
     private fun startBootstrap(forceRestart: Boolean) {
@@ -2376,7 +2299,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        webView.reload()
+        reloadTavernWebView()
     }
 
     private fun openBootstrapSettings(openDefaultExtensionsInstaller: Boolean = false) {

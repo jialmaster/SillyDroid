@@ -67,6 +67,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var dataPanelView: View
     private lateinit var quickFieldContainer: LinearLayout
     private lateinit var floatingLogsSwitch: MaterialSwitch
+    private lateinit var pullRefreshSwitch: MaterialSwitch
     private lateinit var extensionsPanelView: View
     private lateinit var extensionsListContainer: LinearLayout
     private lateinit var extensionsEmptyView: TextView
@@ -169,6 +170,10 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         floatingLogsSwitch.setOnCheckedChangeListener { _, isChecked ->
             hostConfigStore.floatingLogBubbleEnabled = isChecked
         }
+        pullRefreshSwitch.isChecked = hostConfigStore.webViewPullRefreshEnabled
+        pullRefreshSwitch.setOnCheckedChangeListener { _, isChecked ->
+            hostConfigStore.webViewPullRefreshEnabled = isChecked
+        }
         importButton.setOnClickListener {
             importArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
         }
@@ -248,6 +253,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         dataPanelView = findViewById(R.id.bootstrapSettingsDataPanel)
         quickFieldContainer = findViewById(R.id.bootstrapSettingsQuickFieldContainer)
         floatingLogsSwitch = findViewById(R.id.bootstrapSettingsFloatingLogsSwitch)
+        pullRefreshSwitch = findViewById(R.id.bootstrapSettingsPullRefreshSwitch)
         extensionsPanelView = findViewById(R.id.bootstrapSettingsExtensionsPanel)
         extensionsListContainer = findViewById(R.id.bootstrapSettingsExtensionsListContainer)
         extensionsEmptyView = findViewById(R.id.bootstrapSettingsExtensionsEmpty)
@@ -299,6 +305,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             loadingIndicator = loadingIndicator,
             searchLayout = searchLayout,
             floatingLogsSwitch = floatingLogsSwitch,
+            pullRefreshSwitch = pullRefreshSwitch,
             restoreDefaultsButton = restoreDefaultsButton,
             importButton = importButton,
             exportButton = exportButton,

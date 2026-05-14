@@ -6,7 +6,7 @@
     <div class="inline-drawer-content">
         <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;">
             <strong>安卓宿主扩展设置</strong>
-            <span style="opacity:0.82;">这里提供悬浮球、消息通知、打开设置和版本说明。</span>
+            <span style="opacity:0.82;">这里提供悬浮球、下拉刷新、消息通知、打开设置和版本说明。</span>
         </div>
         <div id="sillydroid_android_host_version_summary" style="margin-bottom:12px;opacity:0.92;">
             宿主桥不可用
@@ -15,12 +15,17 @@
             <input id="sillydroid_android_host_floating_bubble" type="checkbox" />
             <span>启用悬浮球</span>
         </label>
+        <label class="checkbox_label" for="sillydroid_android_host_pull_refresh" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <input id="sillydroid_android_host_pull_refresh" type="checkbox" />
+            <span>启用下拉刷新（会和悬浮小组件的拖动功能冲突，谨慎开启）</span>
+        </label>
         <label class="checkbox_label" for="sillydroid_android_host_notification" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
             <input id="sillydroid_android_host_notification" type="checkbox" />
             <span>启用消息通知</span>
         </label>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
             <button id="sillydroid_android_host_open_settings" class="menu_button" type="button">打开设置</button>
+            <button id="sillydroid_android_host_reload_tavern" class="menu_button" type="button">刷新页面</button>
             <button id="sillydroid_android_host_version_info" class="menu_button" type="button">版本说明</button>
         </div>
     </div>

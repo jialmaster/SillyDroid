@@ -79,7 +79,8 @@ internal data class StartupState(
     val message: String = "正在准备 SillyDroid 宿主环境。",
     val details: String = "",
     val localUrl: String = BootConfig.localServiceUrl,
-    val progressPercent: Int = phase.defaultProgressPercent
+    val progressPercent: Int = phase.defaultProgressPercent,
+    val phaseStartedAtMillis: Long = 0L
 ) {
     val isReady: Boolean
         get() = phase == StartupPhase.READY
@@ -88,12 +89,26 @@ internal data class StartupState(
         get() = phase == StartupPhase.BLOCKED || phase == StartupPhase.ERROR
 }
 
+internal val StartupState.shouldPreferTavernServerLog: Boolean
+    get() = phase == StartupPhase.STARTING_SERVER ||
+        phase == StartupPhase.WAITING_READY ||
+        phase == StartupPhase.READY
+
 internal object StartupRuntimeStore {
     private val mutableState = MutableStateFlow(StartupState())
     val state = mutableState.asStateFlow()
 
     fun update(state: StartupState) {
-        mutableState.value = state
+        val previousState = mutableState.value
+        val nowMillis = System.currentTimeMillis()
+        val resolvedPhaseStartedAtMillis = when {
+            state.phaseStartedAtMillis > 0L -> state.phaseStartedAtMillis
+            previousState.phase == state.phase && previousState.phaseStartedAtMillis > 0L ->
+                previousState.phaseStartedAtMillis
+            else -> nowMillis
+        }
+
+        mutableState.value = state.copy(phaseStartedAtMillis = resolvedPhaseStartedAtMillis)
     }
 }
 

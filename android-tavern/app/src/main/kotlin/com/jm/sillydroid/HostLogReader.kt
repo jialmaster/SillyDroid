@@ -27,9 +27,10 @@ internal object HostLogReader {
     private const val defaultMaxChars = 320_000
     private const val defaultMaxBytes = 768 * 1024
     private const val defaultMaxLines = 6_000
+    private const val startupLogFileName = "startup.log"
 
     private val visibleLogFileNames = linkedSetOf(
-        "startup.log",
+        startupLogFileName,
         "sillydroid-server.log",
         "rootfs-runtime.log"
     )
@@ -126,6 +127,51 @@ internal object HostLogReader {
         )
     }
 
+    fun readLastNonBlankLine(logFile: File, maxChars: Int = 220): String {
+        if (!logFile.isFile || !logFile.extension.equals("log", ignoreCase = true)) {
+            return ""
+        }
+
+        val totalBytes = logFile.length()
+        if (totalBytes <= 0L) {
+            return ""
+        }
+
+        val readBytes = 16 * 1024
+        val startOffset = (totalBytes - readBytes).coerceAtLeast(0L)
+        val buffer = ByteArray((totalBytes - startOffset).toInt())
+        RandomAccessFile(logFile, "r").use { input ->
+            input.seek(startOffset)
+            input.readFully(buffer)
+        }
+
+        var content = buffer.toString(Charsets.UTF_8)
+        if (startOffset > 0L) {
+            content = trimLeadingPartialLine(content)
+        }
+
+        val lastLine = content.lineSequence()
+            .map { it.trimEnd() }
+            .lastOrNull { it.isNotBlank() }
+            .orEmpty()
+
+        if (lastLine.isBlank()) {
+            return ""
+        }
+
+        val normalizedLine = if (logFile.name.equals(startupLogFileName, ignoreCase = true)) {
+            normalizeLegacyStartupLogLine(lastLine)
+        } else {
+            lastLine
+        }
+
+        if (normalizedLine.length <= maxChars) {
+            return normalizedLine
+        }
+
+        return normalizedLine.takeLast(maxChars)
+    }
+
     private fun formatTimestamp(lastModified: Long): String {
         return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(lastModified))
     }
@@ -197,6 +243,10 @@ internal object HostLogReader {
             truncated = true
         }
 
+        if (logFile.name.equals(startupLogFileName, ignoreCase = true)) {
+            content = normalizeLegacyStartupLogTimestamps(content)
+        }
+
         if (!truncated || content.isBlank()) {
             return content
         }
@@ -208,6 +258,35 @@ internal object HostLogReader {
         }
     }
 
+    private fun normalizeLegacyStartupLogTimestamps(content: String): String {
+        if (content.isBlank()) {
+            return content
+        }
+
+        return content.lineSequence()
+            .joinToString(separator = "\n") { line -> normalizeLegacyStartupLogLine(line) }
+    }
+
+    private fun normalizeLegacyStartupLogLine(line: String): String {
+        val firstSpaceIndex = line.indexOf(' ')
+        if (firstSpaceIndex != 13) {
+            return line
+        }
+
+        val epochMillis = line.substring(0, firstSpaceIndex).toLongOrNull() ?: return line
+        val formattedPrefix = formatTimestampWithMillis(epochMillis)
+        val payload = line.substring(firstSpaceIndex + 1)
+        return if (payload.isBlank()) {
+            formattedPrefix
+        } else {
+            "$formattedPrefix $payload"
+        }
+    }
+
+    private fun formatTimestampWithMillis(epochMillis: Long): String {
+        return SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date(epochMillis))
+    }
+
     private fun trimLeadingPartialLine(content: String): String {
         val firstLineBreak = content.indexOf('\n')
         if (firstLineBreak <= 0 || firstLineBreak >= content.lastIndex) {
@@ -217,4 +296,3 @@ internal object HostLogReader {
         return content.substring(firstLineBreak + 1)
     }
 }
-

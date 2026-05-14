@@ -9,7 +9,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
-import android.os.FileObserver
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -17,12 +16,17 @@ import androidx.core.app.NotificationManagerCompat
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,6 +37,11 @@ class StartupCoordinatorService : Service() {
         private const val ACTION_START = "com.jm.sillydroid.action.START"
         private const val ACTION_RETRY = "com.jm.sillydroid.action.RETRY"
         private const val ACTION_STOP_FOR_SETTINGS = "com.jm.sillydroid.action.STOP_FOR_SETTINGS"
+        private const val readyWatchdogIntervalMillis = 5_000L
+        private const val readyWatchdogFailureThreshold = 3
+        private const val autoRestartDelayMillis = 1_500L
+        private const val autoRestartWindowMillis = 60_000L
+        private const val autoRestartAttemptLimit = 3
 
         fun createStartIntent(context: Context, retry: Boolean = false): Intent {
             return Intent(context, StartupCoordinatorService::class.java).apply {
@@ -50,10 +59,14 @@ class StartupCoordinatorService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var bootstrapJob: Job? = null
     private var serverMonitorJob: Job? = null
+    private var readyWatchdogJob: Job? = null
     private var serverProcess: ManagedProcess? = null
-    private var serverLogObserver: FileObserver? = null
-    private var startupPhaseBaseDetails: String? = null
-    private var lastObservedServerLogLine = ""
+    private var autoRestartWindowStartedAtMs = 0L
+    private var autoRestartAttemptCount = 0
+    private val startupLogSessionId = AtomicLong(0L)
+    private val startupLogWriter by lazy(LazyThreadSafetyMode.NONE) {
+        StartupLogWriter { startupLogFile }
+    }
     private val startupLogFile: File
         get() = File(filesDir, "android-tavern/logs/startup.log")
     private val serverLogFile: File
@@ -86,14 +99,14 @@ class StartupCoordinatorService : Service() {
             startForeground(BootConfig.notificationId, notification)
         }
         startBootstrap(retry)
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onDestroy() {
         bootstrapJob?.cancel()
-        stopServerLogObserver()
         stopManagedProcesses()
         serviceScope.cancel()
+        startupLogWriter.close()
         super.onDestroy()
     }
 
@@ -125,7 +138,7 @@ class StartupCoordinatorService : Service() {
 
     private suspend fun runBootstrap() {
         resetStartupLog()
-        stopServerLogObserver()
+        stopReadyWatchdog()
         try {
             val paths = HostPaths.from(applicationContext)
             val initialLocalUrl = BootConfig.localServiceUrl(applicationContext)
@@ -133,6 +146,7 @@ class StartupCoordinatorService : Service() {
 
             if (HealthProbe.isReady(initialReadinessUrl)) {
                 appendStartupLog("Detected existing local Tavern server at $initialLocalUrl, reusing current instance.")
+                resetAutoRestartBudget()
                 updateState(
                     StartupState(
                         phase = StartupPhase.READY,
@@ -141,6 +155,7 @@ class StartupCoordinatorService : Service() {
                         progressPercent = 100
                     )
                 )
+                startReadyWatchdog(initialReadinessUrl, initialLocalUrl)
                 return
             }
 
@@ -225,7 +240,7 @@ class StartupCoordinatorService : Service() {
                 throw BootstrapException("本地 Tavern 服务在等待窗口内未就绪。")
             }
 
-            stopServerLogObserver()
+            resetAutoRestartBudget()
             updateState(
                 StartupState(
                     phase = StartupPhase.READY,
@@ -235,13 +250,14 @@ class StartupCoordinatorService : Service() {
                 )
             )
             startServerMonitor()
+            startReadyWatchdog(readinessUrl, localUrl)
         } catch (_: CancellationException) {
             appendStartupLog("Bootstrap cancelled.")
-            stopServerLogObserver()
+            stopReadyWatchdog()
         } catch (exception: BootstrapException) {
             appendStartupLog("BootstrapException: ${exception.message ?: exception.javaClass.simpleName}")
             appendStartupLog(formatThrowable(exception))
-            stopServerLogObserver()
+            stopReadyWatchdog()
             updateState(
                 StartupState(
                     phase = StartupPhase.BLOCKED,
@@ -252,7 +268,7 @@ class StartupCoordinatorService : Service() {
         } catch (exception: Exception) {
             appendStartupLog("Exception: ${exception.message ?: exception.javaClass.simpleName}")
             appendStartupLog(formatThrowable(exception))
-            stopServerLogObserver()
+            stopReadyWatchdog()
             updateState(
                 StartupState(
                     phase = StartupPhase.ERROR,
@@ -266,7 +282,8 @@ class StartupCoordinatorService : Service() {
     private suspend fun interruptForSettings() {
         bootstrapJob?.cancel(CancellationException("Interrupted for bootstrap settings."))
         bootstrapJob = null
-        stopServerLogObserver()
+        stopReadyWatchdog()
+        resetAutoRestartBudget()
         updateState(
             StartupState(
                 phase = StartupPhase.PAUSING,
@@ -314,13 +331,20 @@ class StartupCoordinatorService : Service() {
     }
 
     private fun resetStartupLog() {
-        startupLogFile.parentFile?.mkdirs()
-        startupLogFile.writeText("")
+        val sessionId = startupLogSessionId.incrementAndGet()
+        startupLogWriter.reset(sessionId)
     }
 
     private fun appendStartupLog(message: String) {
-        startupLogFile.parentFile?.mkdirs()
-        startupLogFile.appendText("${System.currentTimeMillis()} $message\n")
+        val sessionId = startupLogSessionId.get()
+        startupLogWriter.append(
+            sessionId = sessionId,
+            line = "${formatStartupLogTimestamp(System.currentTimeMillis())} $message\n"
+        )
+    }
+
+    private fun formatStartupLogTimestamp(epochMillis: Long): String {
+        return SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date(epochMillis))
     }
 
     private fun updateStartupPhaseState(
@@ -330,105 +354,15 @@ class StartupCoordinatorService : Service() {
         localUrl: String,
         progressPercent: Int
     ) {
-        startupPhaseBaseDetails = baseDetails
-        ensureServerLogObserverStarted()
-        lastObservedServerLogLine = readServerLogLastLine()
         updateState(
             StartupState(
                 phase = phase,
                 message = message,
-                details = buildStartupPhaseDetails(baseDetails),
+                details = baseDetails,
                 localUrl = localUrl,
                 progressPercent = progressPercent
             )
         )
-    }
-
-    private fun ensureServerLogObserverStarted() {
-        if (serverLogObserver != null) {
-            return
-        }
-
-        val logsDir = serverLogFile.parentFile?.apply {
-            mkdirs()
-        } ?: return
-        val mask = FileObserver.CREATE or FileObserver.MODIFY or FileObserver.CLOSE_WRITE or FileObserver.MOVED_TO or FileObserver.DELETE
-        serverLogObserver = object : FileObserver(logsDir, mask) {
-            override fun onEvent(event: Int, path: String?) {
-                if (path != null && !path.equals(serverLogFile.name, ignoreCase = true)) {
-                    return
-                }
-
-                serviceScope.launch {
-                    refreshStartupPhaseLogTail()
-                }
-            }
-        }.also { observer ->
-            observer.startWatching()
-        }
-    }
-
-    private fun stopServerLogObserver() {
-        serverLogObserver?.stopWatching()
-        serverLogObserver = null
-        startupPhaseBaseDetails = null
-        lastObservedServerLogLine = ""
-    }
-
-    private fun refreshStartupPhaseLogTail() {
-        val currentState = StartupRuntimeStore.state.value
-        val baseDetails = startupPhaseBaseDetails ?: return
-        if (currentState.phase != StartupPhase.STARTING_SERVER && currentState.phase != StartupPhase.WAITING_READY) {
-            return
-        }
-
-        val latestLine = readServerLogLastLine()
-        if (latestLine == lastObservedServerLogLine) {
-            return
-        }
-
-        lastObservedServerLogLine = latestLine
-        val updatedDetails = buildStartupPhaseDetails(baseDetails)
-        if (updatedDetails == currentState.details) {
-            return
-        }
-
-        updateState(currentState.copy(details = updatedDetails))
-    }
-
-    private fun buildStartupPhaseDetails(baseDetails: String): String {
-        val lastServerLogLine = readServerLogLastLine()
-        if (lastServerLogLine.isBlank()) {
-            return baseDetails
-        }
-
-        return buildString {
-            append(baseDetails)
-            append('\n')
-            append(getString(R.string.bootstrap_startup_tavern_log_tail, lastServerLogLine))
-        }
-    }
-
-    private fun readServerLogLastLine(maxChars: Int = 220): String {
-        val lastLine = runCatching {
-            if (!serverLogFile.exists()) {
-                return@runCatching ""
-            }
-
-            serverLogFile.useLines { lines ->
-                lines
-                    .map { it.trimEnd() }
-                    .filter { it.isNotBlank() }
-                    .lastOrNull()
-                    .orEmpty()
-            }
-        }.getOrDefault("")
-
-        if (lastLine.length <= maxChars) {
-            return lastLine
-        }
-
-        return lastLine.takeLast(maxChars)
     }
 
     private fun readServerLogExcerpt(maxLines: Int = 24, maxChars: Int = 1800): String {
@@ -537,20 +471,113 @@ class StartupCoordinatorService : Service() {
             appendStartupLog("Server process exited unexpectedly. exitCode=$exitCode")
             recordServerExitDiagnostics(details)
             serverProcess = null
+            scheduleAutoRestart(
+                message = "本地 Tavern 服务已退出，正在自动重启。",
+                details = details
+            )
+        }
+    }
+
+    private fun startReadyWatchdog(readinessUrl: String, localUrl: String) {
+        readyWatchdogJob?.cancel()
+        readyWatchdogJob = serviceScope.launch {
+            var consecutiveFailures = 0
+            while (isActive) {
+                delay(readyWatchdogIntervalMillis)
+                if (HealthProbe.isReady(readinessUrl)) {
+                    consecutiveFailures = 0
+                    continue
+                }
+
+                consecutiveFailures += 1
+                appendStartupLog(
+                    "Ready watchdog probe failed ($consecutiveFailures/$readyWatchdogFailureThreshold): $readinessUrl"
+                )
+                if (consecutiveFailures < readyWatchdogFailureThreshold) {
+                    continue
+                }
+
+                serverProcess = null
+                scheduleAutoRestart(
+                    message = "本地 Tavern 服务失去响应，正在自动重启。",
+                    details = buildString {
+                        append("连续 ")
+                        append(readyWatchdogFailureThreshold)
+                        append(" 次探针检测失败：")
+                        append(localUrl)
+                    },
+                    localUrl = localUrl
+                )
+                return@launch
+            }
+        }
+    }
+
+    private fun stopReadyWatchdog() {
+        readyWatchdogJob?.cancel()
+        readyWatchdogJob = null
+    }
+
+    private fun scheduleAutoRestart(
+        message: String,
+        details: String,
+        localUrl: String = BootConfig.localServiceUrl(applicationContext)
+    ) {
+        stopReadyWatchdog()
+        val attempt = recordAutoRestartAttempt() ?: run {
             updateState(
                 StartupState(
                     phase = StartupPhase.ERROR,
-                    message = "本地 Tavern 服务已退出。",
+                    message = "本地 Tavern 服务反复异常，已停止自动重启。",
                     details = details,
+                    localUrl = localUrl,
                     progressPercent = 0
                 )
             )
+            return
         }
+
+        updateState(
+            StartupState(
+                phase = StartupPhase.STARTING_SERVER,
+                message = message,
+                details = "正在执行第 $attempt 次自动重启。\n$details",
+                localUrl = localUrl,
+                progressPercent = 94
+            )
+        )
+
+        bootstrapJob?.cancel()
+        bootstrapJob = serviceScope.launch {
+            delay(autoRestartDelayMillis)
+            stopManagedProcesses()
+            runBootstrap()
+        }
+    }
+
+    private fun recordAutoRestartAttempt(nowMs: Long = System.currentTimeMillis()): Int? {
+        if (autoRestartWindowStartedAtMs == 0L || nowMs - autoRestartWindowStartedAtMs > autoRestartWindowMillis) {
+            autoRestartWindowStartedAtMs = nowMs
+            autoRestartAttemptCount = 0
+        }
+
+        if (autoRestartAttemptCount >= autoRestartAttemptLimit) {
+            return null
+        }
+
+        autoRestartAttemptCount += 1
+        return autoRestartAttemptCount
+    }
+
+    private fun resetAutoRestartBudget() {
+        autoRestartWindowStartedAtMs = 0L
+        autoRestartAttemptCount = 0
     }
 
     private fun stopManagedProcesses() {
         serverMonitorJob?.cancel()
         serverMonitorJob = null
+        stopReadyWatchdog()
         serverProcess?.stop()
         serverProcess = null
         val cleanedProcessCount = ServerProcessJanitor.cleanupLingeringServerProcesses()
@@ -559,5 +586,3 @@ class StartupCoordinatorService : Service() {
         }
     }
 }
-
-
