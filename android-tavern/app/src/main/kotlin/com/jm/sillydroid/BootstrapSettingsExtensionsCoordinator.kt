@@ -1895,7 +1895,9 @@ internal class BootstrapSettingsExtensionsCoordinator(
         failureMessage: (String) -> String
     ): String {
         paths.ensureWorkingDirectories()
-        runtimeProvisioner.ensure()
+        runtimeProvisioner.ensure(
+            logFileName = HostLogManager.currentRootfsRuntimeLogFileName(activity)
+        )
 
         val maintenanceRoot = File(paths.serverDataDir, ".sillydroid-maintenance")
         val serverMaintenanceRoot = File(paths.bootstrapRoot, "server/.sillydroid-maintenance")
@@ -1907,7 +1909,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
         commandScript.writeText(commandContent)
         launchScript.writeText(extensionRuntimeScript())
 
-        val logPath = File(paths.logsDir, "$requestName.log").absolutePath
+        val resolvedLogFileName = HostLogManager.runtimeLogFileName(requestName)
+        val logPath = File(paths.logsDir, resolvedLogFileName).absolutePath
         val progressFile = File(maintenanceRoot, "$requestName.progress.json")
         val guestProgressFile = "/tavern/data/.sillydroid-maintenance/${progressFile.name}"
         progressFile.delete()
@@ -1919,7 +1922,8 @@ internal class BootstrapSettingsExtensionsCoordinator(
                 "APP_DATA_ROOT" to paths.serverDataDir.absolutePath,
                 "COMMAND_JS" to "/tavern/server/.sillydroid-maintenance/$commandFileName",
                 "SILLYDROID_EXTENSION_PROGRESS_FILE" to guestProgressFile
-            )
+            ),
+            logFileName = resolvedLogFileName
         )
         val process = launcher.start(request)
         var lastProgressPayload: String? = null

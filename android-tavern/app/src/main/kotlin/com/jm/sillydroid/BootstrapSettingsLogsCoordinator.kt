@@ -12,8 +12,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 internal class BootstrapSettingsLogsCoordinator(
     private val activity: AppCompatActivity,
@@ -25,10 +23,11 @@ internal class BootstrapSettingsLogsCoordinator(
     private val selectButton: MaterialButton,
     private val exportButton: MaterialButton,
     private val reloadButton: MaterialButton,
+    private val clearButton: MaterialButton,
     private val setBusy: (Boolean) -> Unit,
     private val showError: (String) -> Unit,
     private val showMessage: (String) -> Unit,
-    private val requestExport: (String) -> Unit
+    private val requestExport: () -> Unit
 ) {
     private var busy = false
     private var currentSnapshot: HostLogSnapshot? = null
@@ -40,12 +39,13 @@ internal class BootstrapSettingsLogsCoordinator(
             showLogSelectionDialog()
         }
         exportButton.setOnClickListener {
-            val snapshot = currentSnapshot ?: return@setOnClickListener
-            val zipName = snapshot.fileName.removeSuffix(".log") + "-log.zip"
-            requestExport(zipName)
+            requestExport()
         }
         reloadButton.setOnClickListener {
             reloadLatestLog()
+        }
+        clearButton.setOnClickListener {
+            confirmClearAllLogs()
         }
         scrollToBottomButton.setOnClickListener {
             scrollToBottom()
@@ -56,31 +56,18 @@ internal class BootstrapSettingsLogsCoordinator(
         renderSnapshot()
     }
 
-    fun exportCurrentLog(targetUri: Uri) {
-        val snapshot = currentSnapshot ?: run {
-            showError(activity.getString(R.string.bootstrap_settings_logs_export_failed))
-            return
-        }
-
+    fun exportLogBundle(targetUri: Uri) {
         activity.lifecycleScope.launch {
             setBusyState(true)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    activity.contentResolver.openOutputStream(targetUri)?.use { output ->
-                        ZipOutputStream(output).use { zipOut ->
-                            zipOut.putNextEntry(ZipEntry(snapshot.fileName))
-                            snapshot.sourceFile.inputStream().use { input ->
-                                input.copyTo(zipOut)
-                            }
-                            zipOut.closeEntry()
-                        }
-                    } ?: throw IllegalStateException("Failed to open export target.")
+                    HostLogManager.exportToUri(activity, targetUri)
                 }
             }
             setBusyState(false)
 
-            result.onSuccess {
-                showMessage(activity.getString(R.string.bootstrap_settings_logs_export_success, snapshot.displayName))
+            result.onSuccess { export ->
+                showMessage(activity.getString(R.string.bootstrap_settings_logs_export_success, export.bundleFileName))
             }.onFailure {
                 showError(activity.getString(R.string.bootstrap_settings_logs_export_failed))
             }
@@ -112,7 +99,7 @@ internal class BootstrapSettingsLogsCoordinator(
     }
 
     private fun loadLatestLogSnapshot(): HostLogSnapshot? {
-        currentEntries = HostLogReader.listEntries(activity)
+        currentEntries = HostLogManager.listEntries(activity)
         if (currentEntries.isEmpty()) {
             selectedLogPath = null
             return null
@@ -126,9 +113,9 @@ internal class BootstrapSettingsLogsCoordinator(
         }
 
         return if (selectedEntry != null) {
-            HostLogReader.readSnapshot(activity, selectedEntry.sourceFile, entry = selectedEntry)
+            HostLogManager.readSnapshot(activity, selectedEntry.sourceFile, entry = selectedEntry)
         } else {
-            HostLogReader.readPreferredSnapshot(
+            HostLogManager.readPreferredSnapshot(
                 context = activity,
                 preferTavernServerLog = StartupRuntimeStore.state.value.shouldPreferTavernServerLog,
                 entries = currentEntries
@@ -138,8 +125,9 @@ internal class BootstrapSettingsLogsCoordinator(
 
     private fun renderSnapshot() {
         selectButton.isEnabled = !busy && currentEntries.isNotEmpty()
-        exportButton.isEnabled = !busy && currentSnapshot != null
+        exportButton.isEnabled = !busy
         reloadButton.isEnabled = !busy
+        clearButton.isEnabled = !busy
         val snapshot = currentSnapshot
         emptyView.isVisible = snapshot == null
         metaView.isVisible = snapshot != null
@@ -187,7 +175,7 @@ internal class BootstrapSettingsLogsCoordinator(
             setBusyState(true)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    HostLogReader.listEntries(activity)
+                    HostLogManager.listEntries(activity)
                 }
             }
             setBusyState(false)
@@ -227,6 +215,44 @@ internal class BootstrapSettingsLogsCoordinator(
                     .show()
             }.onFailure { exception ->
                 showError(exception.message ?: activity.getString(R.string.bootstrap_settings_logs_load_failed))
+            }
+        }
+    }
+
+    private fun confirmClearAllLogs() {
+        if (busy) {
+            return
+        }
+
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.bootstrap_settings_logs_clear_confirm_title)
+            .setMessage(R.string.bootstrap_settings_logs_clear_confirm_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.bootstrap_settings_logs_clear) { _, _ ->
+                clearAllLogs()
+            }
+            .show()
+    }
+
+    private fun clearAllLogs() {
+        activity.lifecycleScope.launch {
+            setBusyState(true)
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    HostLogManager.clearAllLogs(activity)
+                }
+            }
+            setBusyState(false)
+
+            result.onSuccess {
+                selectedLogPath = null
+                currentEntries = emptyList()
+                currentSnapshot = null
+                renderSnapshot()
+                showMessage(activity.getString(R.string.bootstrap_settings_logs_clear_success))
+                reloadLatestLog()
+            }.onFailure { exception ->
+                showError(exception.message ?: activity.getString(R.string.bootstrap_settings_logs_clear_failed))
             }
         }
     }

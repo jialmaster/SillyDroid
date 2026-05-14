@@ -9,19 +9,21 @@
         android:id="@+id/webViewRefreshLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:background="@color/tavern_webview_background"
         android:visibility="gone">
 
         <WebView
             android:id="@+id/webView"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_height="match_parent"
+            android:background="@color/tavern_webview_background" />
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
     <LinearLayout
         android:id="@+id/bootstrapOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#FFF7F7F7"
+        android:background="@color/bootstrap_overlay_background"
         android:orientation="vertical"
         android:padding="@dimen/sillydroid_space_3xl">
 
@@ -49,7 +51,7 @@
                 android:layout_marginBottom="@dimen/sillydroid_space_4xl"
                 android:text="@string/bootstrap_progress_indeterminate"
                 android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-                android:textColor="#6B7280" />
+                android:textColor="@color/bootstrap_overlay_secondary_text" />
 
             <TextView
                 android:id="@+id/bootstrapTitle"
@@ -58,7 +60,7 @@
                 android:layout_marginBottom="@dimen/sillydroid_space_md"
                 android:text="@string/bootstrap_title"
                 android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
-                android:textColor="#111827" />
+                android:textColor="@color/bootstrap_overlay_title" />
 
             <TextView
                 android:id="@+id/bootstrapStatus"
@@ -67,7 +69,7 @@
                 android:gravity="center"
                 android:text="@string/bootstrap_idle"
                 android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
-                android:textColor="#374151" />
+                android:textColor="@color/bootstrap_overlay_body" />
 
             <Button
                 android:id="@+id/bootstrapRetry"
@@ -103,7 +105,7 @@
                 android:contentDescription="@string/bootstrap_update_open"
                 android:padding="@dimen/sillydroid_overlay_icon_button_padding"
                 android:src="@android:drawable/stat_sys_download_done"
-                android:tint="#111827" />
+                android:tint="@color/bootstrap_overlay_icon_tint" />
 
             <View
                 android:id="@+id/bootstrapUpdateBadge"
@@ -125,7 +127,7 @@
             android:contentDescription="@string/bootstrap_settings_open"
             android:padding="@dimen/sillydroid_overlay_icon_button_padding"
             android:src="@drawable/ic_bootstrap_settings"
-            android:tint="#111827" />
+            android:tint="@color/bootstrap_overlay_icon_tint" />
     </LinearLayout>
 
     <com.google.android.material.card.MaterialCardView
@@ -165,30 +167,6 @@
                     android:textColor="@color/floating_logs_panel_title"
                     android:textAppearance="@style/TextAppearance.SillyDroid.SettingsSectionTitle" />
 
-                <ImageButton
-                    android:id="@+id/floatingLogsReloadWebViewButton"
-                    android:layout_width="@dimen/sillydroid_compact_icon_button_size"
-                    android:layout_height="@dimen/sillydroid_compact_icon_button_size"
-                    android:layout_marginStart="@dimen/sillydroid_space_sm"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/floating_logs_reload_webview"
-                    android:padding="@dimen/sillydroid_compact_icon_button_padding"
-                    android:scaleType="center"
-                    android:src="@drawable/ic_restore_defaults"
-                    android:tint="@color/floating_logs_panel_secondary_text" />
-
-                <ImageButton
-                    android:id="@+id/floatingLogsDownloadButton"
-                    android:layout_width="@dimen/sillydroid_compact_icon_button_size"
-                    android:layout_height="@dimen/sillydroid_compact_icon_button_size"
-                    android:layout_marginStart="@dimen/sillydroid_space_sm"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/floating_logs_download"
-                    android:padding="@dimen/sillydroid_compact_icon_button_padding"
-                    android:scaleType="center"
-                    android:src="@drawable/ic_download"
-                    android:tint="@color/floating_logs_panel_secondary_text" />
-
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/floatingLogsSelectButton"
                     style="@style/Widget.SillyDroid.FloatingLogsCompactButton"
@@ -213,13 +191,13 @@
 
                 <ImageButton
                     android:id="@+id/floatingLogsCloseButton"
-                    android:layout_width="@dimen/sillydroid_compact_icon_button_size"
-                    android:layout_height="@dimen/sillydroid_compact_icon_button_size"
+                    android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
+                    android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
                     android:layout_marginStart="@dimen/sillydroid_space_xs"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/floating_logs_panel_close"
-                    android:padding="@dimen/sillydroid_compact_icon_button_padding"
-                    android:scaleType="center"
+                    android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
+                    android:scaleType="centerInside"
                     android:src="@drawable/ic_close"
                     android:tint="@color/floating_logs_panel_secondary_text" />
             </LinearLayout>
@@ -280,18 +258,59 @@
 
                 <ImageButton
                     android:id="@+id/floatingLogsScrollToBottomButton"
-                    android:layout_width="@dimen/sillydroid_compact_icon_button_size"
-                    android:layout_height="@dimen/sillydroid_compact_icon_button_size"
+                    android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
+                    android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
                     android:layout_gravity="bottom|end"
                     android:layout_margin="6dp"
                     android:background="@drawable/bg_floating_logs_panel_surface"
                     android:contentDescription="@string/floating_logs_scroll_to_bottom"
-                    android:padding="@dimen/sillydroid_compact_icon_button_padding"
-                    android:scaleType="center"
+                    android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
+                    android:scaleType="centerInside"
                     android:src="@drawable/ic_scroll_to_bottom"
                     android:tint="@color/floating_logs_panel_secondary_text"
                     android:visibility="gone" />
             </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/sillydroid_space_sm"
+                android:gravity="start|center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/floatingLogsReloadWebViewButton"
+                    style="@style/Widget.SillyDroid.FloatingLogsCompactButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/floating_logs_reload_webview_button" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/floatingLogsDownloadButton"
+                    style="@style/Widget.SillyDroid.FloatingLogsCompactButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/sillydroid_space_sm"
+                    android:text="@string/floating_logs_download_button" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/floatingLogsClearButton"
+                    style="@style/Widget.SillyDroid.FloatingLogsCompactButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/sillydroid_space_sm"
+                    android:text="@string/floating_logs_clear_button"
+                    android:textColor="?attr/colorError"
+                    app:strokeColor="?attr/colorError" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/floatingLogsOpenSettingsButton"
+                    style="@style/Widget.SillyDroid.FloatingLogsCompactButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/sillydroid_space_sm"
+                    android:text="@string/floating_logs_open_settings_button" />
+            </LinearLayout>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 

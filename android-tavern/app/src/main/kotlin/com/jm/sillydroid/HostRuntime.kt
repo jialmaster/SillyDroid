@@ -147,7 +147,7 @@ internal data class HostPaths(
                 hostProotLoader32 = File(hostNativeLibDir, "libproot-loader32.so"),
                 dataRoot = dataRoot,
                 serverDataDir = File(dataRoot, "server"),
-                logsDir = File(context.filesDir, "android-tavern/logs")
+                logsDir = resolveHostLogsDir(context)
             )
         }
     }
@@ -160,6 +160,10 @@ internal data class HostPaths(
                 }
             }
     }
+}
+
+internal fun resolveHostLogsDir(context: Context): File {
+    return File(context.applicationContext.filesDir, "android-tavern/logs")
 }
 
 internal class AssetExtractor(private val context: Context) {
@@ -826,7 +830,8 @@ internal data class LaunchRequest(
     val name: String,
     val scriptFile: File,
     val workingDirectory: File,
-    val environment: Map<String, String>
+    val environment: Map<String, String>,
+    val logFileName: String = HostLogManager.runtimeLogFileName(name)
 )
 
 internal class ManagedProcess(
@@ -986,7 +991,7 @@ internal class LinuxRuntimeLauncher(private val paths: HostPaths) {
 
         request.scriptFile.setExecutable(true)
 
-        val logFile = File(paths.logsDir, "${request.name}.log")
+        val logFile = File(paths.logsDir, request.logFileName)
         logFile.parentFile?.mkdirs()
 
         val processBuilder = ProcessBuilder("/system/bin/sh", request.scriptFile.absolutePath)
@@ -1018,12 +1023,13 @@ internal class RootfsRuntimeProvisioner(
     private val launcher: LinuxRuntimeLauncher,
     private val paths: HostPaths
 ) {
-    fun ensure(onHeartbeat: (elapsedSeconds: Int) -> Unit = {}) {
+    fun ensure(logFileName: String, onHeartbeat: (elapsedSeconds: Int) -> Unit = {}) {
         val request = LaunchRequest(
             name = "rootfs-runtime",
             scriptFile = File(paths.scriptsDir, "ensure-rootfs-runtime.sh"),
             workingDirectory = paths.bootstrapRoot,
-            environment = emptyMap()
+            environment = emptyMap(),
+            logFileName = logFileName
         )
         val process = launcher.start(request)
         var elapsedSeconds = 0
@@ -1033,7 +1039,7 @@ internal class RootfsRuntimeProvisioner(
         }
         val exitCode = process.waitFor()
         if (exitCode != 0) {
-            throw IllegalStateException("Linux 离线运行时校验失败，请查看 android-tavern/logs/rootfs-runtime.log。")
+            throw IllegalStateException("Linux 离线运行时校验失败，请查看当前 app 启动对应的 rootfs-runtime 日志。")
         }
     }
 }
@@ -1041,7 +1047,8 @@ internal class RootfsRuntimeProvisioner(
 internal class ServerController(
     private val launcher: LinuxRuntimeLauncher,
     private val paths: HostPaths,
-    private val servicePort: Int
+    private val servicePort: Int,
+    private val logFileName: String
 ) {
     fun start(): ManagedProcess {
         val request = LaunchRequest(
@@ -1051,13 +1058,18 @@ internal class ServerController(
             environment = mapOf(
                 "APP_DATA_ROOT" to paths.serverDataDir.absolutePath,
                 "TAVERN_PORT" to servicePort.toString()
-            )
+            ),
+            logFileName = logFileName
         )
         return launcher.start(request)
     }
 }
 
 internal object HealthProbe {
+    // watchdog/awaitReady 仅用来判断"本地 Tavern 进程是否在监听并响应 HTTP"。
+    // 任何能完成 HTTP 握手的响应（含 3xx 重定向、4xx 认证挑战、5xx 服务自身错误）
+    // 都说明 Node 进程仍然存活；只有 IOException/超时这类网络层失败才算掉线。
+    // 不再依赖 2xx 白名单，避免开启 basicAuth 后探针永远失败、触发持续假阳性自动重启。
     suspend fun awaitReady(targetUrl: String, onAttempt: (attempt: Int, totalAttempts: Int) -> Unit = { _, _ -> }): Boolean {
         repeat(BootConfig.readinessProbeAttempts) { attempt ->
             onAttempt(attempt + 1, BootConfig.readinessProbeAttempts)
@@ -1076,13 +1088,16 @@ internal object HealthProbe {
     private fun checkOnce(targetUrl: String): Boolean {
         val connection = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            connectTimeout = 1000
-            readTimeout = 1000
+            // 3000ms 比 1000ms 对手机端更宽容：允许偶发 GC、调度抖动以及 WebView 抢占 CPU 的瞬时延迟。
+            connectTimeout = 3_000
+            readTimeout = 3_000
+            instanceFollowRedirects = false
         }
 
         return try {
             connection.connect()
-            connection.responseCode in 200..299
+            // responseCode 能取到值就意味着对端完成了 HTTP 状态行的回复，进程活着。
+            connection.responseCode > 0
         } catch (_: IOException) {
             false
         } finally {

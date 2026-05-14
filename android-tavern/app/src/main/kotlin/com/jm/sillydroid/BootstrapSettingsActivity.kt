@@ -2,6 +2,7 @@ package com.jm.sillydroid
 
 import android.app.Activity
 import android.app.DownloadManager
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
@@ -9,6 +10,7 @@ import android.view.View
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import android.net.Uri
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -85,8 +87,10 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var logsSelectButton: MaterialButton
     private lateinit var logsExportButton: MaterialButton
     private lateinit var logsReloadButton: MaterialButton
+    private lateinit var logsClearButton: MaterialButton
     private lateinit var settingsPanelView: View
     private lateinit var aboutPanelView: View
+    private lateinit var aboutGithubButton: ImageButton
     private lateinit var aboutVersionView: TextView
     private lateinit var aboutUpdateStatusView: TextView
     private lateinit var aboutUpdateButton: MaterialButton
@@ -130,12 +134,9 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         }
     }
 
-    private var pendingLogExportFileName: String? = null
     private val exportLogLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { targetUri ->
-        val requestedFileName = pendingLogExportFileName
-        pendingLogExportFileName = null
-        if (targetUri != null && requestedFileName != null) {
-            logsCoordinator.exportCurrentLog(targetUri)
+        if (targetUri != null) {
+            logsCoordinator.exportLogBundle(targetUri)
         }
     }
 
@@ -173,6 +174,9 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         pullRefreshSwitch.isChecked = hostConfigStore.webViewPullRefreshEnabled
         pullRefreshSwitch.setOnCheckedChangeListener { _, isChecked ->
             hostConfigStore.webViewPullRefreshEnabled = isChecked
+        }
+        aboutGithubButton.setOnClickListener {
+            openProjectHomePage()
         }
         importButton.setOnClickListener {
             importArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
@@ -271,8 +275,10 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         logsSelectButton = findViewById(R.id.bootstrapSettingsLogsSelectButton)
         logsExportButton = findViewById(R.id.bootstrapSettingsLogsExportButton)
         logsReloadButton = findViewById(R.id.bootstrapSettingsLogsReloadButton)
+        logsClearButton = findViewById(R.id.bootstrapSettingsLogsClearButton)
         settingsPanelView = findViewById(R.id.bootstrapSettingsSettingsPanel)
         aboutPanelView = findViewById(R.id.bootstrapSettingsAboutPanel)
+        aboutGithubButton = findViewById(R.id.bootstrapSettingsAboutGithubButton)
         aboutVersionView = findViewById(R.id.bootstrapSettingsAboutVersion)
         aboutUpdateStatusView = findViewById(R.id.bootstrapSettingsAboutUpdateStatus)
         aboutUpdateButton = findViewById(R.id.bootstrapSettingsAboutUpdateButton)
@@ -284,6 +290,20 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         exportButton = findViewById(R.id.bootstrapSettingsExportButton)
         clearDataButton = findViewById(R.id.bootstrapSettingsClearDataButton)
         saveStartButton = findViewById(R.id.bootstrapSettingsSaveButton)
+    }
+
+    private fun openProjectHomePage() {
+        val repository = BuildConfig.SILLYDROID_GITHUB_REPOSITORY.trim()
+        val projectUri = Uri.parse("https://github.com/$repository")
+        try {
+            startActivity(
+                Intent(Intent.ACTION_VIEW, projectUri).apply {
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                }
+            )
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, R.string.browser_open_external_failed, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun initializeControllers() {
@@ -393,6 +413,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             selectButton = logsSelectButton,
             exportButton = logsExportButton,
             reloadButton = logsReloadButton,
+            clearButton = logsClearButton,
             setBusy = screenController::setBusy,
             showError = settingsCoordinator::showValidationMessage,
             showMessage = screenController::showMessage,
@@ -414,8 +435,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         )
     }
 
-    private fun requestLogExport(fileName: String) {
-        pendingLogExportFileName = fileName
-        exportLogLauncher.launch(fileName)
+    private fun requestLogExport() {
+        exportLogLauncher.launch(HostLogManager.buildBundleFileName())
     }
 }

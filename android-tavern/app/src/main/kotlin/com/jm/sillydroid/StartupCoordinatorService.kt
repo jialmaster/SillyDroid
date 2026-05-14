@@ -24,8 +24,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -37,10 +39,13 @@ class StartupCoordinatorService : Service() {
         private const val ACTION_START = "com.jm.sillydroid.action.START"
         private const val ACTION_RETRY = "com.jm.sillydroid.action.RETRY"
         private const val ACTION_STOP_FOR_SETTINGS = "com.jm.sillydroid.action.STOP_FOR_SETTINGS"
+        // 探针节奏放宽：5s × 6 = 30s 持续不响应才视为掉线，
+        // 避免偶发的 GC pause / WebView 占用 CPU 造成假阳性重启。
         private const val readyWatchdogIntervalMillis = 5_000L
-        private const val readyWatchdogFailureThreshold = 3
+        private const val readyWatchdogFailureThreshold = 6
         private const val autoRestartDelayMillis = 1_500L
-        private const val autoRestartWindowMillis = 60_000L
+        // 5 分钟窗口内最多重启 3 次；与 watchdog 30s 阈值隔开，防止连环重启迫使用户遇到 ERROR 。
+        private const val autoRestartWindowMillis = 5 * 60_000L
         private const val autoRestartAttemptLimit = 3
 
         fun createStartIntent(context: Context, retry: Boolean = false): Intent {
@@ -65,15 +70,17 @@ class StartupCoordinatorService : Service() {
     private var autoRestartAttemptCount = 0
     private val startupLogSessionId = AtomicLong(0L)
     private val startupLogWriter by lazy(LazyThreadSafetyMode.NONE) {
-        StartupLogWriter { startupLogFile }
+        HostLogManager.AsyncWriter { startupLogFile }
     }
     private val startupLogFile: File
-        get() = File(filesDir, "android-tavern/logs/startup.log")
+        get() = HostLogManager.currentStartupLogFile(applicationContext)
     private val serverLogFile: File
-        get() = File(filesDir, "android-tavern/logs/sillydroid-server.log")
+        get() = HostLogManager.currentServerLogFile(applicationContext)
+    private var hasResetStartupLogForCurrentProcess = false
 
     override fun onCreate() {
         super.onCreate()
+        HostLogManager.initializeForAppStart(applicationContext)
         ensureNotificationChannel()
     }
 
@@ -127,8 +134,11 @@ class StartupCoordinatorService : Service() {
             }
         }
 
-        bootstrapJob?.cancel()
+        val previousJob = bootstrapJob
         bootstrapJob = serviceScope.launch {
+            // 先 join 上一份 bootstrap 协程，避免上一次还在 ServerController.start() 中间怅太
+            // 就被并发 stopManagedProcesses，造成 fork 出来的 proot 进程成为 orphan 占住端口。
+            previousJob?.cancelAndJoin()
             if (forceRestart) {
                 stopManagedProcesses()
             }
@@ -136,8 +146,11 @@ class StartupCoordinatorService : Service() {
         }
     }
 
-    private suspend fun runBootstrap() {
-        resetStartupLog()
+    private suspend fun runBootstrap(resetLog: Boolean = true) {
+        if (resetLog && !hasResetStartupLogForCurrentProcess) {
+            resetStartupLog()
+            hasResetStartupLogForCurrentProcess = true
+        }
         stopReadyWatchdog()
         try {
             val paths = HostPaths.from(applicationContext)
@@ -207,7 +220,9 @@ class StartupCoordinatorService : Service() {
                     progressPercent = 88
                 )
             )
-            RootfsRuntimeProvisioner(launcher, paths).ensure { elapsedSeconds ->
+            RootfsRuntimeProvisioner(launcher, paths).ensure(
+                logFileName = HostLogManager.currentRootfsRuntimeLogFileName(applicationContext)
+            ) { elapsedSeconds ->
                 updateState(
                     StartupState(
                         phase = StartupPhase.VALIDATING,
@@ -227,7 +242,12 @@ class StartupCoordinatorService : Service() {
                 progressPercent = 94
             )
             stopManagedProcesses()
-            serverProcess = ServerController(launcher, paths, servicePort).start()
+            serverProcess = ServerController(
+                launcher = launcher,
+                paths = paths,
+                servicePort = servicePort,
+                logFileName = HostLogManager.currentServerLogFileName(applicationContext)
+            ).start()
 
             updateStartupPhaseState(
                 phase = StartupPhase.WAITING_READY,
@@ -280,7 +300,14 @@ class StartupCoordinatorService : Service() {
     }
 
     private suspend fun interruptForSettings() {
-        bootstrapJob?.cancel(CancellationException("Interrupted for bootstrap settings."))
+        // cancelAndJoin 避免 bootstrap 协程中间怅太时与 stopManagedProcesses 发生竞态，
+        // 造成刚 fork 出、还未写入 serverProcess 字段的 proot 进程成为 orphan。
+        bootstrapJob?.let { job ->
+            job.cancel(CancellationException("Interrupted for bootstrap settings."))
+            withContext(NonCancellable) {
+                runCatching { job.join() }
+            }
+        }
         bootstrapJob = null
         stopReadyWatchdog()
         resetAutoRestartBudget()
@@ -524,6 +551,10 @@ class StartupCoordinatorService : Service() {
         localUrl: String = BootConfig.localServiceUrl(applicationContext)
     ) {
         stopReadyWatchdog()
+        // 原实现只停了 watchdog，但 serverMonitorJob 还能在后续检测到 server 退出后再调一次
+        // scheduleAutoRestart，提前耗尽重启预算。在调度重启前同时取消。
+        serverMonitorJob?.cancel()
+        serverMonitorJob = null
         val attempt = recordAutoRestartAttempt() ?: run {
             updateState(
                 StartupState(
@@ -537,21 +568,22 @@ class StartupCoordinatorService : Service() {
             return
         }
 
-        updateState(
-            StartupState(
-                phase = StartupPhase.STARTING_SERVER,
-                message = message,
-                details = "正在执行第 $attempt 次自动重启。\n$details",
-                localUrl = localUrl,
-                progressPercent = 94
-            )
+        // 不在这里马上 updateState(STARTING_SERVER)：
+        // 过去在 delay(1.5s) 之前就把 phase 降级会让 MainActivity 立即隐藏 WebView，
+        // 造成“凭空出现白屏”。现在 phase 保持不变（仍是 READY），
+        // 只记入当前 app 启动对应的 startup 日志方便事后追查；真正进入重启后由 runBootstrap 自然推进 phase。
+        appendStartupLog(
+            "Auto-restart scheduled (attempt $attempt/$autoRestartAttemptLimit): $message | $details"
         )
 
-        bootstrapJob?.cancel()
+        val previousJob = bootstrapJob
         bootstrapJob = serviceScope.launch {
+            previousJob?.cancelAndJoin()
             delay(autoRestartDelayMillis)
             stopManagedProcesses()
-            runBootstrap()
+            // resetLog=false 保留上一次服务退出 / watchdog 失败的诊断信息，
+            // 避免被下一轮 bootstrap 的 resetStartupLog 抹除。
+            runBootstrap(resetLog = false)
         }
     }
 

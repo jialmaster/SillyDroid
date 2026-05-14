@@ -15,20 +15,23 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.FileObserver
 import android.os.Message
+import android.os.SystemClock
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.animation.OvershootInterpolator
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -70,8 +73,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 import kotlin.math.absoluteValue
 import kotlin.math.abs
 
@@ -106,7 +107,14 @@ class MainActivity : AppCompatActivity() {
         val tag: String
     )
 
+    private data class WebReloadTrace(
+        val id: Long,
+        val source: String,
+        val startedAtElapsedMillis: Long
+    )
+
     companion object {
+        private const val mainLogTag = "SillyDroidMain"
         private const val downloadBridgeName = "AndroidDownloadBridge"
         private const val webViewStateKey = "tavern.webview.state"
         private const val loadedUrlStateKey = "tavern.webview.loadedUrl"
@@ -138,8 +146,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var floatingLogsSelectButton: MaterialButton
     private lateinit var floatingLogsIntervalButton: MaterialButton
     private lateinit var floatingLogsCloseButton: ImageButton
-    private lateinit var floatingLogsReloadWebViewButton: ImageButton
-    private lateinit var floatingLogsDownloadButton: ImageButton
+    private lateinit var floatingLogsReloadWebViewButton: MaterialButton
+    private lateinit var floatingLogsDownloadButton: MaterialButton
+    private lateinit var floatingLogsClearButton: MaterialButton
+    private lateinit var floatingLogsOpenSettingsButton: MaterialButton
     private lateinit var floatingLogsScrollToBottomButton: ImageButton
     private lateinit var backPressCallback: OnBackPressedCallback
     private var webSessionScriptHandler: ScriptHandler? = null
@@ -148,6 +158,9 @@ class MainActivity : AppCompatActivity() {
     private var isOpeningBootstrapSettings = false
     private var isPullGestureRefreshing = false
     private var isImeVisible = false
+    // 本地 baseUrl 加载失败后的连续重试计数；onPageFinished 成功后重置。
+    // 限制上限防止服务一直起不来时 WebView 不断闪烁。
+    private var pendingLocalRetryAttempts = 0
     // 首次解包完成后该文件存在，用来判断"曾经初始化过"，进而决定设置按钮是否可用。
     // 用 lazy 避免在 onCreate 之前访问 filesDir。
     private val isBootstrapPreviouslyCompleted: Boolean by lazy {
@@ -160,12 +173,14 @@ class MainActivity : AppCompatActivity() {
     private var floatingLogsRefreshJob: Job? = null
     private var floatingLogsRealtimeRenderJob: Job? = null
     private var floatingLogsRealtimeRenderPending = false
-    private var floatingLogsFileObserver: FileObserver? = null
+    private var floatingLogsSubscription: AutoCloseable? = null
     private var lastFloatingLogSnapshot: HostLogSnapshot? = null
     private var floatingLogsAvailableEntries: List<HostLogEntry> = emptyList()
     private var floatingLogsSelectedLogPath: String? = null
     private var floatingLogsAutoScrollEnabled = true
     private var floatingLogsBubbleDockSide = FloatingLogsBubbleDockSide.RIGHT
+    private var nextWebReloadTraceId = 0L
+    private var activeWebReloadTrace: WebReloadTrace? = null
     private val floatingLogsBubbleTouchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop }
     private val floatingLogsPanelGapPx by lazy { 12f * resources.displayMetrics.density }
     private val floatingLogsBubbleRevealInterpolator = OvershootInterpolator(0.9f)
@@ -175,6 +190,11 @@ class MainActivity : AppCompatActivity() {
         val width: Int,
         val height: Int,
         val layoutChanged: Boolean
+    )
+
+    private data class FloatingLogsDownloadResult(
+        val zipFileName: String,
+        val zipPath: String
     )
     private val hostConfigStore by lazy { BootstrapHostConfigStore(this) }
     private val processManager by lazy<HostProcessManager> { DefaultHostProcessManager(this) }
@@ -292,6 +312,9 @@ class MainActivity : AppCompatActivity() {
         appUpdateCoordinator.onDestroy()
         stopBootstrapWaitingStatusRefreshLoop()
         stopFloatingLogsRefreshLoop()
+        // 不再需要监听 Tavern 服务日志尾部，主动 stop 避免 FileObserver 在 Activity
+        // 销毁后继续驻留，并避免后台守护进程被反复唤醒写 StateFlow。
+        HostLogManager.stopCurrentServerTail()
         super.onDestroy()
     }
 
@@ -334,6 +357,8 @@ class MainActivity : AppCompatActivity() {
         floatingLogsCloseButton = findViewById(R.id.floatingLogsCloseButton)
         floatingLogsReloadWebViewButton = findViewById(R.id.floatingLogsReloadWebViewButton)
         floatingLogsDownloadButton = findViewById(R.id.floatingLogsDownloadButton)
+        floatingLogsClearButton = findViewById(R.id.floatingLogsClearButton)
+        floatingLogsOpenSettingsButton = findViewById(R.id.floatingLogsOpenSettingsButton)
         floatingLogsScrollToBottomButton = findViewById(R.id.floatingLogsScrollToBottomButton)
     }
 
@@ -367,15 +392,7 @@ class MainActivity : AppCompatActivity() {
                         longPressRunnable = Runnable {
                             if (!dragging && !longPressTriggered) {
                                 longPressTriggered = true
-                                val phase = StartupRuntimeStore.state.value.phase
-                                val isExtracting = phase == StartupPhase.EXTRACTING
-                                val settingsAvailable = !isExtracting && (
-                                    isBootstrapPreviouslyCompleted || phase in setOf(
-                                        StartupPhase.PAUSING, StartupPhase.CONFIGURING,
-                                        StartupPhase.ERROR, StartupPhase.BLOCKED
-                                    )
-                                )
-                                if (settingsAvailable) {
+                                if (canOpenBootstrapSettings(StartupRuntimeStore.state.value)) {
                                     openBootstrapSettings()
                                 }
                             }
@@ -442,7 +459,7 @@ class MainActivity : AppCompatActivity() {
             setFloatingLogsPanelVisible(false)
         }
         floatingLogsReloadWebViewButton.setOnClickListener {
-            reloadTavernWebView()
+            reloadTavernWebView(source = "floating_logs_button")
         }
         floatingLogsScrollToBottomButton.setOnClickListener {
             floatingLogsAutoScrollEnabled = true
@@ -473,6 +490,13 @@ class MainActivity : AppCompatActivity() {
         }
         floatingLogsDownloadButton.setOnClickListener {
             downloadFloatingLogsAsZip()
+        }
+        floatingLogsClearButton.setOnClickListener {
+            confirmClearFloatingLogs()
+        }
+        floatingLogsOpenSettingsButton.setOnClickListener {
+            setFloatingLogsPanelVisible(false)
+            openBootstrapSettings()
         }
     }
 
@@ -755,42 +779,33 @@ class MainActivity : AppCompatActivity() {
         floatingLogsRealtimeRenderJob?.cancel()
         floatingLogsRealtimeRenderJob = null
         floatingLogsRealtimeRenderPending = false
-        floatingLogsFileObserver?.stopWatching()
-        floatingLogsFileObserver = null
+        floatingLogsSubscription?.close()
+        floatingLogsSubscription = null
     }
 
     private fun startFloatingLogsRealtimeObserver() {
-        if (floatingLogsFileObserver != null) {
+        if (floatingLogsSubscription != null) {
             return
         }
 
-        val logsDir = File(filesDir, "android-tavern/logs").apply {
-            mkdirs()
-        }
-        val mask = FileObserver.CREATE or FileObserver.MODIFY or FileObserver.CLOSE_WRITE or FileObserver.MOVED_TO or FileObserver.DELETE
-        floatingLogsFileObserver = object : FileObserver(logsDir, mask) {
-            override fun onEvent(event: Int, path: String?) {
-                if (path != null) {
-                    val selectedFileName = floatingLogsSelectedLogPath?.let { File(it).name }
-                    if (selectedFileName != null) {
-                        if (!path.equals(selectedFileName, ignoreCase = true)) {
-                            return
-                        }
-                    } else if (!path.endsWith(".log", ignoreCase = true)) {
-                        return
+        floatingLogsSubscription = HostLogManager.subscribeToLogChanges(
+            context = this,
+            matcher = { path ->
+                when {
+                    path == null -> true
+                    floatingLogsSelectedLogPath != null -> {
+                        val selectedFileName = floatingLogsSelectedLogPath?.let { File(it).name }
+                        selectedFileName != null && path.equals(selectedFileName, ignoreCase = true)
                     }
-                }
-
-                contentRoot.post {
-                    if (floatingLogsPanel.isVisible &&
-                        hostConfigStore.floatingLogRefreshIntervalMillis == BootstrapHostConfigStore.floatingLogRefreshIntervalRealtimeMillis
-                    ) {
-                        requestFloatingLogsRealtimeRefresh()
-                    }
+                    else -> path.endsWith(".log", ignoreCase = true)
                 }
             }
-        }.also { observer ->
-            observer.startWatching()
+        ) {
+            if (floatingLogsPanel.isVisible &&
+                hostConfigStore.floatingLogRefreshIntervalMillis == BootstrapHostConfigStore.floatingLogRefreshIntervalRealtimeMillis
+            ) {
+                requestFloatingLogsRealtimeRefresh()
+            }
         }
     }
 
@@ -825,21 +840,19 @@ class MainActivity : AppCompatActivity() {
     private suspend fun renderFloatingLatestLog() {
         val preferTavernServerLog = StartupRuntimeStore.state.value.shouldPreferTavernServerLog
         val result = withContext(Dispatchers.IO) {
-            val entries = HostLogReader.listEntries(this@MainActivity)
+            val entries = HostLogManager.listEntries(this@MainActivity)
             val selectedEntry = floatingLogsSelectedLogPath?.let { selectedPath ->
                 entries.firstOrNull { entry -> entry.sourceFile.absolutePath == selectedPath }
             }
             val snapshot = when {
-                selectedEntry != null -> HostLogReader.readSnapshot(
+                selectedEntry != null -> HostLogManager.readRealtimeSnapshot(
                     context = this@MainActivity,
                     logFile = selectedEntry.sourceFile,
-                    maxChars = 200_000,
                     entry = selectedEntry
                 )
-                else -> HostLogReader.readPreferredSnapshot(
+                else -> HostLogManager.readPreferredRealtimeSnapshot(
                     context = this@MainActivity,
                     preferTavernServerLog = preferTavernServerLog,
-                    maxChars = 200_000,
                     entries = entries
                 )
             }
@@ -1004,32 +1017,66 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun downloadFloatingLogsAsZip() {
-        val snapshot = lastFloatingLogSnapshot ?: run {
-            Toast.makeText(this, getString(R.string.floating_logs_download_failed), Toast.LENGTH_SHORT).show()
-            return
-        }
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val zipName = snapshot.fileName.removeSuffix(".log") + "-log.zip"
-                    val downloadsDir = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
-                        ?: filesDir
-                    downloadsDir.mkdirs()
-                    val zipFile = File(downloadsDir, zipName)
-                    ZipOutputStream(zipFile.outputStream()).use { zipOut ->
-                        zipOut.putNextEntry(ZipEntry(snapshot.fileName))
-                        snapshot.sourceFile.inputStream().use { input ->
-                            input.copyTo(zipOut)
-                        }
-                        zipOut.closeEntry()
-                    }
-                    zipFile.name
+                    val export = HostLogManager.exportToPublicDownloads(this@MainActivity)
+                    FloatingLogsDownloadResult(
+                        zipFileName = export.bundleFileName,
+                        zipPath = export.zipPath.orEmpty()
+                    )
+                }
+            }
+            result.onSuccess { download ->
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(
+                        R.string.floating_logs_download_success,
+                        download.zipFileName,
+                        download.zipPath
+                    ),
+                    Toast.LENGTH_LONG
+                ).show()
+            }.onFailure {
+                Toast.makeText(this@MainActivity, getString(R.string.floating_logs_download_failed), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun confirmClearFloatingLogs() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.bootstrap_settings_logs_clear_confirm_title)
+            .setMessage(R.string.bootstrap_settings_logs_clear_confirm_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.bootstrap_settings_logs_clear) { _, _ ->
+                clearFloatingLogs()
+            }
+            .show()
+    }
+
+    private fun clearFloatingLogs() {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    HostLogManager.clearAllLogs(this@MainActivity)
                 }
             }
             result.onSuccess {
-                Toast.makeText(this@MainActivity, getString(R.string.floating_logs_download_success), Toast.LENGTH_SHORT).show()
-            }.onFailure {
-                Toast.makeText(this@MainActivity, getString(R.string.floating_logs_download_failed), Toast.LENGTH_SHORT).show()
+                floatingLogsSelectedLogPath = null
+                floatingLogsAvailableEntries = emptyList()
+                lastFloatingLogSnapshot = null
+                requestFloatingLogsRealtimeRefresh(resetAutoScroll = true)
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.bootstrap_settings_logs_clear_success),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }.onFailure { exception ->
+                Toast.makeText(
+                    this@MainActivity,
+                    exception.message ?: getString(R.string.bootstrap_settings_logs_clear_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -1078,6 +1125,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun configureWebView() {
         webViewRefreshLayout.isEnabled = false
+        val webViewBackgroundColor = ContextCompat.getColor(this, R.color.tavern_webview_background)
+        webViewRefreshLayout.setBackgroundColor(webViewBackgroundColor)
+        webView.setBackgroundColor(webViewBackgroundColor)
         webViewRefreshLayout.setOnChildScrollUpCallback { _, _ ->
             !canStartSwipeRefresh() || webView.canScrollVertically(-1)
         }
@@ -1087,7 +1137,12 @@ class MainActivity : AppCompatActivity() {
                 return@setOnRefreshListener
             }
             isPullGestureRefreshing = true
-            reloadTavernWebView()
+            beginWebReloadTrace(source = "swipe_refresh")
+            logActiveWebReloadTrace(phase = "on_refresh")
+            if (!reloadTavernWebView(source = "swipe_refresh")) {
+                logActiveWebReloadTrace(phase = "reload_rejected")
+                clearActiveWebReloadTrace()
+            }
         }
 
         webView.settings.javaScriptEnabled = true
@@ -1125,8 +1180,19 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                logActiveWebReloadTrace(phase = "page_started", url = url)
+            }
+
+            override fun onPageCommitVisible(view: WebView?, url: String?) {
+                super.onPageCommitVisible(view, url)
+                logActiveWebReloadTrace(phase = "page_commit_visible", url = url)
+            }
+
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                logActiveWebReloadTrace(phase = "page_finished", url = url)
                 isPullGestureRefreshing = false
                 webViewRefreshLayout.isRefreshing = false
                 updateWebViewRefreshLayoutEnabled()
@@ -1135,7 +1201,45 @@ class MainActivity : AppCompatActivity() {
                 installBlobDownloadBridge()
                 if (!url.isNullOrBlank()) {
                     loadedUrl = url
+                    pendingLocalRetryAttempts = 0
                 }
+                clearActiveWebReloadTrace()
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                super.onReceivedError(view, request, error)
+                if (request?.isForMainFrame != true) {
+                    return
+                }
+                val failingUrl = request.url?.toString().orEmpty()
+                if (!isLocalTavernUrl(failingUrl)) {
+                    return
+                }
+                // 本地 Tavern 服务在重启过程中会短暂连不上；走轻量延迟重试，避免 WebView
+                // 停留在 net::ERR_CONNECTION_REFUSED 默认错误页（看上去是一片空白）。
+                scheduleLocalWebViewRetry(failingUrl)
+            }
+
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                val didCrash = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    detail?.didCrash() == true
+                } else {
+                    true
+                }
+                Log.e(
+                    mainLogTag,
+                    "WebView renderer gone (didCrash=$didCrash). Recreating WebView to keep host process alive."
+                )
+                if (isFinishing || isDestroyed) {
+                    // 仍返回 true，不让宣主进程跟着被系统 kill。
+                    return true
+                }
+                recreateWebViewAfterRendererGone()
+                return true
             }
         }
         webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
@@ -1862,7 +1966,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             runOnUiThread {
-                reloadTavernWebView()
+                reloadTavernWebView(source = "android_host_bridge")
             }
             return true
         }
@@ -1974,6 +2078,13 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // 恢复出来的 URL 可能在上一轮会话中使用了不同的服务端口。
+        // 若与当前 localUrl 不匹配，则不能复用，避免 WebView 以旧端口发起请求
+        // 造成永久 ERR_CONNECTION_REFUSED 白屏。
+        if (!isLocalTavernUrl(restoredUrl)) {
+            return
+        }
+
         loadedUrl = restoredUrl
         hasRestoredWebViewState = true
     }
@@ -1992,7 +2103,7 @@ class MainActivity : AppCompatActivity() {
     private fun observeTavernServerLogTail() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                TavernServerLogTailStore.latestLine.collect { line ->
+                HostLogManager.latestTavernServerLine.collect { line ->
                     latestTavernServerLogLine = line
                     val state = currentBootstrapState
                     if (state.phase == StartupPhase.STARTING_SERVER || state.phase == StartupPhase.WAITING_READY) {
@@ -2036,21 +2147,8 @@ class MainActivity : AppCompatActivity() {
         }
         bootstrapProgress.isVisible = !state.canRetry && state.phase != StartupPhase.CONFIGURING
         bootstrapProgressLabel.isVisible = bootstrapProgress.isVisible
-        // 规则：
-        // 1. EXTRACTING 阶段（正在解包 rootfs/server）：无论是否初始化过都禁用，避免并发踩踏。
-        // 2. 曾经初始化过（server 已解包）且非 EXTRACTING：允许打开设置。
-        // 3. 全新安装：只有进入静止状态（等待配置/出错/被阻塞）才允许。
-        val isExtracting = state.phase == StartupPhase.EXTRACTING
-        val settingsAvailable = !isExtracting && (
-            isBootstrapPreviouslyCompleted || state.phase in setOf(
-                StartupPhase.PAUSING, StartupPhase.CONFIGURING,
-                StartupPhase.ERROR, StartupPhase.BLOCKED
-            )
-        )
         bootstrapSettingsButton.isVisible = !state.isReady
-        val settingsEnabled = !state.isReady && !isOpeningBootstrapSettings && settingsAvailable
-        bootstrapSettingsButton.isEnabled = settingsEnabled
-        bootstrapSettingsButton.alpha = if (settingsEnabled) 1f else 0.35f
+        syncBootstrapSettingsEntryState(state)
         bootstrapProgress.max = 100
         val progressPercent = state.progressPercent.coerceIn(0, 100)
         bootstrapProgress.isIndeterminate = progressPercent <= 0
@@ -2144,7 +2242,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        TavernServerLogTailStore.start(applicationContext)
+        HostLogManager.startCurrentServerTail(applicationContext)
         if (bootstrapWaitingStatusRefreshJob?.isActive == true) {
             return
         }
@@ -2161,7 +2259,7 @@ class MainActivity : AppCompatActivity() {
         bootstrapWaitingStatusRefreshJob?.cancel()
         bootstrapWaitingStatusRefreshJob = null
         latestTavernServerLogLine = ""
-        TavernServerLogTailStore.stop()
+        HostLogManager.stopCurrentServerTail()
     }
 
     private fun renderBootstrapWaitingStatusSnapshot() {
@@ -2281,12 +2379,59 @@ class MainActivity : AppCompatActivity() {
             !isImeVisible
     }
 
-    private fun reloadTavernWebView(): Boolean {
+    private fun beginWebReloadTrace(source: String) {
+        val trace = WebReloadTrace(
+            id = ++nextWebReloadTraceId,
+            source = source,
+            startedAtElapsedMillis = SystemClock.elapsedRealtime()
+        )
+        activeWebReloadTrace = trace
+    }
+
+    private fun logActiveWebReloadTrace(phase: String, url: String? = null, extra: String? = null) {
+        val trace = activeWebReloadTrace ?: return
+        val elapsedMillis = SystemClock.elapsedRealtime() - trace.startedAtElapsedMillis
+        val message = buildString {
+            append("PullRefreshTrace")
+            append(" id=")
+            append(trace.id)
+            append(" source=")
+            append(trace.source)
+            append(" phase=")
+            append(phase)
+            append(" elapsedMs=")
+            append(elapsedMillis)
+            if (!url.isNullOrBlank()) {
+                append(" url=")
+                append(url)
+            }
+            if (!extra.isNullOrBlank()) {
+                append(" extra=")
+                append(extra)
+            }
+        }
+        Log.d(mainLogTag, message)
+    }
+
+    private fun clearActiveWebReloadTrace() {
+        activeWebReloadTrace = null
+    }
+
+    private fun reloadTavernWebView(source: String): Boolean {
         if (!webView.isVisible || bootstrapOverlay.isVisible) {
+            logActiveWebReloadTrace(
+                phase = "reload_blocked",
+                extra = "webViewVisible=${webView.isVisible},overlayVisible=${bootstrapOverlay.isVisible}"
+            )
             return false
         }
 
+        if (activeWebReloadTrace?.source != source) {
+            beginWebReloadTrace(source)
+        }
+        logActiveWebReloadTrace(phase = "reload_requested", url = webView.url)
         webView.reload()
+        logActiveWebReloadTrace(phase = "reload_dispatched", url = webView.url)
         return true
     }
 
@@ -2299,7 +2444,26 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        reloadTavernWebView()
+        reloadTavernWebView(source = "host_state_ready")
+    }
+
+    private fun canOpenBootstrapSettings(state: StartupState): Boolean {
+        val isExtracting = state.phase == StartupPhase.EXTRACTING
+        val settingsAvailable = !isExtracting && (
+            isBootstrapPreviouslyCompleted || state.phase in setOf(
+                StartupPhase.PAUSING, StartupPhase.CONFIGURING,
+                StartupPhase.ERROR, StartupPhase.BLOCKED
+            )
+        )
+        return !state.isReady && !isOpeningBootstrapSettings && settingsAvailable
+    }
+
+    private fun syncBootstrapSettingsEntryState(state: StartupState) {
+        val settingsEnabled = canOpenBootstrapSettings(state)
+        bootstrapSettingsButton.isEnabled = settingsEnabled
+        bootstrapSettingsButton.alpha = if (settingsEnabled) 1f else 0.35f
+        floatingLogsOpenSettingsButton.isEnabled = settingsEnabled
+        floatingLogsOpenSettingsButton.alpha = if (settingsEnabled) 1f else 0.35f
     }
 
     private fun openBootstrapSettings(openDefaultExtensionsInstaller: Boolean = false) {
@@ -2308,7 +2472,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         isOpeningBootstrapSettings = true
-        bootstrapSettingsButton.isEnabled = false
+        syncBootstrapSettingsEntryState(StartupRuntimeStore.state.value)
         bootstrapSettingsLauncher.launch(
             BootstrapSettingsActivity.createIntent(
                 activity = this,
@@ -2435,6 +2599,77 @@ class MainActivity : AppCompatActivity() {
         }
 
         return normalizedPort(targetUri) == normalizedPort(localUri)
+    }
+
+    private fun isLocalTavernUrl(url: String): Boolean {
+        if (url.isBlank()) return false
+        val parsed = runCatching { Uri.parse(url) }.getOrNull() ?: return false
+        return isLocalTavernUri(parsed)
+    }
+
+    private fun scheduleLocalWebViewRetry(failingUrl: String) {
+        if (pendingLocalRetryAttempts >= 5) {
+            // 估计是服务侧長期起不来；交给 startup overlay 接手，不再闪烁。
+            return
+        }
+        if (!StartupRuntimeStore.state.value.isReady) {
+            return
+        }
+        pendingLocalRetryAttempts += 1
+        val delayMillis = (500L * pendingLocalRetryAttempts).coerceAtMost(3_000L)
+        webView.postDelayed(
+            {
+                if (isFinishing || isDestroyed) {
+                    return@postDelayed
+                }
+                if (!StartupRuntimeStore.state.value.isReady) {
+                    return@postDelayed
+                }
+                if (failingUrl == loadedUrl || failingUrl.startsWith(loadedUrl.trimEnd('/'))) {
+                    webView.loadUrl(failingUrl)
+                } else {
+                    webView.reload()
+                }
+            },
+            delayMillis
+        )
+    }
+
+    private fun recreateWebViewAfterRendererGone() {
+        val crashedWebView = webView
+        val parent = crashedWebView.parent as? android.view.ViewGroup
+        val indexInParent = parent?.indexOfChild(crashedWebView) ?: -1
+        val layoutParams = crashedWebView.layoutParams
+        val targetUrl = StartupRuntimeStore.state.value.localUrl
+            .ifBlank { BootConfig.localServiceUrl(this) }
+
+        // 旧 WebView 必须先从视图树移除再 destroy，避免 native 资源泄漏。
+        webSessionScriptHandler?.remove()
+        webSessionScriptHandler = null
+        parent?.removeView(crashedWebView)
+        runCatching { crashedWebView.destroy() }
+
+        val newWebView = WebView(this).apply {
+            id = R.id.webView
+        }
+        if (parent != null) {
+            if (indexInParent >= 0 && layoutParams != null) {
+                parent.addView(newWebView, indexInParent, layoutParams)
+            } else if (layoutParams != null) {
+                parent.addView(newWebView, layoutParams)
+            } else {
+                parent.addView(newWebView)
+            }
+        }
+        webView = newWebView
+        // 重新走一遍与初始化一致的配置。
+        configureWebView()
+        hasRestoredWebViewState = false
+        loadedUrl = ""
+        pendingLocalRetryAttempts = 0
+        if (StartupRuntimeStore.state.value.isReady) {
+            showWebView(targetUrl)
+        }
     }
 
     private fun normalizedPort(uri: Uri): Int {

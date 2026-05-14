@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="bootstrap_overlay_background">#0F172A</color>
+    <color name="bootstrap_overlay_title">#F8FAFC</color>
+    <color name="bootstrap_overlay_body">#CBD5E1</color>
+    <color name="bootstrap_overlay_secondary_text">#94A3B8</color>
+    <color name="bootstrap_overlay_icon_tint">#E5E7EB</color>
+    <color name="bootstrap_overlay_icon_button_background">#1F2937</color>
+    <color name="bootstrap_overlay_icon_button_stroke">#334155</color>
+    <color name="bootstrap_update_badge_background">#F87171</color>
+    <color name="tavern_webview_background">#0F172A</color>
     <color name="floating_logs_panel_background">#111827</color>
     <color name="floating_logs_panel_stroke">#334155</color>
     <color name="floating_logs_panel_title">#F8FAFC</color>

@@ -349,6 +349,19 @@ android_source_git() {
     git -c safe.directory="$workspace_root" -C "$source_root" "$@"
 }
 
+write_android_source_export_manifest() {
+    local source_root="$1"
+    local output_path="$2"
+    local relative_path=''
+
+    : > "$output_path"
+    android_source_git "$source_root" ls-files --cached --others --exclude-standard -z \
+        | while IFS= read -r -d '' relative_path; do
+            [[ -e "$source_root/$relative_path" ]] || continue
+            printf '%s\0' "$relative_path"
+        done > "$output_path"
+}
+
 assert_android_source_git() {
     local source_root="$1"
 
@@ -368,7 +381,7 @@ staged_android_project_satisfy_request() {
     assert_android_source_git "$source_root"
 
     current_manifest_path="$(mktemp)"
-    android_source_git "$source_root" ls-files --cached --others --exclude-standard -z > "$current_manifest_path"
+    write_android_source_export_manifest "$source_root" "$current_manifest_path"
 
     if ! cmp -s "$current_manifest_path" "$manifest_path"; then
         rm -f "$current_manifest_path"
@@ -377,7 +390,7 @@ staged_android_project_satisfy_request() {
     rm -f "$current_manifest_path"
 
     while IFS= read -r -d '' relative_path; do
-        [[ -f "$source_root/$relative_path" && -f "$staged_root/$relative_path" ]] || return 1
+        [[ -e "$source_root/$relative_path" && -e "$staged_root/$relative_path" ]] || return 1
         if [[ "$source_root/$relative_path" -nt "$manifest_path" ]]; then
             return 1
         fi
@@ -405,7 +418,7 @@ prepare_staged_android_project() {
         current_manifest_path="$(mktemp)"
         (
             cd "$source_root"
-            android_source_git "$source_root" ls-files --cached --others --exclude-standard -z > "$current_manifest_path"
+            write_android_source_export_manifest "$source_root" "$current_manifest_path"
             tar --null -T "$current_manifest_path" -cf -
         ) | tar -xf - -C "$staged_root"
         mv "$current_manifest_path" "$manifest_path"

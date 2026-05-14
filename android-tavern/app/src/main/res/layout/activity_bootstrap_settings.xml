@@ -629,13 +629,32 @@
                         android:paddingEnd="8dp"
                         android:paddingBottom="8dp">
 
-                        <TextView
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="@string/bootstrap_settings_tab_about"
-                            android:textColor="?attr/colorOnSurface"
-                            android:textSize="12sp"
-                            android:textStyle="bold" />
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/bootstrap_settings_tab_about"
+                                android:textColor="?attr/colorOnSurface"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <ImageButton
+                                android:id="@+id/bootstrapSettingsAboutGithubButton"
+                                android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
+                                android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="@string/bootstrap_settings_about_github"
+                                android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
+                                android:scaleType="centerInside"
+                                android:src="@drawable/ic_github"
+                                android:tint="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
 
                         <TextView
                             android:layout_width="match_parent"
@@ -771,28 +790,51 @@
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/bootstrapSettingsLogsSelectButton"
                     style="@style/Widget.SillyDroid.SettingsButton.Outlined"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:layout_marginEnd="6dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:minHeight="@dimen/sillydroid_control_min_height"
                     android:text="@string/bootstrap_settings_logs_select" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/bootstrapSettingsLogsExportButton"
                     style="@style/Widget.SillyDroid.SettingsButton.Outlined"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:layout_marginEnd="6dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:minHeight="@dimen/sillydroid_control_min_height"
                     android:text="@string/bootstrap_settings_logs_export" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/bootstrapSettingsLogsReloadButton"
                     style="@style/Widget.SillyDroid.SettingsButton.Outlined"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:minHeight="@dimen/sillydroid_control_min_height"
                     android:text="@string/bootstrap_settings_logs_reload" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/bootstrapSettingsLogsClearButton"
+                    style="@style/Widget.SillyDroid.SettingsButton.Outlined"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:minHeight="@dimen/sillydroid_control_min_height"
+                    android:text="@string/bootstrap_settings_logs_clear"
+                    android:textColor="?attr/colorError"
+                    app:strokeColor="?attr/colorError" />
             </LinearLayout>
 
             <TextView
@@ -863,13 +905,13 @@
 
             <ImageButton
                 android:id="@+id/bootstrapSettingsLogsScrollToBottomButton"
-                android:layout_width="@dimen/sillydroid_compact_icon_button_size"
-                android:layout_height="@dimen/sillydroid_compact_icon_button_size"
+                android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
+                android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
                 android:layout_gravity="bottom|end"
                 android:layout_margin="8dp"
                 android:background="?attr/colorPrimaryContainer"
                 android:contentDescription="@string/bootstrap_settings_logs_scroll_to_bottom"
-                android:padding="@dimen/sillydroid_compact_icon_button_padding"
+                android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
                 android:scaleType="centerInside"
                 android:src="@drawable/ic_scroll_to_bottom"
                 android:tint="?attr/colorOnPrimaryContainer"
