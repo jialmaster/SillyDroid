@@ -312,35 +312,36 @@ resolve_archive_target() {
     mkdir -p "$export_cache_dir"
 
     ensure_termux_api_tools_available || true
-    ensure_python_available || true
-
-    if command -v termux-download >/dev/null 2>&1 && find_python_command >/dev/null 2>&1; then
-        log "回退方案：使用 Android 系统下载服务。原因：$direct_failure_reason"
-        if confirm_export_method "是否使用系统下载服务导出？选择 N 将继续尝试下一个回退方案。"; then
-            EXPORT_METHOD='download'
-            ARCHIVE_PATH="$export_cache_dir/$archive_name"
-            EXPORT_LABEL='Android 系统下载服务'
-            return 0
-        fi
-        log "用户选择不使用系统下载服务，继续尝试下一个回退方案。"
-    else
-        local missing_download_reasons=()
-        command -v termux-download >/dev/null 2>&1 || missing_download_reasons+=("未检测到 termux-download")
-        find_python_command >/dev/null 2>&1 || missing_download_reasons+=("未检测到 python/python3")
-        log "系统下载服务不可用：$(IFS='；'; printf '%s' "${missing_download_reasons[*]}")。如果刚才自动安装 termux-api 成功但仍不可用，请确认已安装 Android 端 Termux:API 应用。"
-    fi
 
     if command -v termux-share >/dev/null 2>&1; then
-        log "回退方案：使用 Android 系统分享面板。原因：共享存储不可写，且未使用系统下载服务。"
-        if confirm_export_method "是否使用系统分享面板导出？选择 N 将中止导出。"; then
+        log "回退方案：使用 Android 系统分享面板。原因：$direct_failure_reason"
+        if confirm_export_method "是否使用系统分享面板导出？选择 N 将继续尝试最后的系统下载服务方案。"; then
             EXPORT_METHOD='share'
             ARCHIVE_PATH="$export_cache_dir/$archive_name"
             EXPORT_LABEL='Android 系统分享面板'
             return 0
         fi
-        log "用户选择不使用系统分享面板。"
+        log "用户选择不使用系统分享面板，继续尝试最后的系统下载服务方案。"
     else
         log "系统分享面板不可用：未检测到 termux-share。"
+    fi
+
+    ensure_python_available || true
+
+    if command -v termux-download >/dev/null 2>&1 && find_python_command >/dev/null 2>&1; then
+        log "最后回退方案：使用 Android 系统下载服务。原因：共享存储不可写，且未使用系统分享面板。"
+        if confirm_export_method "是否使用系统下载服务导出？选择 N 将中止导出。"; then
+            EXPORT_METHOD='download'
+            ARCHIVE_PATH="$export_cache_dir/$archive_name"
+            EXPORT_LABEL='Android 系统下载服务'
+            return 0
+        fi
+        log "用户选择不使用系统下载服务。"
+    else
+        local missing_download_reasons=()
+        command -v termux-download >/dev/null 2>&1 || missing_download_reasons+=("未检测到 termux-download")
+        find_python_command >/dev/null 2>&1 || missing_download_reasons+=("未检测到 python/python3")
+        log "系统下载服务不可用：$(IFS='；'; printf '%s' "${missing_download_reasons[*]}")。如果刚才自动安装 termux-api 成功但仍不可用，请确认已安装 Android 端 Termux:API 应用。"
     fi
 
     echo "无法发布导出文件：共享存储不可写，且未检测到可用的 termux-download 或 termux-share。" >&2
