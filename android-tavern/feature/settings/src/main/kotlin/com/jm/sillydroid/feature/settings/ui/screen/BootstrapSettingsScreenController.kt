@@ -2,6 +2,7 @@ package com.jm.sillydroid.feature.settings.ui.screen
 
 import android.graphics.Rect
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
@@ -31,7 +32,6 @@ class BootstrapSettingsScreenController(
     private val rootView: android.view.View,
     private val topShellView: android.view.View,
     private val scrollView: NestedScrollView,
-    private val actionBarView: android.view.View,
     private val tabLayout: TabLayout,
     private val dataPanelView: android.view.View,
     private val extensionsPanelView: android.view.View,
@@ -54,6 +54,8 @@ class BootstrapSettingsScreenController(
 ) {
     private var selectedTabIndex = 0
     private var bannerIsError = false
+    private var busy = false
+    private var hasUnsavedChanges = false
 
     fun initialize() {
         setupTabs()
@@ -65,6 +67,7 @@ class BootstrapSettingsScreenController(
     }
 
     fun setBusy(busy: Boolean) {
+        this.busy = busy
         loadingIndicator.isVisible = busy
         searchLayout.isEnabled = !busy
         floatingLogsSwitch.isEnabled = !busy
@@ -73,15 +76,17 @@ class BootstrapSettingsScreenController(
         importButton.isEnabled = !busy
         exportButton.isEnabled = !busy
         clearDataButton.isEnabled = !busy
-        saveStartButton.isEnabled = !busy
+        syncSaveStartButtonState()
     }
 
     fun updateDirtyState(hasUnsavedChanges: Boolean) {
+        this.hasUnsavedChanges = hasUnsavedChanges
         saveStartButton.text = if (hasUnsavedChanges) {
             activity.getString(R.string.bootstrap_settings_save_start_dirty)
         } else {
             activity.getString(R.string.bootstrap_settings_save_start)
         }
+        syncSaveStartButtonState()
     }
 
     fun focusValidationTab(isQuickField: Boolean) {
@@ -97,11 +102,15 @@ class BootstrapSettingsScreenController(
         }
 
         if (isError) {
-            warningView.setBackgroundColor(resolveThemeColor(MaterialR.attr.colorErrorContainer))
-            warningView.setTextColor(resolveThemeColor(MaterialR.attr.colorOnErrorContainer))
+            applyRoundedBannerStyle(
+                backgroundColorAttr = MaterialR.attr.colorErrorContainer,
+                textColorAttr = MaterialR.attr.colorOnErrorContainer
+            )
         } else {
-            warningView.setBackgroundColor(resolveThemeColor(MaterialR.attr.colorSecondaryContainer))
-            warningView.setTextColor(resolveThemeColor(MaterialR.attr.colorOnSecondaryContainer))
+            applyRoundedBannerStyle(
+                backgroundColorAttr = MaterialR.attr.colorSecondaryContainer,
+                textColorAttr = MaterialR.attr.colorOnSecondaryContainer
+            )
         }
     }
 
@@ -245,7 +254,7 @@ class BootstrapSettingsScreenController(
     private fun applyWindowInsets() {
         val topShellTopPadding = topShellView.paddingTop
         val scrollBottomPadding = scrollView.paddingBottom
-        val actionBarBottomPadding = actionBarView.paddingBottom
+        val logsPanelBottomPadding = logsPanelView.paddingBottom
 
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -253,9 +262,12 @@ class BootstrapSettingsScreenController(
             val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
 
             topShellView.updatePadding(top = topShellTopPadding + systemBars.top)
-            scrollView.updatePadding(bottom = scrollBottomPadding + if (imeVisible) imeInsets.bottom + dp(12) else 0)
-            actionBarView.updatePadding(bottom = actionBarBottomPadding + if (imeVisible) 0 else systemBars.bottom)
-            actionBarView.isVisible = !imeVisible
+            scrollView.updatePadding(
+                bottom = scrollBottomPadding + if (imeVisible) imeInsets.bottom + dimen(R.dimen.sillydroid_scroll_focus_spacing_top) else systemBars.bottom
+            )
+            logsPanelView.updatePadding(
+                bottom = logsPanelBottomPadding + if (imeVisible) imeInsets.bottom else systemBars.bottom
+            )
 
             if (imeVisible) {
                 scrollView.doOnNextLayout {
@@ -277,8 +289,8 @@ class BootstrapSettingsScreenController(
         focusedView.getDrawingRect(targetRect)
         scrollView.offsetDescendantRectToMyCoords(focusedView, targetRect)
 
-        val topSpacing = dp(12)
-        val bottomSpacing = dp(24)
+        val topSpacing = dimen(R.dimen.sillydroid_scroll_focus_spacing_top)
+        val bottomSpacing = dimen(R.dimen.sillydroid_scroll_focus_spacing_bottom)
         val viewportTop = scrollView.scrollY
         val viewportBottom = scrollView.scrollY + scrollView.height - scrollView.paddingBottom
 
@@ -313,8 +325,10 @@ class BootstrapSettingsScreenController(
     private fun compactTabLayout() {
         tabLayout.post {
             val tabStrip = tabLayout.getChildAt(0) as? ViewGroup ?: return@post
-            val tabLayoutHeight = dp(40)
-            val tabItemHeight = dp(36)
+            // 页签外壳和单项尺寸统一走 token，避免 XML 与运行时二次压缩出现两套间距标准。
+            val tabLayoutHeight = dimen(R.dimen.sillydroid_tab_strip_height)
+            val tabItemHeight = dimen(R.dimen.sillydroid_tab_item_height)
+            val tabHorizontalPadding = dimen(R.dimen.sillydroid_tab_horizontal_padding)
 
             tabLayout.minimumHeight = 0
             tabLayout.setPadding(0, 0, 0, 0)
@@ -331,7 +345,7 @@ class BootstrapSettingsScreenController(
             for (index in 0 until tabStrip.childCount) {
                 val tabView = tabStrip.getChildAt(index)
                 tabView.minimumHeight = 0
-                tabView.setPadding(dp(10), 0, dp(10), 0)
+                tabView.setPadding(tabHorizontalPadding, 0, tabHorizontalPadding, 0)
 
                 val layoutParams = tabView.layoutParams
                 if (layoutParams.height != tabItemHeight) {
@@ -344,8 +358,28 @@ class BootstrapSettingsScreenController(
         }
     }
 
+    private fun applyRoundedBannerStyle(backgroundColorAttr: Int, textColorAttr: Int) {
+        // 启动设置页已经统一成圆角面板，这里不能再直接 setBackgroundColor 覆盖成矩形色块。
+        warningView.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = activity.resources.getDimension(R.dimen.sillydroid_nested_card_radius)
+            setColor(resolveThemeColor(backgroundColorAttr))
+            setStroke(dp(1).coerceAtLeast(1), resolveThemeColor(MaterialR.attr.colorOutlineVariant))
+        }
+        warningView.setTextColor(resolveThemeColor(textColorAttr))
+    }
+
     private fun resolveThemeColor(attrRes: Int, fallback: Int = Color.TRANSPARENT): Int {
         return MaterialColors.getColor(activity, attrRes, fallback)
+    }
+
+    private fun syncSaveStartButtonState() {
+        // 保存并启动现在只在“设置”页签内承担提交动作；没有脏数据时保持禁用，避免误触。
+        saveStartButton.isEnabled = !busy && hasUnsavedChanges
+    }
+
+    private fun dimen(resId: Int): Int {
+        return activity.resources.getDimensionPixelSize(resId)
     }
 
     private fun dp(value: Int): Int {

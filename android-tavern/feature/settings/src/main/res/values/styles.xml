@@ -48,12 +48,28 @@
         <item name="boxStrokeWidth">1dp</item>
         <item name="boxStrokeWidthFocused">2dp</item>
         <item name="boxCollapsedPaddingTop">2dp</item>
-        <item name="boxCornerRadiusTopStart">14dp</item>
-        <item name="boxCornerRadiusTopEnd">14dp</item>
-        <item name="boxCornerRadiusBottomStart">14dp</item>
-        <item name="boxCornerRadiusBottomEnd">14dp</item>
+        <item name="boxCornerRadiusTopStart">@dimen/sillydroid_nested_card_radius</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/sillydroid_nested_card_radius</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/sillydroid_nested_card_radius</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/sillydroid_nested_card_radius</item>
         <item name="helperTextTextAppearance">@style/TextAppearance.SillyDroid.SettingsMeta</item>
         <item name="hintTextAppearance">@style/TextAppearance.SillyDroid.SettingsMeta</item>
+    </style>
+
+    <style name="Widget.SillyDroid.SettingsPanelCard" parent="Widget.Material3.CardView.Filled">
+        <item name="cardBackgroundColor">?attr/colorSurface</item>
+        <item name="cardCornerRadius">@dimen/sillydroid_panel_card_radius</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeColor">?attr/colorOutlineVariant</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <style name="Widget.SillyDroid.SettingsNestedCard" parent="Widget.Material3.CardView.Filled">
+        <item name="cardBackgroundColor">?attr/colorSurfaceContainerLow</item>
+        <item name="cardCornerRadius">@dimen/sillydroid_nested_card_radius</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeColor">?attr/colorOutlineVariant</item>
+        <item name="strokeWidth">1dp</item>
     </style>
 
     <style name="Widget.SillyDroid.SettingsButton" parent="Widget.Material3.Button">

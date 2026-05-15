@@ -7,8 +7,9 @@ class AndroidHostBridge(
     private val runOnUiThread: (() -> Unit) -> Unit,
     private val openSettings: () -> Unit,
     private val showFloatingLogsBubble: () -> Unit,
-    private val setFloatingLogsBubbleEnabled: (Boolean) -> Unit,
-    private val setWebViewPullRefreshEnabled: (Boolean) -> Unit,
+    // 这里必须和 @JavascriptInterface 方法名区分开，避免 Kotlin 在 lambda 里解析成当前桥接方法并递归调用。
+    private val applyFloatingLogsBubbleEnabled: (Boolean) -> Unit,
+    private val applyWebViewPullRefreshEnabled: (Boolean) -> Unit,
     private val reloadTavern: () -> Unit,
     private val hostVersionInfoJson: () -> String
 ) {
@@ -39,7 +40,7 @@ class AndroidHostBridge(
         }
 
         runOnUiThread {
-            setFloatingLogsBubbleEnabled(enabled)
+            applyFloatingLogsBubbleEnabled(enabled)
         }
         return true
     }
@@ -51,7 +52,7 @@ class AndroidHostBridge(
         }
 
         runOnUiThread {
-            setWebViewPullRefreshEnabled(enabled)
+            applyWebViewPullRefreshEnabled(enabled)
         }
         return true
     }

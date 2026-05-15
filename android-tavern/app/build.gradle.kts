@@ -40,9 +40,17 @@ fun requireReleaseSigningValue(name: String, value: String): String {
     return value
 }
 
-fun loadReleaseSigningProperties(): Properties {
+fun requireDebugSigningValue(name: String, value: String): String {
+    if (value.isBlank()) {
+        throw GradleException("缺少 Android debug 签名配置：$name")
+    }
+
+    return value
+}
+
+fun loadSigningProperties(relativePath: String): Properties {
     val properties = Properties()
-    val propertiesFile = file("signing/release-signing.properties")
+    val propertiesFile = file(relativePath)
 
     if (propertiesFile.isFile) {
         propertiesFile.inputStream().use(properties::load)
@@ -51,7 +59,11 @@ fun loadReleaseSigningProperties(): Properties {
     return properties
 }
 
-fun resolveReleaseSigningValue(
+fun resolveReleaseSigningValue(envName: String): String {
+    return System.getenv(envName).orEmpty().trim()
+}
+
+fun resolveDebugSigningValue(
     envName: String,
     propertyName: String,
     properties: Properties
@@ -65,26 +77,39 @@ val requestedTasks = gradle.startParameter.taskNames.map { it.lowercase() }
 val requiresReleaseSigning = requestedTasks.any { taskName ->
     taskName.contains("release") || taskName.contains("bundle")
 }
-val releaseSigningProperties = loadReleaseSigningProperties()
-val releaseSigningKeystorePath = resolveReleaseSigningValue(
-    envName = "SILLYDROID_ANDROID_RELEASE_KEYSTORE_PATH",
+val debugSigningProperties = loadSigningProperties("signing/debug-signing.properties")
+val debugSigningKeystorePath = resolveDebugSigningValue(
+    envName = "SILLYDROID_ANDROID_DEBUG_KEYSTORE_PATH",
     propertyName = "storeFile",
-    properties = releaseSigningProperties
+    properties = debugSigningProperties
+)
+val debugSigningKeystorePassword = resolveDebugSigningValue(
+    envName = "SILLYDROID_ANDROID_DEBUG_KEYSTORE_PASSWORD",
+    propertyName = "storePassword",
+    properties = debugSigningProperties
+)
+val debugSigningKeyAlias = resolveDebugSigningValue(
+    envName = "SILLYDROID_ANDROID_DEBUG_KEY_ALIAS",
+    propertyName = "keyAlias",
+    properties = debugSigningProperties
+)
+val debugSigningKeyPassword = resolveDebugSigningValue(
+    envName = "SILLYDROID_ANDROID_DEBUG_KEY_PASSWORD",
+    propertyName = "keyPassword",
+    properties = debugSigningProperties
+)
+// release 签名材料只允许从外部环境变量注入，避免正式签名 key 再次回退到仓库或开发机本地属性文件。
+val releaseSigningKeystorePath = resolveReleaseSigningValue(
+    envName = "SILLYDROID_ANDROID_RELEASE_KEYSTORE_PATH"
 )
 val releaseSigningKeystorePassword = resolveReleaseSigningValue(
-    envName = "SILLYDROID_ANDROID_RELEASE_KEYSTORE_PASSWORD",
-    propertyName = "storePassword",
-    properties = releaseSigningProperties
+    envName = "SILLYDROID_ANDROID_RELEASE_KEYSTORE_PASSWORD"
 )
 val releaseSigningKeyAlias = resolveReleaseSigningValue(
-    envName = "SILLYDROID_ANDROID_RELEASE_KEY_ALIAS",
-    propertyName = "keyAlias",
-    properties = releaseSigningProperties
+    envName = "SILLYDROID_ANDROID_RELEASE_KEY_ALIAS"
 )
 val releaseSigningKeyPassword = resolveReleaseSigningValue(
-    envName = "SILLYDROID_ANDROID_RELEASE_KEY_PASSWORD",
-    propertyName = "keyPassword",
-    properties = releaseSigningProperties
+    envName = "SILLYDROID_ANDROID_RELEASE_KEY_PASSWORD"
 )
 
 fun resolveAndroidVersionCode(rawValue: String): Int {
@@ -149,11 +174,40 @@ android {
     compileSdk = 36
 
     signingConfigs {
+        create("debugShared") {
+            // debug 构建也必须走项目内显式 keystore，禁止不同机器回退到各自 ~/.android/debug.keystore，
+            // 否则 gradlew 与 stage-4/apk 脚本会产出不同签名，导致同包名调试包无法覆盖安装。
+            val signingKeystoreFile = file(
+                requireDebugSigningValue(
+                    name = "SILLYDROID_ANDROID_DEBUG_KEYSTORE_PATH / signing/debug-signing.properties:storeFile",
+                    value = debugSigningKeystorePath
+                )
+            )
+
+            if (!signingKeystoreFile.isFile) {
+                throw GradleException("Android debug keystore 不存在：${signingKeystoreFile.absolutePath}")
+            }
+
+            storeFile = signingKeystoreFile
+            storePassword = requireDebugSigningValue(
+                name = "SILLYDROID_ANDROID_DEBUG_KEYSTORE_PASSWORD / signing/debug-signing.properties:storePassword",
+                value = debugSigningKeystorePassword
+            )
+            keyAlias = requireDebugSigningValue(
+                name = "SILLYDROID_ANDROID_DEBUG_KEY_ALIAS / signing/debug-signing.properties:keyAlias",
+                value = debugSigningKeyAlias
+            )
+            keyPassword = requireDebugSigningValue(
+                name = "SILLYDROID_ANDROID_DEBUG_KEY_PASSWORD / signing/debug-signing.properties:keyPassword",
+                value = debugSigningKeyPassword
+            )
+        }
+
         create("release") {
             if (requiresReleaseSigning) {
                 val signingKeystoreFile = file(
                     requireReleaseSigningValue(
-                        name = "SILLYDROID_ANDROID_RELEASE_KEYSTORE_PATH / signing/release-signing.properties:storeFile",
+                        name = "SILLYDROID_ANDROID_RELEASE_KEYSTORE_PATH",
                         value = releaseSigningKeystorePath
                     )
                 )
@@ -164,15 +218,15 @@ android {
 
                 storeFile = signingKeystoreFile
                 storePassword = requireReleaseSigningValue(
-                    name = "SILLYDROID_ANDROID_RELEASE_KEYSTORE_PASSWORD / signing/release-signing.properties:storePassword",
+                    name = "SILLYDROID_ANDROID_RELEASE_KEYSTORE_PASSWORD",
                     value = releaseSigningKeystorePassword
                 )
                 keyAlias = requireReleaseSigningValue(
-                    name = "SILLYDROID_ANDROID_RELEASE_KEY_ALIAS / signing/release-signing.properties:keyAlias",
+                    name = "SILLYDROID_ANDROID_RELEASE_KEY_ALIAS",
                     value = releaseSigningKeyAlias
                 )
                 keyPassword = requireReleaseSigningValue(
-                    name = "SILLYDROID_ANDROID_RELEASE_KEY_PASSWORD / signing/release-signing.properties:keyPassword",
+                    name = "SILLYDROID_ANDROID_RELEASE_KEY_PASSWORD",
                     value = releaseSigningKeyPassword
                 )
             }
@@ -191,6 +245,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // 所有 debug 入口统一用项目内共享 debug key，保证本地 gradlew、WSL、stage-4 脚本产物签名一致。
+            signingConfig = signingConfigs.getByName("debugShared")
+        }
+
         release {
             if (requiresReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")

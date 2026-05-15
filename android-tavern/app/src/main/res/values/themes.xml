@@ -3,6 +3,11 @@
     <style name="Theme.SillyDroid" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:statusBarColor">@android:color/black</item>
         <item name="android:navigationBarColor">@android:color/black</item>
+        <!--
+            统一所有 MaterialAlertDialogBuilder(activity) 的弹窗外观：圆角、按钮、标题/正文字号都从这里抽。
+            这样无需改 ~20 处 call site，新增弹窗也自动跟随同一套视觉。
+        -->
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.SillyDroid.MaterialAlertDialog.MaterialComponents</item>
     </style>
 
     <style name="Theme.SillyDroid.Settings" parent="Theme.Material3.DayNight.NoActionBar">
@@ -11,6 +16,61 @@
         <item name="android:windowBackground">?attr/colorSurfaceContainerLowest</item>
         <item name="materialButtonStyle">@style/Widget.SillyDroid.SettingsButton</item>
         <item name="materialButtonOutlinedStyle">@style/Widget.SillyDroid.SettingsButton.Outlined</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.SillyDroid.MaterialAlertDialog.Material3</item>
+    </style>
+
+    <!--
+        MainActivity 仍是 MaterialComponents 主题，Settings 是 Material3 主题。
+        两边若强行共用同一个 Material3 dialog overlay，会在 MaterialComponents 宿主里直接崩溃。
+        因此这里按宿主主题拆成两套兼容 overlay，但继续复用统一的标题 / 正文 / 圆角规范。
+     -->
+    <style name="ThemeOverlay.SillyDroid.MaterialAlertDialog.MaterialComponents" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="materialAlertDialogTitleTextStyle">@style/TextAppearance.SillyDroid.Dialog.Title</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/TextAppearance.SillyDroid.Dialog.Body</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.SillyDroid.Dialog.Button.MaterialComponents</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.SillyDroid.Dialog.Button.MaterialComponents</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.SillyDroid.Dialog.Button.MaterialComponents</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.SillyDroid.Dialog</item>
+    </style>
+
+    <style name="ThemeOverlay.SillyDroid.MaterialAlertDialog.Material3" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="materialAlertDialogTitleTextStyle">@style/TextAppearance.SillyDroid.Dialog.Title</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/TextAppearance.SillyDroid.Dialog.Body</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.SillyDroid.Dialog.Button.Material3</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.SillyDroid.Dialog.Button.Material3</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.SillyDroid.Dialog.Button.Material3</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.SillyDroid.Dialog</item>
+    </style>
+
+    <style name="ShapeAppearance.SillyDroid.Dialog" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">20dp</item>
+    </style>
+
+    <!--
+        materialAlertDialogTitleTextStyle / materialAlertDialogBodyTextStyle 在 MDC 里被当成 Widget
+        style 直接 style="?attr/..." 套在 TextView 上，必须带 layout_width / layout_height 这些布局属性。
+        以前继承的是 TextAppearance.*，inflate 时拿不到 layout_width 会直接 InflateException 崩溃。
+        现在改为继承 MDC 默认的 Title.Text / Body.Text widget 样式，仅覆盖字号 / 粗体 / 行距。
+    -->
+    <style name="TextAppearance.SillyDroid.Dialog.Title" parent="MaterialAlertDialog.MaterialComponents.Title.Text">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.SillyDroid.Dialog.Body" parent="MaterialAlertDialog.MaterialComponents.Body.Text">
+        <item name="android:textSize">14sp</item>
+        <item name="android:lineSpacingExtra">2sp</item>
+    </style>
+
+    <style name="Widget.SillyDroid.Dialog.Button.MaterialComponents" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.SillyDroid.Dialog.Button.Material3" parent="Widget.Material3.Button.TextButton.Dialog">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
     </style>
 
     <style name="TextAppearance.SillyDroid.SettingsToolbarTitle" parent="TextAppearance.Material3.TitleMedium">

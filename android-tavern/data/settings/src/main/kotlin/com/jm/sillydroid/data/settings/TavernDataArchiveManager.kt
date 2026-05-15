@@ -22,6 +22,8 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
         UPSTREAM_USER_ROOT
     }
 
+    private data class UserContentRoot(val root: File)
+
     private data class ArchiveImportPlan(
         val layout: ArchiveLayout,
         val sourceRoot: File
@@ -41,6 +43,24 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
         private const val defaultUserHandle = "default-user"
         private const val layoutLabelManaged = "Docker 四目录（根目录为 config,data,plugins,extensions；Android 宿主导出同构）"
         private const val layoutLabelPublic = "Linux/Termux public 结构（根目录为 config,data,plugins,public；第三方扩展位于 public/scripts/extensions/third-party）"
+        private val presetDirectoryNames: Set<String> = setOf(
+            "KoboldAI Settings",
+            "OpenAI Settings",
+            "NovelAI Settings",
+            "TextGen Settings",
+            "context",
+            "instruct",
+            "QuickReplies",
+            "sysprompt",
+            "reasoning"
+        )
+
+        private val userContentMarkerDirectories: Set<String> = presetDirectoryNames + setOf(
+            "characters",
+            "chats",
+            "group chats",
+            "worlds"
+        )
 
         private val upstreamUserBackupDirectories: Set<String> = setOf(
             "assets",
@@ -165,30 +185,31 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
     }
 
     private fun buildContentStats(importPlan: ArchiveImportPlan): List<String> {
-        val dataRoot = when (importPlan.layout) {
-            ArchiveLayout.UPSTREAM_USER_ROOT -> importPlan.sourceRoot
-            else -> importPlan.managedDirectory("data")
-        }
+        val userContentRoots = resolveUserContentRoots(importPlan)
 
-        val roleCardCount = countFilesInNamedDirectories(
-            dataRoot,
+        val roleCardCount = countManagedContentFiles(
+            userContentRoots,
             setOf("characters"),
-            setOf("json", "png", "jpg", "jpeg", "webp")
+            setOf("png"),
+            recursive = false
         )
-        val presetCount = countFilesInNamedDirectories(
-            dataRoot,
-            setOf("KoboldAI Settings", "OpenAI Settings", "NovelAI Settings", "TextGen Settings", "instruct", "sysprompt", "QuickReplies"),
-            setOf("json", "yaml", "yml")
+        val presetCount = countManagedContentFiles(
+            userContentRoots,
+            presetDirectoryNames,
+            setOf("json"),
+            recursive = false
         )
-        val dialogueCount = countFilesInNamedDirectories(
-            dataRoot,
+        val dialogueCount = countManagedContentFiles(
+            userContentRoots,
             setOf("chats", "group chats"),
-            setOf("jsonl", "json")
+            setOf("jsonl"),
+            recursive = true
         )
-        val worldsCount = countFilesInNamedDirectories(
-            dataRoot,
+        val worldsCount = countManagedContentFiles(
+            userContentRoots,
             setOf("worlds"),
-            setOf("json", "yaml", "yml")
+            setOf("json"),
+            recursive = false
         )
         val thirdPartyExtensionsCount = countThirdPartyExtensions(importPlan)
 
@@ -218,18 +239,72 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
             .count { it.isDirectory }
     }
 
-    private fun countFilesInNamedDirectories(root: File, directoryNames: Set<String>, allowedExtensions: Set<String>): Int {
-        if (!root.exists()) {
-            return 0
-        }
+    private fun countManagedContentFiles(
+        contentRoots: List<UserContentRoot>,
+        directoryNames: Set<String>,
+        allowedExtensions: Set<String>,
+        recursive: Boolean
+    ): Int {
+        // 统计规则需要和酒馆当前用户目录模型对齐：
+        // - characters 目录里真正被酒馆识别为角色卡的是根层 .png 文件；
+        //   角色目录下的 sprites/backgrounds 等附属资源不能再被算成“角色卡数量”。
+        // - worlds、各类 presets 目录由酒馆按目录根层文件读取；
+        //   这里只统计酒馆实际会读取的文件类型，避免把旁路文件或旧格式误算进去。
+        // - chats 仍保留递归统计，因为角色聊天会落在 chats/<character>/*.jsonl。
+        return contentRoots.sumOf { contentRoot ->
+            directoryNames.sumOf { directoryName ->
+                val directory = File(contentRoot.root, directoryName)
+                if (!directory.isDirectory) {
+                    return@sumOf 0
+                }
 
-        return root.walkTopDown()
-            .filter { it.isDirectory && it.name in directoryNames }
-            .sumOf { directory ->
-                directory.walkTopDown().count { file ->
-                    file.isFile && file.extension.lowercase() in allowedExtensions
+                val candidateFiles = if (recursive) {
+                    directory.walkTopDown().asSequence().filter { it.isFile }
+                } else {
+                    directory.listFiles()
+                        .orEmpty()
+                        .asSequence()
+                        .filter { it.isFile }
+                }
+
+                candidateFiles.count { file ->
+                    file.extension.lowercase() in allowedExtensions
                 }
             }
+        }
+    }
+
+    private fun resolveUserContentRoots(importPlan: ArchiveImportPlan): List<UserContentRoot> {
+        if (importPlan.layout == ArchiveLayout.UPSTREAM_USER_ROOT) {
+            return listOf(createUserContentRoot(importPlan.sourceRoot))
+        }
+
+        val dataRoot = importPlan.managedDirectory("data")
+        if (!dataRoot.isDirectory) {
+            return emptyList()
+        }
+
+        val directChildren = dataRoot.listFiles()
+            .orEmpty()
+            .filter { it.isDirectory }
+        val nestedUserRoots = directChildren.filter(::looksLikeUserContentRoot)
+        val resolvedRoots = if (nestedUserRoots.isNotEmpty()) {
+            nestedUserRoots
+        } else if (looksLikeUserContentRoot(dataRoot)) {
+            listOf(dataRoot)
+        } else {
+            emptyList()
+        }
+
+        return resolvedRoots.map(::createUserContentRoot)
+    }
+
+    private fun looksLikeUserContentRoot(directory: File): Boolean {
+        return userContentMarkerDirectories.any { File(directory, it).exists() }
+    }
+
+    private fun createUserContentRoot(root: File): UserContentRoot {
+        return UserContentRoot(root = root)
     }
 
     private fun countImportedFiles(importPlan: ArchiveImportPlan): Int {

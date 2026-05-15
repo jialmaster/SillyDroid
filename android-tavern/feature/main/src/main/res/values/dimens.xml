@@ -22,4 +22,11 @@
     <dimen name="sillydroid_floating_logs_select_control_width">96dp</dimen>
     <dimen name="sillydroid_floating_logs_interval_control_width">76dp</dimen>
     <dimen name="sillydroid_floating_logs_control_corner_radius">10dp</dimen>
+    <dimen name="sillydroid_floating_logs_surface_corner_radius">8dp</dimen>
+    <dimen name="sillydroid_floating_logs_scrollbar_hit_width">12dp</dimen>
+    <dimen name="sillydroid_floating_logs_scrollbar_min_height">36dp</dimen>
+    <dimen name="sillydroid_floating_logs_scrollbar_radius">3dp</dimen>
+    <dimen name="sillydroid_floating_logs_scrollbar_visual_inset">4dp</dimen>
+    <dimen name="sillydroid_floating_logs_scrollbar_end_margin">2dp</dimen>
+    <dimen name="sillydroid_floating_logs_scrollbar_vertical_margin">6dp</dimen>
 </resources>

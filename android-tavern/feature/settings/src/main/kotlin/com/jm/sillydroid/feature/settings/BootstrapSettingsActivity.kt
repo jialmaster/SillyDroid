@@ -23,8 +23,8 @@ import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
-import com.jm.sillydroid.core.model.bootstrap.buildStatusSummaryText
 import com.jm.sillydroid.core.model.bootstrap.shouldPreferTavernServerLog
+import com.jm.sillydroid.core.ui.scroll.DraggableScrollThumbController
 import com.jm.sillydroid.core.model.settings.SettingsNavigationContract
 import com.jm.sillydroid.domain.app.SillyDroidAppGraph
 import com.jm.sillydroid.domain.app.SillyDroidAppGraphProvider
@@ -45,7 +45,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.map
 
 class BootstrapSettingsActivity : AppCompatActivity() {
     companion object {
@@ -79,7 +78,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var rootView: View
     private lateinit var topShellView: View
     private lateinit var scrollView: NestedScrollView
-    private lateinit var actionBarView: View
     private lateinit var loadingIndicator: LinearProgressIndicator
     private lateinit var searchLayout: TextInputLayout
     private lateinit var searchInput: TextInputEditText
@@ -98,7 +96,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var logsPanelView: View
     private lateinit var logsScrollView: NestedScrollView
     private lateinit var logsScrollToBottomButton: android.widget.ImageButton
-    private lateinit var logsSessionSummaryView: TextView
+    private lateinit var logsScrollbarThumb: View
     private lateinit var logsMetaView: TextView
     private lateinit var logsEmptyView: TextView
     private lateinit var logsContentView: TextView
@@ -224,6 +222,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             }
         }
 
+        // 设置页仍然等真实配置异步回填，但“启动端口”先放默认值占位，避免首屏出现空白洞。
+        formController.renderStartupPortPlaceholder()
         screenController.setBusy(true)
         settingsCoordinator.loadConfiguration()
 
@@ -253,7 +253,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         toolbarTitleView = findViewById(R.id.bootstrapSettingsToolbarTitle)
         tabLayout = findViewById(R.id.bootstrapSettingsTabs)
         scrollView = findViewById(R.id.bootstrapSettingsScrollView)
-        actionBarView = findViewById(R.id.bootstrapSettingsActionBar)
         loadingIndicator = findViewById(R.id.bootstrapSettingsLoading)
         searchLayout = findViewById(R.id.bootstrapSettingsSearchLayout)
         searchInput = findViewById(R.id.bootstrapSettingsSearchInput)
@@ -272,7 +271,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         logsPanelView = findViewById(R.id.bootstrapSettingsLogsPanel)
         logsScrollView = findViewById(R.id.bootstrapSettingsLogsScrollView)
         logsScrollToBottomButton = findViewById(R.id.bootstrapSettingsLogsScrollToBottomButton)
-        logsSessionSummaryView = findViewById(R.id.bootstrapSettingsLogsSessionSummary)
+        logsScrollbarThumb = findViewById(R.id.bootstrapSettingsLogsScrollbarThumb)
         logsMetaView = findViewById(R.id.bootstrapSettingsLogsMeta)
         logsEmptyView = findViewById(R.id.bootstrapSettingsLogsEmpty)
         logsContentView = findViewById(R.id.bootstrapSettingsLogsContent)
@@ -302,7 +301,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             rootView = rootView,
             topShellView = topShellView,
             scrollView = scrollView,
-            actionBarView = actionBarView,
             tabLayout = tabLayout,
             dataPanelView = dataPanelView,
             extensionsPanelView = extensionsPanelView,
@@ -421,19 +419,21 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         logsCoordinator = BootstrapSettingsLogsCoordinator(
             activity = this,
             dispatchers = appGraph.dispatchers,
-            sessionSummaryView = logsSessionSummaryView,
             metaView = logsMetaView,
             emptyView = logsEmptyView,
             contentView = logsContentView,
             logsScrollView = logsScrollView,
+            scrollThumbController = DraggableScrollThumbController(
+                scrollView = logsScrollView,
+                thumbView = logsScrollbarThumb,
+                minThumbHeightPx = resources.getDimensionPixelSize(R.dimen.sillydroid_logs_scrollbar_min_height)
+            ),
             scrollToBottomButton = logsScrollToBottomButton,
             selectButton = logsSelectButton,
             exportButton = logsExportButton,
             reloadButton = logsReloadButton,
             clearButton = logsClearButton,
             hostLogRepository = hostLogRepository,
-            bootstrapSessionSummaryFlow = processManager.snapshot.map { snapshot -> snapshot.buildStatusSummaryText() },
-            currentBootstrapSessionSummary = { processManager.currentSnapshot().buildStatusSummaryText() },
             preferTavernServerLog = { processManager.currentSnapshot().shouldPreferTavernServerLog() },
             setBusy = screenController::setBusy,
             showError = settingsCoordinator::showValidationMessage,

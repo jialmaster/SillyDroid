@@ -84,6 +84,12 @@ data class BootstrapFailureSnapshot(
     val details: String,
     val isBlocked: Boolean,
     val throwableType: String? = null,
+    /**
+     * 结构化错误分类标签，对应 `BootstrapError` 子类的 simpleName
+     * （例如 `ArchiveCorrupted`、`ServerNotReady`）。
+     * 历史/未分类错误为 `null`，UI 应回退到 [title] / [details] 文案。
+     */
+    val errorKind: String? = null,
     val happenedAtMillis: Long = System.currentTimeMillis()
 )
 

@@ -87,7 +87,9 @@ bash "$workspace_root/scripts/resolve-tavern-build-plan.sh" \
 
 get_plan_value() {
     local key="$1"
-    sed -n "s/^${key}=//p" "$plan_file" | tail -n 1
+    # 构建计划文件可能来自 Windows CRLF 工作树；这里统一剥离 \r，
+    # 防止下游目录、文件名和 cp 目标路径拼接出隐藏回车。
+    sed -n "s/^${key}=//p" "$plan_file" | tail -n 1 | tr -d '\r'
 }
 
 tavern_tag="$(get_plan_value tavern_tag)"

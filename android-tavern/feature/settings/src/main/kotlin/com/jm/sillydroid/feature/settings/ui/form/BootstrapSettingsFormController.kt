@@ -127,6 +127,27 @@ class BootstrapSettingsFormController(
     private var currentRoot = linkedMapOf<String, Any?>()
     private var currentSearchQuery = ""
 
+    fun renderStartupPortPlaceholder() {
+        val portField = configRepository.fieldsByPath["port"] ?: return
+        currentRoot = linkedMapOf()
+        quickFieldContainer.removeAllViews()
+        sectionContainer.removeAllViews()
+        fieldBindings.clear()
+        fieldSearchBindings.clear()
+        sectionBindings.clear()
+        quickFieldPaths.clear()
+
+        // 异步加载真实配置前，先用默认端口占位，避免“数据”页签首屏出现空白跳动。
+        quickFieldContainer.addView(
+            createPortFieldView(
+                field = portField,
+                currentValue = defaultServicePort,
+                registerBinding = false,
+                enabled = false
+            )
+        )
+    }
+
     fun render(root: LinkedHashMap<String, Any?>) {
         currentRoot = configRepository.copyRoot(root)
         quickFieldContainer.removeAllViews()
@@ -257,7 +278,7 @@ class BootstrapSettingsFormController(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                bottomMargin = dp(8)
+                bottomMargin = dimen(R.dimen.sillydroid_section_card_spacing)
             }
         }
 
@@ -355,7 +376,7 @@ class BootstrapSettingsFormController(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                     ).apply {
-                        topMargin = dp(6)
+                        topMargin = dimen(R.dimen.sillydroid_field_vertical_spacing)
                     }
                 }
                 val container = LinearLayout(activity).apply {
@@ -421,7 +442,7 @@ class BootstrapSettingsFormController(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                     ).apply {
-                        topMargin = dp(6)
+                        topMargin = dimen(R.dimen.sillydroid_field_vertical_spacing)
                     }
                 }
                 val inputLayout = TextInputLayout(
@@ -481,7 +502,7 @@ class BootstrapSettingsFormController(
                         fieldContainer.background = if (matched) {
                             GradientDrawable().apply {
                                 shape = GradientDrawable.RECTANGLE
-                                cornerRadius = dpFloat(16)
+                                cornerRadius = dimenFloat(R.dimen.sillydroid_nested_card_radius)
                                 setColor(resolveThemeColor(MaterialR.attr.colorSurface))
                                 setStroke(dp(2), resolveThemeColor(MaterialR.attr.colorPrimary))
                             }
@@ -499,7 +520,12 @@ class BootstrapSettingsFormController(
         }
     }
 
-    private fun createPortFieldView(field: TavernConfigFieldSpec, currentValue: Any?): View {
+    private fun createPortFieldView(
+        field: TavernConfigFieldSpec,
+        currentValue: Any?,
+        registerBinding: Boolean = true,
+        enabled: Boolean = true
+    ): View {
         val defaultPortText = defaultServicePort.toString()
 
         val fieldContainer = LinearLayout(activity).apply {
@@ -508,7 +534,7 @@ class BootstrapSettingsFormController(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                topMargin = dp(6)
+                topMargin = dimen(R.dimen.sillydroid_field_vertical_spacing)
             }
         }
 
@@ -540,6 +566,7 @@ class BootstrapSettingsFormController(
             inputType = resolveInputType(field.kind)
             isSingleLine = true
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            isEnabled = enabled
             setOnFocusChangeListener { focusedView, hasFocus ->
                 if (hasFocus) {
                     ensureViewVisible(focusedView)
@@ -554,7 +581,7 @@ class BootstrapSettingsFormController(
         val randomButton = ImageButton(activity).apply {
             layoutParams = LinearLayout.LayoutParams(dimen(R.dimen.sillydroid_icon_button_size), dimen(R.dimen.sillydroid_icon_button_size)).apply {
                 marginStart = dimen(R.dimen.sillydroid_space_md)
-                topMargin = dp(6)
+                topMargin = dimen(R.dimen.sillydroid_field_vertical_spacing)
             }
             minimumWidth = 0
             minimumHeight = 0
@@ -569,6 +596,7 @@ class BootstrapSettingsFormController(
             setImageResource(R.drawable.ic_port_random)
             imageTintList = ColorStateList.valueOf(resolveThemeColor(MaterialR.attr.colorOnSurfaceVariant))
             contentDescription = activity.getString(R.string.bootstrap_settings_port_randomize)
+            isEnabled = enabled
         }
         randomButton.setOnClickListener {
             val currentPort = editText.text?.toString()?.trim()?.toIntOrNull()
@@ -582,16 +610,18 @@ class BootstrapSettingsFormController(
         rowLayout.addView(inputLayout)
         rowLayout.addView(randomButton)
         fieldContainer.addView(rowLayout)
-        fieldBindings[field.path] = TextBinding(
-            path = field.path,
-            containerView = fieldContainer,
-            inputLayout = inputLayout,
-            input = editText,
-            blankFallbackText = defaultPortText
-        )
-        editText.doAfterTextChanged {
-            onFieldEdited(field.path)
-            onFormChanged()
+        if (registerBinding) {
+            fieldBindings[field.path] = TextBinding(
+                path = field.path,
+                containerView = fieldContainer,
+                inputLayout = inputLayout,
+                input = editText,
+                blankFallbackText = defaultPortText
+            )
+            editText.doAfterTextChanged {
+                onFieldEdited(field.path)
+                onFormChanged()
+            }
         }
         return fieldContainer
     }
@@ -680,8 +710,8 @@ class BootstrapSettingsFormController(
             targetView.getDrawingRect(targetRect)
             scrollView.offsetDescendantRectToMyCoords(targetView, targetRect)
 
-            val topSpacing = dp(12)
-            val bottomSpacing = dp(24)
+            val topSpacing = dimen(R.dimen.sillydroid_scroll_focus_spacing_top)
+            val bottomSpacing = dimen(R.dimen.sillydroid_scroll_focus_spacing_bottom)
             val viewportTop = scrollView.scrollY
             val viewportBottom = scrollView.scrollY + scrollView.height - scrollView.paddingBottom
 
