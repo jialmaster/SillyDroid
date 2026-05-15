@@ -1,8 +1,11 @@
 package com.jm.sillydroid.feature.main.ui.home
 
+import android.os.Bundle
+import androidx.lifecycle.AbstractSavedStateViewModelFactory
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.savedstate.SavedStateRegistryOwner
 import com.jm.sillydroid.core.model.bootstrap.BootstrapSessionSnapshot
 import com.jm.sillydroid.domain.bootstrap.BootstrapController
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,18 +19,26 @@ import kotlinx.coroutines.launch
  *
  * - bootstrapSnapshot: 由 ViewModel 在 viewModelScope 内持续订阅 processManager.snapshot；
  *   Activity 通过 repeatOnLifecycle 重新接收。
- * - 其余字段是 WebView 恢复 / 重试 / 设置入口防抖等需要在生命周期事件之间保留的轻量状态。
+ * - loadedUrl / pendingLocalRetryAttempts 走 SavedStateHandle，可跨进程死亡恢复。
+ * - 其余字段是进程生命期内的轻量瞬态状态，不走 SavedStateHandle。
  */
 class HomeViewModel(
-    private val bootstrapController: BootstrapController
+    private val bootstrapController: BootstrapController,
+    private val savedStateHandle: SavedStateHandle = SavedStateHandle()
 ) : ViewModel() {
 
     private val mutableBootstrapSnapshot = MutableStateFlow(bootstrapController.currentSnapshot())
     val bootstrapSnapshot: StateFlow<BootstrapSessionSnapshot> = mutableBootstrapSnapshot.asStateFlow()
 
-    var loadedUrl: String = ""
+    var loadedUrl: String
+        get() = savedStateHandle[KEY_LOADED_URL] ?: ""
+        set(value) { savedStateHandle[KEY_LOADED_URL] = value }
+
+    var pendingLocalRetryAttempts: Int
+        get() = savedStateHandle[KEY_PENDING_LOCAL_RETRY] ?: 0
+        set(value) { savedStateHandle[KEY_PENDING_LOCAL_RETRY] = value }
+
     var hasRestoredWebViewState: Boolean = false
-    var pendingLocalRetryAttempts: Int = 0
     var isOpeningBootstrapSettings: Boolean = false
     var isPullGestureRefreshing: Boolean = false
     var isImeVisible: Boolean = false
@@ -53,14 +64,25 @@ class HomeViewModel(
     }
 
     class Factory(
-        private val bootstrapController: BootstrapController
-    ) : ViewModelProvider.Factory {
+        owner: SavedStateRegistryOwner,
+        private val bootstrapController: BootstrapController,
+        defaultArgs: Bundle? = null
+    ) : AbstractSavedStateViewModelFactory(owner, defaultArgs) {
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        override fun <T : ViewModel> create(
+            key: String,
+            modelClass: Class<T>,
+            handle: SavedStateHandle
+        ): T {
             require(modelClass.isAssignableFrom(HomeViewModel::class.java)) {
                 "Unknown ViewModel class: ${modelClass.name}"
             }
-            return HomeViewModel(bootstrapController) as T
+            return HomeViewModel(bootstrapController, handle) as T
         }
+    }
+
+    private companion object {
+        const val KEY_LOADED_URL = "home.loaded_url"
+        const val KEY_PENDING_LOCAL_RETRY = "home.pending_local_retry"
     }
 }

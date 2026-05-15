@@ -117,7 +117,7 @@ class MainActivity : AppCompatActivity() {
     private val hostLogRepository by lazy { appGraph.hostLogRepository }
     private val processManager by lazy<BootstrapController> { appGraph.bootstrapController }
     private val runtimeConfigRepository by lazy { appGraph.runtimeConfigRepository }
-    private val homeViewModel: HomeViewModel by viewModels { HomeViewModel.Factory(processManager) }
+    private val homeViewModel: HomeViewModel by viewModels { HomeViewModel.Factory(this, processManager) }
     private var loadedUrl: String
         get() = homeViewModel.loadedUrl
         set(value) { homeViewModel.loadedUrl = value }
@@ -325,6 +325,14 @@ class MainActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
         bindViews()
+        installAppUpdateCoordinator()
+        installSystemUi()
+        installWebViewStack(savedInstanceState)
+        installBootstrapWiring()
+        startBootstrap(false)
+    }
+
+    private fun installAppUpdateCoordinator() {
         appUpdateCoordinator = AppUpdateCoordinator(
             activity = this,
             appUpdateRepository = appGraph.appUpdateRepository,
@@ -338,19 +346,27 @@ class MainActivity : AppCompatActivity() {
             )
         )
         appUpdateCoordinator.initialize()
+    }
+
+    private fun installSystemUi() {
         applySystemBarInsets()
         floatingLogsController.configure()
         floatingLogsController.refreshVisibility()
         systemNotificationController.ensureChannel()
         requestNotificationPermissionIfNeeded()
+    }
+
+    private fun installWebViewStack(savedInstanceState: Bundle?) {
         configureWebView()
         registerBackPressHandler()
         restoreWebViewState(savedInstanceState)
+    }
+
+    private fun installBootstrapWiring() {
         observeBootstrapSession()
         observeBootstrapEvents()
         bootstrapRetry.setOnClickListener { startBootstrap(true) }
         bootstrapSettingsButton.setOnClickListener { openBootstrapSettings() }
-        startBootstrap(false)
     }
 
     override fun onStart() {

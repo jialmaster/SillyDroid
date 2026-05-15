@@ -419,17 +419,10 @@ class AppUpdateCoordinator(
     }
 
     private fun formatUpdateCheckError(exception: Throwable): String {
-        val rawMessage = exception.message.orEmpty().trim()
-        if (rawMessage.isBlank()) {
-            return activity.getString(R.string.app_update_check_failed_unknown_reason)
-        }
-
-        return rawMessage
-            .lineSequence()
-            .map { it.trim() }
-            .firstOrNull { it.isNotBlank() }
-            ?.take(240)
-            ?: activity.getString(R.string.app_update_check_failed_unknown_reason)
+        return formatAppUpdateCheckError(
+            exception = exception,
+            unknownFallback = activity.getString(R.string.app_update_check_failed_unknown_reason)
+        )
     }
 
     private suspend fun queryDownloadStatus(downloadId: Long): AppDownloadStatus {

@@ -74,22 +74,12 @@ class BootstrapSessionManager(
     private var observedTavernServerTailLogFileName: String? = null
     private var readyWatchdogJob: Job? = null
     private var serverProcess: ManagedProcess? = null
-    private var autoRestartWindowStartedAtMs = 0L
-    private var autoRestartAttemptCount = 0
+    private var autoRestartBudget = BootstrapAutoRestartBudget(
+        attemptLimit = autoRestartAttemptLimit,
+        windowMillis = autoRestartWindowMillis
+    )
     private var currentSnapshot = BootstrapSessionRuntimeStore.snapshot.value
     private var rootfsAssetsRefreshed = false
-
-    private val stepWeights = linkedMapOf(
-        BootstrapStepId.DETECT_EXISTING_SERVER to 2,
-        BootstrapStepId.PREPARE_LOG_SESSION to 3,
-        BootstrapStepId.PREPARE_WORKDIRS to 3,
-        BootstrapStepId.PREPARE_ROOTFS_ASSETS to 28,
-        BootstrapStepId.PREPARE_SERVER_ASSETS to 32,
-        BootstrapStepId.VALIDATE_RUNTIME_LAYOUT to 6,
-        BootstrapStepId.ENSURE_ROOTFS_RUNTIME to 10,
-        BootstrapStepId.START_SERVER_PROCESS to 6,
-        BootstrapStepId.WAIT_HTTP_READY to 10
-    )
 
     fun start(forceRestart: Boolean) {
         if (!forceRestart) {
@@ -166,7 +156,8 @@ class BootstrapSessionManager(
     fun close() {
         bootstrapJob?.cancel()
         stopRuntimeStatusReporting()
-        stopManagedProcesses()
+        // Fire-and-forget process teardown to avoid blocking the caller (typically Activity.onDestroy on the main thread).
+        scope.launch { runCatching { stopManagedProcesses() } }
         startupLogWriter.close()
     }
 
@@ -441,7 +432,7 @@ class BootstrapSessionManager(
                         progressPercent = ((attempt.toDouble() / totalAttempts.toDouble()) * 100.0).toInt().coerceIn(1, 99)
                     )
                 }) {
-                throw BootstrapException("本地 Tavern 服务在等待窗口内未就绪。")
+                throw BootstrapException(BootstrapError.ServerNotReady("本地 Tavern 服务在等待窗口内未就绪。"))
             }
             completeStep(
                 stepId = BootstrapStepId.WAIT_HTTP_READY,
@@ -496,21 +487,13 @@ class BootstrapSessionManager(
         statusDetails: String
     ) {
         val nowMillis = System.currentTimeMillis()
-        val updatedSteps = currentSnapshot.steps.map { step ->
-            if (step.id == stepId) {
-                step.copy(
-                    status = BootstrapStepStatus.RUNNING,
-                    detection = detection,
-                    result = BootstrapStepResult.NONE,
-                    progressPercent = 0,
-                    details = statusDetails,
-                    startedAtMillis = nowMillis,
-                    finishedAtMillis = 0L
-                )
-            } else {
-                step
-            }
-        }
+        val updatedSteps = BootstrapStepLedger.startRunning(
+            steps = currentSnapshot.steps,
+            stepId = stepId,
+            detection = detection,
+            statusDetails = statusDetails,
+            nowMillis = nowMillis
+        )
         publishSnapshot(
             currentSnapshot.copy(
                 lifecycle = BootstrapLifecycle.RUNNING,
@@ -539,16 +522,12 @@ class BootstrapSessionManager(
         progressPercent: Int
     ) {
         val normalizedProgress = progressPercent.coerceIn(0, 99)
-        val updatedSteps = currentSnapshot.steps.map { step ->
-            if (step.id == stepId && step.status == BootstrapStepStatus.RUNNING) {
-                step.copy(
-                    progressPercent = normalizedProgress,
-                    details = details
-                )
-            } else {
-                step
-            }
-        }
+        val updatedSteps = BootstrapStepLedger.heartbeat(
+            steps = currentSnapshot.steps,
+            stepId = stepId,
+            details = details,
+            progressPercent = normalizedProgress
+        )
         publishSnapshot(
             currentSnapshot.copy(
                 steps = updatedSteps,
@@ -576,20 +555,14 @@ class BootstrapSessionManager(
         details: String
     ) {
         val nowMillis = System.currentTimeMillis()
-        val updatedSteps = currentSnapshot.steps.map { step ->
-            if (step.id == stepId) {
-                step.copy(
-                    status = BootstrapStepStatus.COMPLETED,
-                    detection = detection,
-                    result = result,
-                    progressPercent = 100,
-                    details = details,
-                    finishedAtMillis = nowMillis
-                )
-            } else {
-                step
-            }
-        }
+        val updatedSteps = BootstrapStepLedger.completed(
+            steps = currentSnapshot.steps,
+            stepId = stepId,
+            detection = detection,
+            result = result,
+            details = details,
+            nowMillis = nowMillis
+        )
         publishSnapshot(
             currentSnapshot.copy(
                 steps = updatedSteps,
@@ -616,21 +589,14 @@ class BootstrapSessionManager(
         details: String
     ) {
         val nowMillis = System.currentTimeMillis()
-        val updatedSteps = currentSnapshot.steps.map { step ->
-            if (step.id == stepId) {
-                step.copy(
-                    status = BootstrapStepStatus.SKIPPED,
-                    detection = detection,
-                    result = result,
-                    progressPercent = 100,
-                    details = details,
-                    startedAtMillis = nowMillis,
-                    finishedAtMillis = nowMillis
-                )
-            } else {
-                step
-            }
-        }
+        val updatedSteps = BootstrapStepLedger.skipped(
+            steps = currentSnapshot.steps,
+            stepId = stepId,
+            detection = detection,
+            result = result,
+            details = details,
+            nowMillis = nowMillis
+        )
         publishSnapshot(
             currentSnapshot.copy(
                 steps = updatedSteps,
@@ -657,21 +623,13 @@ class BootstrapSessionManager(
         detection: BootstrapStepDetection
     ) {
         val nowMillis = System.currentTimeMillis()
-        val updatedSteps = currentSnapshot.steps.map { step ->
-            if (step.status == BootstrapStepStatus.PENDING) {
-                step.copy(
-                    status = BootstrapStepStatus.SKIPPED,
-                    detection = detection,
-                    result = result,
-                    progressPercent = 100,
-                    details = details,
-                    startedAtMillis = nowMillis,
-                    finishedAtMillis = nowMillis
-                )
-            } else {
-                step
-            }
-        }
+        val updatedSteps = BootstrapStepLedger.skipRemainingPending(
+            steps = currentSnapshot.steps,
+            detection = detection,
+            result = result,
+            details = details,
+            nowMillis = nowMillis
+        )
         publishSnapshot(currentSnapshot.copy(steps = updatedSteps), logLine = "step_skip_remaining result=$result details=$details")
     }
 
@@ -683,19 +641,13 @@ class BootstrapSessionManager(
     ) {
         val failedStepId = currentSnapshot.currentStepId
         val nowMillis = System.currentTimeMillis()
-        val updatedSteps = currentSnapshot.steps.map { step ->
-            if (step.id == failedStepId) {
-                step.copy(
-                    status = BootstrapStepStatus.FAILED,
-                    result = if (blocked) BootstrapStepResult.FAILED_BLOCKED else BootstrapStepResult.FAILED_ERROR,
-                    progressPercent = step.progressPercent.coerceIn(0, 99),
-                    details = details,
-                    finishedAtMillis = nowMillis
-                )
-            } else {
-                step
-            }
-        }
+        val updatedSteps = BootstrapStepLedger.failed(
+            steps = currentSnapshot.steps,
+            stepId = failedStepId,
+            blocked = blocked,
+            details = details,
+            nowMillis = nowMillis
+        )
         publishSnapshot(
             currentSnapshot.copy(
                 lifecycle = if (blocked) BootstrapLifecycle.FAILED_BLOCKED else BootstrapLifecycle.FAILED_ERROR,
@@ -822,7 +774,7 @@ class BootstrapSessionManager(
         stopReadyWatchdog(reason = "scheduling auto-restart")
         serverMonitorJob?.cancel()
         serverMonitorJob = null
-        val attempt = recordAutoRestartAttempt() ?: run {
+        val attempt = autoRestartBudget.recordAttempt(System.currentTimeMillis()) ?: run {
             publishSnapshot(
                 currentSnapshot.copy(
                     lifecycle = BootstrapLifecycle.FAILED_ERROR,
@@ -885,27 +837,15 @@ class BootstrapSessionManager(
         }
     }
 
-    private fun recordAutoRestartAttempt(nowMs: Long = System.currentTimeMillis()): Int? {
-        if (autoRestartWindowStartedAtMs == 0L || nowMs - autoRestartWindowStartedAtMs > autoRestartWindowMillis) {
-            autoRestartWindowStartedAtMs = nowMs
-            autoRestartAttemptCount = 0
-        }
-
-        if (autoRestartAttemptCount >= autoRestartAttemptLimit) {
-            return null
-        }
-
-        autoRestartAttemptCount += 1
-        return autoRestartAttemptCount
-    }
+    private fun recordAutoRestartAttempt(nowMs: Long = System.currentTimeMillis()): Int? =
+        autoRestartBudget.recordAttempt(nowMs)
 
     private fun resetAutoRestartBudget() {
-        autoRestartWindowStartedAtMs = 0L
-        autoRestartAttemptCount = 0
+        autoRestartBudget.reset()
         publishSnapshot(currentSnapshot.copy(restartBudget = buildRestartBudgetSnapshot()))
     }
 
-    private fun stopManagedProcesses() {
+    private suspend fun stopManagedProcesses() {
         serverMonitorJob?.cancel()
         serverMonitorJob = null
         stopReadyWatchdog(reason = "stopping managed Tavern processes")
@@ -1136,21 +1076,8 @@ class BootstrapSessionManager(
         stopTavernServerTailReporting()
     }
 
-    private fun calculateProgress(steps: List<BootstrapStepSnapshot>): Int {
-        val totalWeight = stepWeights.values.sum().coerceAtLeast(1)
-        var accumulated = 0.0
-        for (step in steps) {
-            val weight = stepWeights.getValue(step.id)
-            accumulated += when (step.status) {
-                BootstrapStepStatus.COMPLETED,
-                BootstrapStepStatus.SKIPPED -> weight.toDouble()
-                BootstrapStepStatus.RUNNING,
-                BootstrapStepStatus.FAILED -> weight * (step.progressPercent.coerceIn(0, 100) / 100.0)
-                BootstrapStepStatus.PENDING -> 0.0
-            }
-        }
-        return ((accumulated / totalWeight.toDouble()) * 100.0).toInt().coerceIn(0, 100)
-    }
+    private fun calculateProgress(steps: List<BootstrapStepSnapshot>): Int =
+        BootstrapStepLedger.calculateProgress(steps)
 
     private fun buildLogTargets(): BootstrapCurrentLogTargets {
         val startup = runtimeLogs.currentStartupLogFileName()
@@ -1175,14 +1102,8 @@ class BootstrapSessionManager(
         }
     }
 
-    private fun buildRestartBudgetSnapshot(): BootstrapRestartBudgetSnapshot {
-        return BootstrapRestartBudgetSnapshot(
-            attemptCount = autoRestartAttemptCount,
-            attemptLimit = autoRestartAttemptLimit,
-            windowStartedAtMillis = autoRestartWindowStartedAtMs,
-            windowMillis = autoRestartWindowMillis
-        )
-    }
+    private fun buildRestartBudgetSnapshot(): BootstrapRestartBudgetSnapshot =
+        autoRestartBudget.snapshot()
 
     private fun hasBootstrapManifest(): Boolean {
         return File(HostPaths.from(appContext).serverDir, "bootstrap-manifest.json").isFile

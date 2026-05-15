@@ -6,6 +6,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.core.widget.NestedScrollView
+import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -41,7 +42,7 @@ class BootstrapSettingsLogsCoordinator(
     private val showError: (String) -> Unit,
     private val showMessage: (String) -> Unit,
     private val requestExport: () -> Unit
-) {
+) : DefaultLifecycleObserver {
     private var busy = false
     private var currentSnapshot: HostLogSnapshot? = null
     private var currentEntries: List<HostLogEntry> = emptyList()
@@ -77,6 +78,7 @@ class BootstrapSettingsLogsCoordinator(
         }
         renderSessionSummary()
         renderSnapshot()
+        activity.lifecycle.addObserver(this)
     }
 
     fun exportLogBundle(targetUri: Uri) {
