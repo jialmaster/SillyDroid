@@ -31,7 +31,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 
 object HostLogManager {
@@ -581,16 +580,22 @@ object HostLogManager {
 
         fun close() {
             commandChannel.close()
-            runBlocking {
-                val writerClosed = withTimeoutOrNull(asyncWriterShutdownTimeoutMillis) {
-                    writerJob.join()
-                    true
-                } ?: false
-                if (!writerClosed) {
-                    writerJob.cancel()
+            // Drain any pending log commands without blocking the caller (typically Activity.onDestroy on the main thread).
+            // Use a detached scope so cancelling writerScope here does not abort the drain itself.
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                try {
+                    val writerClosed = withTimeoutOrNull(asyncWriterShutdownTimeoutMillis) {
+                        writerJob.join()
+                        true
+                    } ?: false
+                    if (!writerClosed) {
+                        writerJob.cancel()
+                    }
+                } finally {
+                    writerScope.cancel()
+                    coroutineContext[Job]?.cancel()
                 }
             }
-            writerScope.cancel()
         }
 
         private fun submit(command: Command) {

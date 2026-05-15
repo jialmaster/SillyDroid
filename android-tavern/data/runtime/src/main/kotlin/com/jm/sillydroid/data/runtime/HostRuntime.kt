@@ -568,7 +568,7 @@ class AssetExtractor(private val context: Context) {
                     val outputFile = File(targetDirectory, relativePath).canonicalFile
                     val outputPath = outputFile.path
                     if (outputPath != canonicalTargetDirectory.path && !outputPath.startsWith(canonicalTargetPrefix)) {
-                        throw BootstrapException("bootstrap 归档包含非法路径：$relativePath")
+                        throw BootstrapException(BootstrapError.ArchiveCorrupted("bootstrap 归档包含非法路径：$relativePath"))
                     }
 
                     if (entry.isDirectory) {
@@ -605,7 +605,7 @@ class AssetExtractor(private val context: Context) {
         }
 
         if (processedEntries <= 0) {
-            throw BootstrapException("bootstrap 归档为空或格式无效：$assetPath")
+            throw BootstrapException(BootstrapError.ArchiveCorrupted("bootstrap 归档为空或格式无效：$assetPath"))
         }
 
         if (symlinkManifestRelativePath != null) {
@@ -642,13 +642,13 @@ class AssetExtractor(private val context: Context) {
             lines.filter { line -> line.isNotBlank() }.forEach { line ->
                 val parts = line.split('←', limit = 2)
                 if (parts.size != 2) {
-                    throw BootstrapException("bootstrap symlink manifest 格式非法：$line")
+                    throw BootstrapException(BootstrapError.ArchiveCorrupted("bootstrap symlink manifest 格式非法：$line"))
                 }
 
                 val linkTarget = parts[0].trim()
                 val relativePath = parts[1].trim().removePrefix("./").trimStart('/')
                 if (linkTarget.isBlank() || relativePath.isBlank()) {
-                    throw BootstrapException("bootstrap symlink manifest 包含空路径：$line")
+                    throw BootstrapException(BootstrapError.ArchiveCorrupted("bootstrap symlink manifest 包含空路径：$line"))
                 }
 
                 val linkFile = File(targetDirectory, relativePath)
@@ -656,7 +656,7 @@ class AssetExtractor(private val context: Context) {
 
                 val canonicalLinkPath = linkFile.canonicalFile.path
                 if (canonicalLinkPath != canonicalTargetDirectory.path && !canonicalLinkPath.startsWith(canonicalTargetPrefix)) {
-                    throw BootstrapException("bootstrap symlink 路径非法：$relativePath")
+                    throw BootstrapException(BootstrapError.ArchiveCorrupted("bootstrap symlink 路径非法：$relativePath"))
                 }
 
                 if (linkFile.exists()) {
@@ -710,7 +710,7 @@ class AssetExtractor(private val context: Context) {
 
         if (!process.waitFor(30, TimeUnit.SECONDS)) {
             process.destroyForcibly()
-            throw BootstrapException("dependency post-extract hook 执行超时：${hookFile.absolutePath}")
+            throw BootstrapException(BootstrapError.PostExtractHookFailed("dependency post-extract hook 执行超时：${hookFile.absolutePath}"))
         }
 
         if (process.exitValue() != 0) {
@@ -719,7 +719,7 @@ class AssetExtractor(private val context: Context) {
             } else {
                 output
             }
-            throw BootstrapException("dependency post-extract hook 执行失败：$details")
+            throw BootstrapException(BootstrapError.PostExtractHookFailed("dependency post-extract hook 执行失败：$details"))
         }
     }
 
@@ -952,7 +952,12 @@ class AndroidDnsConfigWriter(private val context: Context) {
     }
 }
 
-class BootstrapException(message: String) : IllegalStateException(message)
+class BootstrapException(
+    val error: BootstrapError,
+    cause: Throwable? = null
+) : IllegalStateException(error.message, cause) {
+    constructor(message: String) : this(BootstrapError.Generic(message))
+}
 
 data class LaunchRequest(
     val name: String,
@@ -1004,7 +1009,7 @@ object ServerProcessJanitor {
         }
     }
 
-    fun cleanupLingeringServerProcesses(): Int {
+    suspend fun cleanupLingeringServerProcesses(): Int {
         val processes = listOwnedProcesses()
         if (processes.isEmpty()) {
             return 0
@@ -1034,12 +1039,12 @@ object ServerProcessJanitor {
         }
 
         sendSignal(pidsToKill, "TERM")
-        Thread.sleep(150)
+        delay(150)
 
         val remainingPids = pidsToKill.filter { pid -> File("/proc/$pid").exists() }
         if (remainingPids.isNotEmpty()) {
             sendSignal(remainingPids, "KILL")
-            Thread.sleep(100)
+            delay(100)
         }
 
         return pidsToKill.size

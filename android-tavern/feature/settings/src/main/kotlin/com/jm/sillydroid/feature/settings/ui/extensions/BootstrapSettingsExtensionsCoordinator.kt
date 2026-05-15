@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.core.widget.TextViewCompat
+import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.lifecycleScope
 import com.jm.sillydroid.core.model.extensions.BatchExtensionFailure
 import com.jm.sillydroid.core.model.extensions.BatchExtensionInstallResult
@@ -85,7 +86,7 @@ class BootstrapSettingsExtensionsCoordinator(
     private val showBanner: (String) -> Unit,
     private val showMessage: (String) -> Unit,
     private val onTavernUiReloadRequired: () -> Unit
-) {
+) : DefaultLifecycleObserver {
     constructor(
         activity: AppCompatActivity,
         dispatchers: DispatcherProvider,
@@ -124,17 +125,10 @@ class BootstrapSettingsExtensionsCoordinator(
         SKIP
     }
 
-    private data class ExtensionProgressState(
-        val actionLabel: String,
-        val stageLabel: String,
-        val percent: Int?,
-        val indeterminate: Boolean
-    )
-
+    private val progressController = ExtensionProgressController(activity, progressHost)
     private var extensions: List<ManagedExtension> = emptyList()
     private var bundledExtensions: List<BundledExtension> = emptyList()
     private var busy = false
-    private var progressState: ExtensionProgressState? = null
 
     fun initialize() {
         installButton.setOnClickListener {
@@ -147,8 +141,9 @@ class BootstrapSettingsExtensionsCoordinator(
             reloadExtensions()
         }
         renderExtensions()
-        renderProgress()
+        progressController.refresh()
         reloadExtensions()
+        activity.lifecycle.addObserver(this)
     }
 
     fun reloadExtensions() {
@@ -203,7 +198,7 @@ class BootstrapSettingsExtensionsCoordinator(
         installButton.isEnabled = !busy
         batchDeleteButton.isEnabled = !busy
         reloadButton.isEnabled = !busy
-        renderProgress()
+        progressController.refresh()
         listContainer.removeAllViews()
         val missingBundledExtensions = bundledExtensions.filterNot { it.targetExists }
         val globalExtensions = extensions.filter { it.kind == ExtensionKind.GLOBAL }
@@ -584,7 +579,7 @@ class BootstrapSettingsExtensionsCoordinator(
 
     private fun deleteExtensionsBatch(selectedExtensions: List<ManagedExtension>) {
         activity.lifecycleScope.launch {
-            setProgressState(
+            progressController.setProgressState(
                 actionLabel = activity.getString(R.string.bootstrap_settings_extensions_action_delete_batch),
                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_delete_batch_progress, selectedExtensions.size),
                 percent = null,
@@ -597,7 +592,7 @@ class BootstrapSettingsExtensionsCoordinator(
                 }
             }
             setBusyState(false)
-            clearProgressState()
+            progressController.clear()
 
             result.onSuccess { (removed, failed) ->
                 val summary = activity.getString(
@@ -647,7 +642,7 @@ class BootstrapSettingsExtensionsCoordinator(
         }
 
         activity.lifecycleScope.launch {
-            setProgressState(
+            progressController.setProgressState(
                 actionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_reinstall),
                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_prepare),
                 percent = null,
@@ -661,7 +656,7 @@ class BootstrapSettingsExtensionsCoordinator(
                         normalizedRepository,
                         kind = extension.kind,
                         onProgress = { runtimeProgress ->
-                            publishRuntimeProgress(
+                            progressController.publishRuntimeProgress(
                                 activity.getString(R.string.bootstrap_settings_extensions_progress_action_reinstall),
                                 runtimeProgress
                             )
@@ -670,7 +665,7 @@ class BootstrapSettingsExtensionsCoordinator(
                 }
             }
             setBusyState(false)
-            clearProgressState()
+            progressController.clear()
 
             result.onSuccess {
                 val message = activity.getString(R.string.bootstrap_settings_extensions_reinstall_success, extension.displayName)
@@ -687,7 +682,7 @@ class BootstrapSettingsExtensionsCoordinator(
 
     private fun reinstallBundledExtension(extension: ManagedExtension, bundledSource: BundledExtension) {
         activity.lifecycleScope.launch {
-            setProgressState(
+            progressController.setProgressState(
                 actionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_reinstall),
                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating),
                 percent = null,
@@ -700,7 +695,7 @@ class BootstrapSettingsExtensionsCoordinator(
                 }
             }
             setBusyState(false)
-            clearProgressState()
+            progressController.clear()
 
             result.onSuccess { installResult ->
                 val message = if (installResult.migratedFromFolderName == null) {
@@ -771,7 +766,7 @@ class BootstrapSettingsExtensionsCoordinator(
         }
 
         activity.lifecycleScope.launch {
-            setProgressState(
+            progressController.setProgressState(
                 actionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_preview),
                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_github_checking),
                 percent = null,
@@ -787,7 +782,7 @@ class BootstrapSettingsExtensionsCoordinator(
                 }
             }
             setBusyState(false)
-            clearProgressState()
+            progressController.clear()
 
             result.onSuccess {
                 promptDefaultRepositorySelectionDialog(repositories)
@@ -1211,7 +1206,7 @@ class BootstrapSettingsExtensionsCoordinator(
 
     private fun installBundledExtension(extension: BundledExtension) {
         activity.lifecycleScope.launch {
-            setProgressState(
+            progressController.setProgressState(
                 actionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_install),
                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating),
                 percent = null,
@@ -1224,7 +1219,7 @@ class BootstrapSettingsExtensionsCoordinator(
                 }
             }
             setBusyState(false)
-            clearProgressState()
+            progressController.clear()
 
             result.onSuccess {
                 val message = activity.getString(R.string.bootstrap_settings_extensions_install_success, extension.displayName)
@@ -1261,7 +1256,7 @@ class BootstrapSettingsExtensionsCoordinator(
     ) {
         activity.lifecycleScope.launch {
             val previewActionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_preview)
-            setProgressState(
+            progressController.setProgressState(
                 actionLabel = previewActionLabel,
                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_github_checking),
                 percent = null,
@@ -1278,7 +1273,7 @@ class BootstrapSettingsExtensionsCoordinator(
                     )
 
                     activity.runOnUiThread {
-                        setProgressState(
+                        progressController.setProgressState(
                             actionLabel = previewActionLabel,
                             stageLabel = activity.getString(R.string.bootstrap_settings_extensions_batch_preview_stage, repositoryUrls.size),
                             percent = 0,
@@ -1297,7 +1292,7 @@ class BootstrapSettingsExtensionsCoordinator(
                             totalCount = normalizedRepositories.size,
                             itemLabel = repositoryDisplayLabel(repositoryUrl, normalizedRepository)
                         )
-                        publishBatchProgress(
+                        progressController.publishBatchProgress(
                             actionLabel = previewActionLabel,
                             descriptor = batchProgress,
                             stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_validating),
@@ -1311,7 +1306,7 @@ class BootstrapSettingsExtensionsCoordinator(
                                 message = activity.getString(R.string.bootstrap_settings_extensions_install_invalid_url),
                                 logPath = null
                             )
-                            publishBatchProgress(
+                            progressController.publishBatchProgress(
                                 actionLabel = previewActionLabel,
                                 descriptor = batchProgress,
                                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_completed),
@@ -1328,7 +1323,7 @@ class BootstrapSettingsExtensionsCoordinator(
                             )
                         }.onSuccess { preview ->
                             previews += preview
-                            publishBatchProgress(
+                            progressController.publishBatchProgress(
                                 actionLabel = previewActionLabel,
                                 descriptor = batchProgress,
                                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_completed),
@@ -1341,7 +1336,7 @@ class BootstrapSettingsExtensionsCoordinator(
                                 fallbackMessage = activity.getString(R.string.bootstrap_settings_extensions_install_failed),
                                 exceptionMessage = exception.message
                             )
-                            publishBatchProgress(
+                            progressController.publishBatchProgress(
                                 actionLabel = previewActionLabel,
                                 descriptor = batchProgress,
                                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_completed),
@@ -1354,7 +1349,7 @@ class BootstrapSettingsExtensionsCoordinator(
                 }
             }
             setBusyState(false)
-            clearProgressState()
+            progressController.clear()
 
             result.onSuccess { batchPreview ->
                 if (batchPreview.previews.isEmpty()) {
@@ -1437,7 +1432,7 @@ class BootstrapSettingsExtensionsCoordinator(
 
     private fun installPreviewedExtension(preview: ExtensionInstallPreview, kind: ExtensionKind = ExtensionKind.GLOBAL) {
         activity.lifecycleScope.launch {
-            setProgressState(
+            progressController.setProgressState(
                 actionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_install),
                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating),
                 percent = null,
@@ -1447,7 +1442,7 @@ class BootstrapSettingsExtensionsCoordinator(
             val result = withContext(dispatchers.io) {
                 runCatching {
                     runExtensionInstall(preview, kind) { runtimeProgress ->
-                        publishRuntimeProgress(
+                        progressController.publishRuntimeProgress(
                             activity.getString(R.string.bootstrap_settings_extensions_progress_action_install),
                             runtimeProgress
                         )
@@ -1455,7 +1450,7 @@ class BootstrapSettingsExtensionsCoordinator(
                 }
             }
             setBusyState(false)
-            clearProgressState()
+            progressController.clear()
 
             result.onSuccess {
                 val message = activity.getString(R.string.bootstrap_settings_extensions_install_success, preview.displayName)
@@ -1473,7 +1468,7 @@ class BootstrapSettingsExtensionsCoordinator(
     private fun installPreviewedExtensionsBatch(batchPreview: BatchExtensionPreview, kind: ExtensionKind = ExtensionKind.GLOBAL) {
         activity.lifecycleScope.launch {
             val installActionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_install)
-            setProgressState(
+            progressController.setProgressState(
                 actionLabel = installActionLabel,
                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_batch_install_stage, batchPreview.previews.size),
                 percent = 0,
@@ -1490,7 +1485,7 @@ class BootstrapSettingsExtensionsCoordinator(
                             totalCount = batchPreview.previews.size,
                             itemLabel = preview.displayName
                         )
-                        publishBatchProgress(
+                        progressController.publishBatchProgress(
                             actionLabel = installActionLabel,
                             descriptor = batchProgress,
                             stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating),
@@ -1499,7 +1494,7 @@ class BootstrapSettingsExtensionsCoordinator(
                         )
                         runCatching {
                             runExtensionInstall(preview, kind) { runtimeProgress ->
-                                publishBatchRuntimeProgress(
+                                progressController.publishBatchRuntimeProgress(
                                     actionLabel = installActionLabel,
                                     descriptor = batchProgress,
                                     runtimeProgress = runtimeProgress
@@ -1507,7 +1502,7 @@ class BootstrapSettingsExtensionsCoordinator(
                             }
                         }.onSuccess {
                             successes += preview
-                            publishBatchProgress(
+                            progressController.publishBatchProgress(
                                 actionLabel = installActionLabel,
                                 descriptor = batchProgress,
                                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_completed),
@@ -1520,7 +1515,7 @@ class BootstrapSettingsExtensionsCoordinator(
                                 fallbackMessage = activity.getString(R.string.bootstrap_settings_extensions_install_failed),
                                 exceptionMessage = exception.message
                             )
-                            publishBatchProgress(
+                            progressController.publishBatchProgress(
                                 actionLabel = installActionLabel,
                                 descriptor = batchProgress,
                                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_completed),
@@ -1534,7 +1529,7 @@ class BootstrapSettingsExtensionsCoordinator(
                 }
             }
             setBusyState(false)
-            clearProgressState()
+            progressController.clear()
 
             result.onSuccess { installResult ->
                 val summary = activity.getString(
@@ -1607,7 +1602,7 @@ class BootstrapSettingsExtensionsCoordinator(
 
     private fun cleanupBrokenExtensions(directories: List<BrokenExtensionDirectory>) {
         activity.lifecycleScope.launch {
-            setProgressState(
+            progressController.setProgressState(
                 actionLabel = activity.getString(R.string.bootstrap_settings_extensions_action_cleanup_broken),
                 stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating),
                 percent = null,
@@ -1620,7 +1615,7 @@ class BootstrapSettingsExtensionsCoordinator(
                 }
             }
             setBusyState(false)
-            clearProgressState()
+            progressController.clear()
 
             result.onSuccess { (removed, failed) ->
                 val summary = activity.getString(
@@ -1821,154 +1816,11 @@ class BootstrapSettingsExtensionsCoordinator(
         return extensionsRepository.normalizeRepositoryUrl(repositoryUrl)
     }
 
-    private data class BatchProgressDescriptor(
-        val currentIndex: Int,
-        val totalCount: Int,
-        val itemLabel: String
-    )
-
-    private fun publishRuntimeProgress(actionLabel: String, runtimeProgress: ExtensionRuntimeProgress) {
-        val nextState = mapProgressState(actionLabel, runtimeProgress)
-        activity.runOnUiThread {
-            progressState = nextState
-            renderProgress()
-        }
-    }
-
-    private fun publishBatchRuntimeProgress(
-        actionLabel: String,
-        descriptor: BatchProgressDescriptor,
-        runtimeProgress: ExtensionRuntimeProgress
-    ) {
-        val mappedProgress = mapProgressState(actionLabel, runtimeProgress)
-        publishBatchProgress(
-            actionLabel = actionLabel,
-            descriptor = descriptor,
-            stageLabel = mappedProgress.stageLabel,
-            itemPercent = mappedProgress.percent,
-            indeterminate = mappedProgress.indeterminate
-        )
-    }
-
-    private fun publishBatchProgress(
-        actionLabel: String,
-        descriptor: BatchProgressDescriptor,
-        stageLabel: String,
-        itemPercent: Int?,
-        indeterminate: Boolean
-    ) {
-        val overallPercent = itemPercent?.let { percent ->
-            val safePercent = percent.coerceIn(0, 100)
-            ((((descriptor.currentIndex - 1).toDouble() + (safePercent / 100.0)) / descriptor.totalCount.toDouble()) * 100.0)
-                .toInt()
-                .coerceIn(0, 100)
-        }
-        val nextState = ExtensionProgressState(
-            actionLabel = actionLabel,
-            stageLabel = activity.getString(
-                R.string.bootstrap_settings_extensions_batch_item_stage,
-                descriptor.currentIndex,
-                descriptor.totalCount,
-                descriptor.itemLabel,
-                stageLabel
-            ),
-            percent = overallPercent,
-            indeterminate = indeterminate || overallPercent == null
-        )
-        activity.runOnUiThread {
-            progressState = nextState
-            renderProgress()
-        }
-    }
-
-    private fun mapProgressState(actionLabel: String, runtimeProgress: ExtensionRuntimeProgress): ExtensionProgressState {
-        val stageLabel = when {
-            !runtimeProgress.message.isNullOrBlank() -> runtimeProgress.message.orEmpty()
-            runtimeProgress.step == "backup" -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_backup)
-            runtimeProgress.step == "validate" -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_validating)
-            runtimeProgress.step == "completed" -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_completed)
-            runtimeProgress.phase?.contains("receiving objects", ignoreCase = true) == true -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_receiving)
-            runtimeProgress.phase?.contains("resolving deltas", ignoreCase = true) == true -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_resolving)
-            runtimeProgress.phase?.contains("updating workdir", ignoreCase = true) == true -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating)
-            else -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_prepare)
-        }
-
-        val percent = when {
-            runtimeProgress.step == "completed" -> 100
-            runtimeProgress.phase?.contains("receiving objects", ignoreCase = true) == true -> scaleProgress(runtimeProgress.loaded, runtimeProgress.total, 6, 82)
-            runtimeProgress.phase?.contains("resolving deltas", ignoreCase = true) == true -> scaleProgress(runtimeProgress.loaded, runtimeProgress.total, 82, 94)
-            runtimeProgress.phase?.contains("updating workdir", ignoreCase = true) == true -> scaleProgress(runtimeProgress.loaded, runtimeProgress.total, 94, 99)
-            else -> null
-        }
-
-        return ExtensionProgressState(
-            actionLabel = actionLabel,
-            stageLabel = stageLabel,
-            percent = percent,
-            indeterminate = runtimeProgress.indeterminate || percent == null
-        )
-    }
-
     private fun repositoryDisplayLabel(
         repositoryUrl: String,
         normalizedRepository: NormalizedExtensionRepository? = normalizeRepositoryUrl(repositoryUrl)
     ): String {
         return extensionsRepository.repositoryDisplayLabel(repositoryUrl, normalizedRepository)
-    }
-
-    private fun scaleProgress(loaded: Int?, total: Int?, minPercent: Int, maxPercent: Int): Int? {
-        val safeLoaded = loaded ?: return null
-        val safeTotal = total ?: return null
-        if (safeTotal <= 0) {
-            return null
-        }
-
-        val boundedRatio = safeLoaded.coerceIn(0, safeTotal).toDouble() / safeTotal.toDouble()
-        return (minPercent + ((maxPercent - minPercent) * boundedRatio).toInt()).coerceIn(minPercent, maxPercent)
-    }
-
-    private fun setProgressState(actionLabel: String, stageLabel: String, percent: Int?, indeterminate: Boolean) {
-        progressState = ExtensionProgressState(
-            actionLabel = actionLabel,
-            stageLabel = stageLabel,
-            percent = percent,
-            indeterminate = indeterminate
-        )
-        renderProgress()
-    }
-
-    private fun clearProgressState() {
-        progressState = null
-        renderProgress()
-    }
-
-    private fun renderProgress() {
-        val currentProgress = progressState
-        if (currentProgress == null) {
-            progressHost.hide()
-            return
-        }
-
-        val message = if (!currentProgress.indeterminate && currentProgress.percent != null) {
-            activity.getString(
-                R.string.bootstrap_settings_extensions_progress_label,
-                currentProgress.actionLabel,
-                currentProgress.stageLabel,
-                currentProgress.percent
-            )
-        } else {
-            activity.getString(
-                R.string.bootstrap_settings_extensions_progress_indeterminate,
-                currentProgress.actionLabel,
-                currentProgress.stageLabel
-            )
-        }
-
-        progressHost.show(
-            message = message,
-            percent = currentProgress.percent,
-            indeterminate = currentProgress.indeterminate
-        )
     }
 
     private fun setBusyState(value: Boolean) {
@@ -1995,4 +1847,6 @@ class BootstrapSettingsExtensionsCoordinator(
 }
 
 private class ExtensionUiException(message: String) : IllegalStateException(message)
+
+private typealias BatchProgressDescriptor = ExtensionProgressController.BatchDescriptor
 

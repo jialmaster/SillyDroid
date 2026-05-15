@@ -71,7 +71,7 @@ class DefaultHostProcessManager(
         }
 
         if (stoppedState == null) {
-            throw BootstrapException(timeoutMessage)
+            throw BootstrapException(BootstrapError.RuntimeStopTimeout(timeoutMessage))
         }
     }
 }
