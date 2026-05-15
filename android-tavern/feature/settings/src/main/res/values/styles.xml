@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="TextAppearance.SillyDroid.SettingsToolbarTitle" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.SillyDroid.SettingsTab" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">11sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.SillyDroid.SettingsButton" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.SillyDroid.SettingsSectionTitle" parent="TextAppearance.Material3.TitleSmall">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.SillyDroid.SettingsCardTitle" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.SillyDroid.SettingsDenseCardTitle" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="lineHeight">17sp</item>
+    </style>
+
+    <style name="TextAppearance.SillyDroid.SettingsBody" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textSize">10sp</item>
+    </style>
+
+    <style name="TextAppearance.SillyDroid.SettingsMeta" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:textSize">9sp</item>
+    </style>
+
+    <style name="TextAppearance.SillyDroid.SettingsBadge" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">9sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.SillyDroid.SettingsTextInputLayout.OutlinedBox" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeWidth">1dp</item>
+        <item name="boxStrokeWidthFocused">2dp</item>
+        <item name="boxCollapsedPaddingTop">2dp</item>
+        <item name="boxCornerRadiusTopStart">14dp</item>
+        <item name="boxCornerRadiusTopEnd">14dp</item>
+        <item name="boxCornerRadiusBottomStart">14dp</item>
+        <item name="boxCornerRadiusBottomEnd">14dp</item>
+        <item name="helperTextTextAppearance">@style/TextAppearance.SillyDroid.SettingsMeta</item>
+        <item name="hintTextAppearance">@style/TextAppearance.SillyDroid.SettingsMeta</item>
+    </style>
+
+    <style name="Widget.SillyDroid.SettingsButton" parent="Widget.Material3.Button">
+        <item name="android:minHeight">@dimen/sillydroid_control_min_height</item>
+        <item name="android:paddingStart">@dimen/sillydroid_control_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/sillydroid_control_padding_horizontal</item>
+        <item name="android:paddingTop">@dimen/sillydroid_control_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/sillydroid_control_padding_vertical</item>
+        <item name="android:textAppearance">@style/TextAppearance.SillyDroid.SettingsButton</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+
+    <style name="Widget.SillyDroid.SettingsButton.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:minHeight">@dimen/sillydroid_control_min_height</item>
+        <item name="android:paddingStart">@dimen/sillydroid_control_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/sillydroid_control_padding_horizontal</item>
+        <item name="android:paddingTop">@dimen/sillydroid_control_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/sillydroid_control_padding_vertical</item>
+        <item name="android:textAppearance">@style/TextAppearance.SillyDroid.SettingsButton</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+
+    <style name="Widget.SillyDroid.SettingsTextInputEditText" parent="Widget.Material3.TextInputEditText.OutlinedBox">
+        <item name="android:minHeight">@dimen/sillydroid_input_min_height</item>
+        <item name="android:paddingStart">@dimen/sillydroid_control_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/sillydroid_control_padding_horizontal</item>
+        <item name="android:paddingTop">@dimen/sillydroid_control_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/sillydroid_control_padding_vertical</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+</resources>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="sillydroid_space_xs">4dp</dimen>
+    <dimen name="sillydroid_space_sm">6dp</dimen>
+    <dimen name="sillydroid_space_md">8dp</dimen>
+    <dimen name="sillydroid_space_lg">10dp</dimen>
+    <dimen name="sillydroid_space_xxxs">2dp</dimen>
+    <dimen name="sillydroid_tab_height">36dp</dimen>
+    <dimen name="sillydroid_toolbar_height">44dp</dimen>
+    <dimen name="sillydroid_scrollbar_size">12dp</dimen>
+    <dimen name="sillydroid_control_padding_horizontal">8dp</dimen>
+    <dimen name="sillydroid_control_padding_vertical">3dp</dimen>
+    <dimen name="sillydroid_control_min_height">32dp</dimen>
+    <dimen name="sillydroid_input_min_height">38dp</dimen>
+    <dimen name="sillydroid_icon_button_size">40dp</dimen>
+    <dimen name="sillydroid_icon_button_padding">8dp</dimen>
+    <dimen name="sillydroid_settings_dense_icon_button_size">24dp</dimen>
+    <dimen name="sillydroid_settings_dense_icon_button_padding">3dp</dimen>
+    <dimen name="sillydroid_card_radius">18dp</dimen>
+    <dimen name="sillydroid_nested_card_radius">14dp</dimen>
+    <dimen name="sillydroid_section_padding">10dp</dimen>
+</resources>

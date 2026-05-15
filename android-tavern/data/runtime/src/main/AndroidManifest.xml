@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <service
+            android:name="com.jm.sillydroid.data.runtime.StartupCoordinatorService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Runs the embedded offline Linux runtime bootstrap for the local Tavern web service hosted by SillyDroid." />
+        </service>
+    </application>
+</manifest>

@@ -20,13 +20,13 @@
         android:usesCleartextTraffic="true">
 
         <activity
-            android:name=".BootstrapSettingsActivity"
+            android:name="com.jm.sillydroid.feature.settings.BootstrapSettingsActivity"
             android:exported="false"
             android:theme="@style/Theme.SillyDroid.Settings"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
-            android:name=".MainActivity"
+            android:name="com.jm.sillydroid.feature.main.MainActivity"
             android:exported="true"
             android:launchMode="singleTask">
             <intent-filter>
@@ -35,15 +35,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <service
-            android:name=".StartupCoordinatorService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Runs the embedded offline Linux runtime bootstrap for the local Tavern web service hosted by SillyDroid." />
-        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"

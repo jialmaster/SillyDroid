@@ -1,0 +1,67 @@
+package com.jm.sillydroid.feature.settings.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import com.jm.sillydroid.domain.settings.HostPreferencesRepository
+import com.jm.sillydroid.feature.settings.model.SettingsActivityUiState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+
+class SettingsActivityViewModel(
+    private val hostPreferencesRepository: HostPreferencesRepository
+) : ViewModel() {
+    private val _uiState = MutableStateFlow(
+        SettingsActivityUiState(
+            floatingLogsEnabled = hostPreferencesRepository.floatingLogBubbleEnabled,
+            pullRefreshEnabled = hostPreferencesRepository.webViewPullRefreshEnabled
+        )
+    )
+
+    val uiState: StateFlow<SettingsActivityUiState> = _uiState.asStateFlow()
+
+    fun selectTab(index: Int) {
+        _uiState.update { current ->
+            if (current.selectedTabIndex == index) current else current.copy(selectedTabIndex = index)
+        }
+    }
+
+    fun setFloatingLogsEnabled(enabled: Boolean) {
+        if (hostPreferencesRepository.floatingLogBubbleEnabled != enabled) {
+            hostPreferencesRepository.floatingLogBubbleEnabled = enabled
+        }
+        _uiState.update { current -> current.copy(floatingLogsEnabled = enabled) }
+    }
+
+    fun setPullRefreshEnabled(enabled: Boolean) {
+        if (hostPreferencesRepository.webViewPullRefreshEnabled != enabled) {
+            hostPreferencesRepository.webViewPullRefreshEnabled = enabled
+        }
+        _uiState.update { current -> current.copy(pullRefreshEnabled = enabled) }
+    }
+
+    fun markResultFlags(
+        shouldStartBootstrap: Boolean = false,
+        shouldReloadTavernUi: Boolean = false
+    ) {
+        _uiState.update { current ->
+            current.copy(
+                shouldStartBootstrap = current.shouldStartBootstrap || shouldStartBootstrap,
+                shouldReloadTavernUi = current.shouldReloadTavernUi || shouldReloadTavernUi
+            )
+        }
+    }
+}
+
+class SettingsActivityViewModelFactory(
+    private val hostPreferencesRepository: HostPreferencesRepository
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(SettingsActivityViewModel::class.java)) {
+            return SettingsActivityViewModel(hostPreferencesRepository) as T
+        }
+        throw IllegalArgumentException("Unsupported ViewModel: ${modelClass.name}")
+    }
+}
