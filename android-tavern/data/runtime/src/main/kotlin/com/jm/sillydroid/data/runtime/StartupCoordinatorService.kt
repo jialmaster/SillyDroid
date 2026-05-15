@@ -106,9 +106,13 @@ class StartupCoordinatorService : Service() {
 
     private fun buildNotification(snapshot: BootstrapSessionSnapshot): Notification {
         val normalizedProgress = snapshot.progressPercent.coerceIn(0, 100)
-        val showProgress = snapshot.derivedUiFlags.showProgress
+        // 就绪后通知必须切到明确的“已启动”态，不能继续残留等待 HTTP 的进度文案。
+        val showReadyState = snapshot.lifecycle == BootstrapLifecycle.READY_MONITORING
+        val showProgress = snapshot.derivedUiFlags.showProgress && !showReadyState
         val indeterminate = normalizedProgress <= 0
-        val contentText = if (showProgress && !indeterminate) {
+        val contentText = if (showReadyState) {
+            "SillyTavern 已启动"
+        } else if (showProgress && !indeterminate) {
             "${snapshot.statusMessage} (${normalizedProgress}%)"
         } else {
             snapshot.statusMessage

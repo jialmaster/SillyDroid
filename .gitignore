@@ -20,5 +20,9 @@ android-tavern/app/src/main/assets/bootstrap/server/*
 
 android-tavern/app/src/main/jniLibs/arm64-v8a/*
 !android-tavern/app/src/main/jniLibs/arm64-v8a/.gitkeep
-validation/
+# 这里只忽略仓库根目录的 validation 工具目录，不能误伤 Android 源码里的 validation 包。
+/validation/
+# release 签名材料只允许通过外部 secrets / 环境变量注入，禁止再次提交到仓库。
+android-tavern/app/signing/release.keystore
+android-tavern/app/signing/release-signing.properties
 AGENTS.md

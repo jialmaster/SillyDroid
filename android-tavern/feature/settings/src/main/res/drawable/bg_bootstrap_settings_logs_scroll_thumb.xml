@@ -1,0 +1,6 @@
+<!-- 与悬浮日志面板里的“滚动到底”按钮保持一致的低对比度圆角面背景。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="?attr/colorSurfaceContainerHigh" />
+    <corners android:radius="12dp" />
+</shape>

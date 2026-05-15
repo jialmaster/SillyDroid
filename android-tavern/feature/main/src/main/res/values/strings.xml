@@ -4,7 +4,7 @@
     <string name="bootstrap_idle">正在准备 SillyDroid 宿主环境。</string>
     <string name="bootstrap_progress_label">初始化进度 %1$d%%</string>
     <string name="bootstrap_progress_indeterminate">正在准备启动步骤…</string>
-    <string name="bootstrap_startup_elapsed">已耗时 %1$d 秒。</string>
+    <string name="bootstrap_startup_elapsed">已等待 %1$d 秒。</string>
     <string name="bootstrap_startup_tavern_log_tail">酒馆启动日志：%1$s</string>
     <string name="bootstrap_paused_message">本地 Tavern 服务已暂停。</string>
     <string name="bootstrap_paused_details">如需继续启动，请点击“继续启动”。</string>

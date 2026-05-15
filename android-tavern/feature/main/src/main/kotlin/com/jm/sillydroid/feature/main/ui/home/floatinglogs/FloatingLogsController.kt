@@ -13,9 +13,10 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.jm.sillydroid.core.model.bootstrap.BootstrapLogKind
 import com.jm.sillydroid.core.model.bootstrap.BootstrapSessionSnapshot
-import com.jm.sillydroid.core.model.bootstrap.buildStatusSummaryText
 import com.jm.sillydroid.core.model.bootstrap.shouldPreferTavernServerLog
+import com.jm.sillydroid.core.ui.scroll.DraggableScrollThumbController
 import com.jm.sillydroid.core.model.logs.HostLogEntry
 import com.jm.sillydroid.core.model.logs.HostLogSnapshot
 import com.jm.sillydroid.core.model.settings.FloatingLogRefreshIntervals
@@ -39,6 +40,7 @@ class FloatingLogsController(
     private val layoutController: FloatingLogsLayoutController,
     private val views: FloatingLogsViews,
     private val text: FloatingLogsText,
+    private val scrollThumbController: DraggableScrollThumbController,
     private val currentSnapshot: () -> BootstrapSessionSnapshot,
     private val canOpenSettings: (BootstrapSessionSnapshot) -> Boolean,
     private val openSettings: () -> Unit,
@@ -51,6 +53,7 @@ class FloatingLogsController(
     private var lastSnapshot: HostLogSnapshot? = null
     private var availableEntries: List<HostLogEntry> = emptyList()
     private var selectedLogFileName: String? = null
+    private var lastPreferredLogKind: BootstrapLogKind? = null
     private var autoScrollEnabled = true
     private val bubbleTouchSlop by lazy { ViewConfiguration.get(activity).scaledTouchSlop }
 
@@ -92,6 +95,7 @@ class FloatingLogsController(
             }
         }
         configureControlButtons()
+        scrollThumbController.configure()
         updateControlLabels()
         activity.lifecycle.addObserver(this)
     }
@@ -108,6 +112,7 @@ class FloatingLogsController(
 
     override fun onDestroy(owner: LifecycleOwner) {
         stopRefreshLoop()
+        scrollThumbController.close()
     }
 
     fun showBubble() {
@@ -181,9 +186,18 @@ class FloatingLogsController(
     }
 
     fun renderSessionSummary(snapshot: BootstrapSessionSnapshot) {
-        val summaryText = snapshot.buildStatusSummaryText()
-        views.sessionSummary.isVisible = summaryText.isNotBlank()
-        views.sessionSummary.text = summaryText
+        // 当 bootstrap 推进到不同阶段（例如 START_SERVER_PROCESS / WAIT_HTTP_READY /
+        // READY_MONITORING）时，preferredKind 会从 STARTUP 切到 TAVERN_SERVER。
+        // 之前只靠面板内部的轮询定时器去发现这个切换，体感上会一直停留在“启动日志”上。
+        // 这里在 snapshot 推送时主动比对 preferredKind，发现变化且用户没有手动选定文件
+        // 就立即触发一次实时刷新，让面板（含顶部文件标签）跟随阶段同步切到酒馆服务日志。
+        val newPreferredKind = snapshot.currentLogTargets.preferredKind
+        val previous = lastPreferredLogKind
+        lastPreferredLogKind = newPreferredKind
+        if (previous != null && previous != newPreferredKind && selectedLogFileName == null && views.panel.isVisible) {
+            lastSnapshot = null
+            requestRealtimeRefresh(resetAutoScroll = true)
+        }
     }
 
     fun syncSettingsEntryState(snapshot: BootstrapSessionSnapshot) {
@@ -607,10 +621,10 @@ data class FloatingLogsViews(
     val bubble: ImageButton,
     val panel: View,
     val meta: TextView,
-    val sessionSummary: TextView,
     val empty: TextView,
     val content: TextView,
     val scroll: NestedScrollView,
+    val scrollbarThumb: View,
     val selectButton: MaterialButton,
     val intervalButton: MaterialButton,
     val closeButton: ImageButton,

@@ -19,6 +19,10 @@ android {
 dependencies {
     api(project(":domain"))
     api(project(":core:ui"))
+    // 复用 :feature:settings 里 BootstrapSettingsExtensionsCoordinator 实现的“默认扩展安装”完整流程
+    // （GitHub 可达性预检 + 按仓库批量预检 + 用户勾选确认 + 百分比进度 + 结果汇总），
+    // MainActivity 首次启动后用一个独立小窗触发同一套流程，不再跳转到设置页。
+    implementation(project(":feature:settings"))
     implementation(project(":ui:update"))
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")

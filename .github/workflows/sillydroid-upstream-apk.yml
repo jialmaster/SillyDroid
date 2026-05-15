@@ -34,11 +34,14 @@ on:
         required: false
         default: false
         type: boolean
-      publish_release:
-        description: 是否上传到当前仓库 GitHub Release
+      publish_target:
+        description: APK 发布目标
         required: false
-        default: true
-        type: boolean
+        default: release
+        type: choice
+        options:
+          - release
+          - artifact-only
   schedule:
     - cron: '17 */6 * * *'
 
@@ -71,6 +74,7 @@ jobs:
       server_changed: ${{ steps.plan.outputs.server_changed }}
       apk_changed: ${{ steps.plan.outputs.apk_changed }}
       force_rebuild: ${{ steps.plan.outputs.force_rebuild }}
+      publish_target: ${{ steps.plan.outputs.publish_target }}
       publish_release: ${{ steps.plan.outputs.publish_release }}
       rootfs_release_tag: ${{ steps.plan.outputs.rootfs_release_tag }}
       rootfs_release_title: ${{ steps.plan.outputs.rootfs_release_title }}
@@ -108,11 +112,20 @@ jobs:
           REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tavern_tag || 'auto' }}
           REQUESTED_BUILD_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.build_type || 'auto' }}
           FORCE_REBUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.force_rebuild || 'false' }}
-          PUBLISH_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release || 'true' }}
+          REQUESTED_PUBLISH_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_target || 'release' }}
           COMPARE_BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
           COMPARE_HEAD: ${{ github.sha }}
         run: |
           set -euo pipefail
+
+          case "$REQUESTED_PUBLISH_TARGET" in
+            release|artifact-only)
+              ;;
+            *)
+              echo "Unsupported publish target: $REQUESTED_PUBLISH_TARGET" >&2
+              exit 1
+              ;;
+          esac
 
           bash ./scripts/resolve-tavern-build-plan.sh \
             --tavern-tag "$REQUESTED_TAG" \
@@ -120,8 +133,14 @@ jobs:
             --compare-base "$COMPARE_BASE" \
             --compare-head "$COMPARE_HEAD" >> "$GITHUB_OUTPUT"
 
+          publish_release='true'
+          if [ "$REQUESTED_PUBLISH_TARGET" = 'artifact-only' ]; then
+            publish_release='false'
+          fi
+
           printf 'force_rebuild=%s\n' "$FORCE_REBUILD" >> "$GITHUB_OUTPUT"
-          printf 'publish_release=%s\n' "$PUBLISH_RELEASE" >> "$GITHUB_OUTPUT"
+          printf 'publish_target=%s\n' "$REQUESTED_PUBLISH_TARGET" >> "$GITHUB_OUTPUT"
+          printf 'publish_release=%s\n' "$publish_release" >> "$GITHUB_OUTPUT"
 
       - name: Append plan summary
         run: |
@@ -133,6 +152,7 @@ jobs:
             echo '- Host version: ${{ steps.plan.outputs.host_version }}'
             echo '- APK release index: ${{ steps.plan.outputs.apk_release_index }}'
             echo '- Force rebuild: ${{ steps.plan.outputs.force_rebuild }}'
+            echo '- Publish target: ${{ steps.plan.outputs.publish_target }}'
             echo '- Publish release: ${{ steps.plan.outputs.publish_release }}'
             echo '- Rootfs changed: ${{ steps.plan.outputs.rootfs_changed }}'
             echo '- Dependency changed: ${{ steps.plan.outputs.dependency_changed }}'
@@ -643,6 +663,7 @@ jobs:
             exit 0
           fi
 
+          # release 构建只能从 GitHub Actions secrets 注入签名材料，禁止回退到仓库内 keystore。
           configured_secret_count=0
           for variable_name in ANDROID_RELEASE_KEYSTORE_BASE64 ANDROID_RELEASE_STORE_PASSWORD ANDROID_RELEASE_KEY_ALIAS ANDROID_RELEASE_KEY_PASSWORD; do
             if [ -n "${!variable_name:-}" ]; then
@@ -650,36 +671,21 @@ jobs:
             fi
           done
 
-          if [ "$configured_secret_count" -eq 4 ]; then
-            keystore_path="$RUNNER_TEMP/android-release.keystore"
-            printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
-
-            {
-              printf 'keystore_path=%s\n' "$keystore_path"
-              printf 'store_password=%s\n' "$ANDROID_RELEASE_STORE_PASSWORD"
-              printf 'key_alias=%s\n' "$ANDROID_RELEASE_KEY_ALIAS"
-              printf 'key_password=%s\n' "$ANDROID_RELEASE_KEY_PASSWORD"
-              printf 'signing_source=%s\n' 'github-secrets'
-            } >> "$GITHUB_OUTPUT"
-
-            exit 0
-          fi
-
-          if [ "$configured_secret_count" -ne 0 ]; then
-            echo 'GitHub Actions release 签名 secrets 只配置了一部分；请补全 4 个变量，或全部删掉后使用仓库内置 keystore。' >&2
+          if [ "$configured_secret_count" -ne 4 ]; then
+            echo 'release 构建要求完整配置 4 个 GitHub Actions secrets：ANDROID_RELEASE_KEYSTORE_BASE64、ANDROID_RELEASE_STORE_PASSWORD、ANDROID_RELEASE_KEY_ALIAS、ANDROID_RELEASE_KEY_PASSWORD。' >&2
             exit 1
           fi
 
-          repo_keystore_path="$GITHUB_WORKSPACE/android-tavern/app/signing/release.keystore"
-          repo_signing_properties_path="$GITHUB_WORKSPACE/android-tavern/app/signing/release-signing.properties"
+          keystore_path="$RUNNER_TEMP/android-release.keystore"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
 
-          if [ -f "$repo_keystore_path" ] && [ -f "$repo_signing_properties_path" ]; then
-            printf 'signing_source=%s\n' 'repo' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo 'release 构建缺少签名配置；请配置 GitHub Actions secrets，或将 android-tavern/app/signing/release.keystore 与 android-tavern/app/signing/release-signing.properties 提交进仓库。' >&2
-          exit 1
+          {
+            printf 'keystore_path=%s\n' "$keystore_path"
+            printf 'store_password=%s\n' "$ANDROID_RELEASE_STORE_PASSWORD"
+            printf 'key_alias=%s\n' "$ANDROID_RELEASE_KEY_ALIAS"
+            printf 'key_password=%s\n' "$ANDROID_RELEASE_KEY_PASSWORD"
+            printf 'signing_source=%s\n' 'github-secrets'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Download rootfs artifact
         if: steps.resolve.outputs.source == 'built'
@@ -806,7 +812,7 @@ jobs:
       - dependency_prereq
       - server_prereq
       - build
-    if: needs.plan.outputs.publish_release == 'true'
+    if: needs.plan.outputs.publish_target == 'release'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -907,7 +913,7 @@ jobs:
       - server_prereq
       - build
       - publish
-    if: needs.plan.outputs.publish_release == 'true' && needs.publish.result == 'success'
+    if: needs.plan.outputs.publish_target == 'release' && needs.publish.result == 'success'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -916,6 +922,7 @@ jobs:
         run: |
           set -euo pipefail
 
+          # artifact-only 仅用于测试；正式发布成功后清空本次 run 的全部 workflow artifacts，避免残留 APK 测试产物。
           mapfile -t artifact_ids < <(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate --jq '.artifacts[].id')
 
           if [ "${#artifact_ids[@]}" -eq 0 ]; then
@@ -925,4 +932,3 @@ jobs:
           for artifact_id in "${artifact_ids[@]}"; do
             gh api repos/${{ github.repository }}/actions/artifacts/${artifact_id} -X DELETE > /dev/null
           done
-

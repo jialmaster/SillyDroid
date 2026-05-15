@@ -11,6 +11,9 @@ if (!externalBuildRoot.isNullOrBlank()) {
     layout.buildDirectory.set(file("$externalBuildRoot/root"))
 
     subprojects {
-        layout.buildDirectory.set(file("$externalBuildRoot/${project.name}"))
+        // 现在存在 :data:settings 与 :feature:settings 这类同名模块；必须按完整 project.path 分目录，
+        // 否则不同模块会共享同一个 build 输出根并互相覆盖生成物，最终触发 Gradle 任务依赖校验失败。
+        val uniqueBuildPath = project.path.removePrefix(":").replace(":", "/")
+        layout.buildDirectory.set(file("$externalBuildRoot/$uniqueBuildPath"))
     }
 }

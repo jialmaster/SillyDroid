@@ -12,8 +12,9 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workspace_root="$(cd "$script_dir/.." && pwd)"
 build_config_path="$workspace_root/sillydroid-build-config.json"
 proot_patch_signature="$(sha256sum "$script_dir/sync-android-rootfs.sh" | awk '{print $1}')"
-target_root="$workspace_root/android-tavern/app/src/main/assets/bootstrap/rootfs"
-jni_libs_root="$workspace_root/android-tavern/app/src/main/jniLibs/arm64-v8a"
+# 默认把 rootfs/jni 临时资产写入本地缓存目录，避免独立执行脚本时污染 android-tavern 工程目录。
+target_root="${SILLYDROID_ANDROID_ROOTFS_TARGET_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/sillydroid-android-rootfs-assets/rootfs}"
+jni_libs_root="${SILLYDROID_ANDROID_ROOTFS_JNI_LIBS_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/sillydroid-android-rootfs-assets/jniLibs/arm64-v8a}"
 runtime_prefix='/data/data/com.jm.sillydroid/files/usr'
 runtime_loader_dir="$runtime_prefix/libexec/proot"
 termux_guest_runtime_prefix='/data/data/com.termux/files/usr'
@@ -143,6 +144,9 @@ declare -A apt_repo_by_package=()
 usage() {
     cat <<'EOF'
 Usage: sync-android-rootfs.sh [--target-root <path>]
+
+说明：
+- 默认把 rootfs/jni 临时资产写入本地缓存目录，不再直接写回 android-tavern 工程目录。
 EOF
 }
 

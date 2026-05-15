@@ -69,14 +69,59 @@ class BootstrapSessionManager(
     private var bootstrapJob: Job? = null
     private var currentStepElapsedRefreshJob: Job? = null
     private var currentStepElapsedAnchorMillis = 0L
-    private var serverMonitorJob: Job? = null
     private var tavernServerTailJob: Job? = null
     private var observedTavernServerTailLogFileName: String? = null
-    private var readyWatchdogJob: Job? = null
     private var serverProcess: ManagedProcess? = null
     private var autoRestartBudget = BootstrapAutoRestartBudget(
         attemptLimit = autoRestartAttemptLimit,
         windowMillis = autoRestartWindowMillis
+    )
+    private val healthMonitor = BootstrapServerHealthMonitor(
+        scope = scope,
+        readyWatchdogIntervalMillis = readyWatchdogIntervalMillis,
+        readyWatchdogFailureThreshold = readyWatchdogFailureThreshold,
+        readyWatchdogSuccessLogEvery = readyWatchdogSuccessLogEvery,
+        callback = object : BootstrapServerHealthMonitor.Callback {
+            override fun appendStartupLog(line: String) {
+                this@BootstrapSessionManager.appendStartupLog(line)
+            }
+
+            override fun onProbeFailed(
+                targetUrl: String,
+                consecutiveFailures: Int,
+                failureThreshold: Int
+            ) {
+                emitEvent { snapshot ->
+                    BootstrapEvent.ProbeFailed(
+                        appSessionId = snapshot.appSessionId,
+                        attemptId = snapshot.attemptId,
+                        happenedAtMillis = System.currentTimeMillis(),
+                        targetUrl = targetUrl,
+                        consecutiveFailures = consecutiveFailures,
+                        failureThreshold = failureThreshold
+                    )
+                }
+            }
+
+            override fun onServerExit(exitCode: Int) {
+                val details = buildServerExitDetails(exitCode)
+                recordServerExitDiagnostics(details)
+                serverProcess = null
+                scheduleAutoRestart(
+                    message = "本地 Tavern 服务已退出，正在自动重启。",
+                    details = details
+                )
+            }
+
+            override fun onReadyWatchdogTriggered(localUrl: String, failureThreshold: Int) {
+                serverProcess = null
+                scheduleAutoRestart(
+                    message = "本地 Tavern 服务失去响应，正在自动重启。",
+                    details = "连续 $failureThreshold 次探针检测失败：$localUrl",
+                    localUrl = localUrl
+                )
+            }
+        }
     )
     private var currentSnapshot = BootstrapSessionRuntimeStore.snapshot.value
     private var rootfsAssetsRefreshed = false
@@ -86,19 +131,21 @@ class BootstrapSessionManager(
             if (bootstrapJob?.isActive == true) {
                 return
             }
-
-            val current = currentSnapshot
-            if (current.isReady && HealthProbe.isReady(readinessUrl())) {
-                return
-            }
-
-            if (current.canRetry) {
-                return
-            }
         }
 
         val previousJob = bootstrapJob
         bootstrapJob = scope.launch {
+            if (!forceRestart) {
+                val current = currentSnapshot
+                // 这里必须放进后台协程里做探针，避免 Service.onStartCommand 主线程直接触发网络访问。
+                if (current.isReady && HealthProbe.isReady(readinessUrl())) {
+                    return@launch
+                }
+
+                if (current.canRetry) {
+                    return@launch
+                }
+            }
             previousJob?.cancelAndJoin()
             if (forceRestart) {
                 stopManagedProcesses()
@@ -228,12 +275,12 @@ class BootstrapSessionManager(
                     currentSnapshot.copy(
                         lifecycle = BootstrapLifecycle.READY_MONITORING,
                         currentStepId = null,
-                        statusMessage = "已连接到现有本地 Tavern 服务。",
-                        statusDetails = "本地 HTTP 服务已可访问，当前会话正在复用现有服务实例。",
+                        statusMessage = "SillyTavern 已启动。",
+                        statusDetails = "已连接到现有本地 SillyTavern 服务实例。",
                         bootstrapPreviouslyCompleted = true,
                         restartBudget = buildRestartBudgetSnapshot()
                     ),
-                    logLine = "lifecycle=${BootstrapLifecycle.READY_MONITORING} message=已连接到现有本地 Tavern 服务。 details=本地 HTTP 服务已可访问，当前会话正在复用现有服务实例。"
+                    logLine = "lifecycle=${BootstrapLifecycle.READY_MONITORING} message=SillyTavern 已启动。 details=已连接到现有本地 SillyTavern 服务实例。"
                 )
                 startReadyWatchdog(readinessUrl, localUrl)
                 return
@@ -412,7 +459,9 @@ class BootstrapSessionManager(
                 stepId = BootstrapStepId.WAIT_HTTP_READY,
                 detection = BootstrapStepDetection.REQUIRED,
                 statusMessage = "正在等待 HTTP 服务就绪。",
-                statusDetails = "正在等待 127.0.0.1 本地服务完成启动。"
+                // WAIT_HTTP_READY 的主状态文案已经表达“等待 HTTP 就绪”，
+                // 这里不再追加近义详情，避免启动遮罩里出现两行重复语义的等待文案。
+                statusDetails = ""
             )
             if (!HealthProbe.awaitReady(resolvedReadinessUrl) { attempt, totalAttempts ->
                     emitEvent { snapshot ->
@@ -428,7 +477,9 @@ class BootstrapSessionManager(
                     }
                     heartbeatStep(
                         stepId = BootstrapStepId.WAIT_HTTP_READY,
-                        details = "第 $attempt/$totalAttempts 次 HTTP 探针检测：$resolvedReadinessUrl",
+                        // 已等待秒数与酒馆启动日志都由 UI 层统一追加；
+                        // 这里保持空详情，避免和“正在等待 HTTP 服务就绪”形成两层同义文案。
+                        details = "",
                         progressPercent = ((attempt.toDouble() / totalAttempts.toDouble()) * 100.0).toInt().coerceIn(1, 99)
                     )
                 }) {
@@ -446,12 +497,12 @@ class BootstrapSessionManager(
                 currentSnapshot.copy(
                     lifecycle = BootstrapLifecycle.READY_MONITORING,
                     currentStepId = null,
-                    statusMessage = "本地 Tavern 服务已就绪。",
-                    statusDetails = "本地 HTTP 服务已可访问，已进入就绪监控。",
+                    statusMessage = "SillyTavern 已启动。",
+                    statusDetails = "本地 HTTP 服务已可访问，已进入运行监控。",
                     bootstrapPreviouslyCompleted = true,
                     restartBudget = buildRestartBudgetSnapshot()
                 ),
-                logLine = "lifecycle=${BootstrapLifecycle.READY_MONITORING} message=本地 Tavern 服务已就绪。 details=本地 HTTP 服务已可访问，已进入就绪监控。"
+                logLine = "lifecycle=${BootstrapLifecycle.READY_MONITORING} message=SillyTavern 已启动。 details=本地 HTTP 服务已可访问，已进入运行监控。"
             )
             startReadyWatchdog(resolvedReadinessUrl, resolvedLocalUrl)
         } catch (_: CancellationException) {
@@ -460,12 +511,14 @@ class BootstrapSessionManager(
         } catch (exception: BootstrapException) {
             appendStartupLog("BootstrapException: ${exception.message ?: exception.javaClass.simpleName}")
             appendStartupLog(formatThrowable(exception))
-            stopReadyWatchdog(reason = "bootstrap attempt failed with blocked error")
+            stopReadyWatchdog(reason = "bootstrap attempt failed with classified error")
+            val classification = classifyBootstrapError(exception)
             failCurrentStep(
-                blocked = true,
-                title = "Tavern bootstrap 资产还不完整。",
-                details = exception.message.orEmpty(),
-                throwableType = exception.javaClass.simpleName
+                blocked = classification.blocked,
+                title = classification.title,
+                details = exception.message.orEmpty().ifBlank { classification.title },
+                throwableType = exception.javaClass.simpleName,
+                errorKind = classification.errorKind
             )
         } catch (exception: Exception) {
             appendStartupLog("Exception: ${exception.message ?: exception.javaClass.simpleName}")
@@ -476,6 +529,46 @@ class BootstrapSessionManager(
                 title = "本地 Tavern 服务启动失败。",
                 details = exception.message ?: exception.javaClass.simpleName,
                 throwableType = exception.javaClass.simpleName
+            )
+        }
+    }
+
+    private data class BootstrapErrorClassification(
+        val title: String,
+        val blocked: Boolean,
+        val errorKind: String
+    )
+
+    /**
+     * 把 [BootstrapError] sealed 子类映射到 UI 可直接展示的文案 + blocked 语义。
+     * 保存 errorKind 供 UI/诊断面板驱动差异化展示（图标/颜色）。
+     */
+    private fun classifyBootstrapError(exception: BootstrapException): BootstrapErrorClassification {
+        return when (val error = exception.error) {
+            is BootstrapError.ArchiveCorrupted -> BootstrapErrorClassification(
+                title = "Tavern bootstrap 资产包损坏或不完整。请重新安装应用或重推资产包。",
+                blocked = true,
+                errorKind = error::class.simpleName!!
+            )
+            is BootstrapError.ServerNotReady -> BootstrapErrorClassification(
+                title = "本地 Tavern 服务起动超时未就绪，可以重试。",
+                blocked = false,
+                errorKind = error::class.simpleName!!
+            )
+            is BootstrapError.RuntimeStopTimeout -> BootstrapErrorClassification(
+                title = "上一次 Tavern 运行时停止超时，可能需要手动清理。",
+                blocked = false,
+                errorKind = error::class.simpleName!!
+            )
+            is BootstrapError.PostExtractHookFailed -> BootstrapErrorClassification(
+                title = "Tavern 资产解压后的初始化脚本执行失败，可查看下方详情。",
+                blocked = true,
+                errorKind = error::class.simpleName!!
+            )
+            is BootstrapError.Generic -> BootstrapErrorClassification(
+                title = "Tavern bootstrap 资产还不完整。",
+                blocked = true,
+                errorKind = error::class.simpleName!!
             )
         }
     }
@@ -637,7 +730,8 @@ class BootstrapSessionManager(
         blocked: Boolean,
         title: String,
         details: String,
-        throwableType: String?
+        throwableType: String?,
+        errorKind: String? = null
     ) {
         val failedStepId = currentSnapshot.currentStepId
         val nowMillis = System.currentTimeMillis()
@@ -660,6 +754,7 @@ class BootstrapSessionManager(
                     details = details,
                     isBlocked = blocked,
                     throwableType = throwableType,
+                    errorKind = errorKind,
                     happenedAtMillis = nowMillis
                 )
             ),
@@ -687,83 +782,15 @@ class BootstrapSessionManager(
 
     private fun startServerMonitor() {
         val currentServerProcess = serverProcess ?: return
-        serverMonitorJob?.cancel()
-        appendStartupLog("Server exit monitor started for the current Tavern process.")
-        serverMonitorJob = scope.launch {
-            val exitCode = currentServerProcess.waitFor()
-            if (!isActive) {
-                return@launch
-            }
-
-            val details = buildServerExitDetails(exitCode)
-            appendStartupLog("Server process exited unexpectedly. exitCode=$exitCode")
-            recordServerExitDiagnostics(details)
-            serverProcess = null
-            scheduleAutoRestart(
-                message = "本地 Tavern 服务已退出，正在自动重启。",
-                details = details
-            )
-        }
+        healthMonitor.startServerMonitor(waitForExit = { currentServerProcess.waitFor() })
     }
 
     private fun startReadyWatchdog(readinessUrl: String, localUrl: String) {
-        readyWatchdogJob?.cancel()
-        appendStartupLog(
-            "Ready watchdog started. interval=${readyWatchdogIntervalMillis}ms threshold=$readyWatchdogFailureThreshold target=$readinessUrl"
-        )
-        readyWatchdogJob = scope.launch {
-            var consecutiveFailures = 0
-            var successfulProbeCount = 0
-            while (isActive) {
-                delay(readyWatchdogIntervalMillis)
-                if (HealthProbe.isReady(readinessUrl)) {
-                    successfulProbeCount += 1
-                    if (consecutiveFailures > 0) {
-                        appendStartupLog(
-                            "Ready watchdog probe recovered after $consecutiveFailures failure(s): $readinessUrl"
-                        )
-                    } else if (successfulProbeCount == 1 || successfulProbeCount % readyWatchdogSuccessLogEvery == 0) {
-                        appendStartupLog("Ready watchdog probe ok (#$successfulProbeCount): $readinessUrl")
-                    }
-                    consecutiveFailures = 0
-                    continue
-                }
-
-                consecutiveFailures += 1
-                appendStartupLog(
-                    "Ready watchdog probe failed ($consecutiveFailures/$readyWatchdogFailureThreshold): $readinessUrl"
-                )
-                emitEvent { snapshot ->
-                    BootstrapEvent.ProbeFailed(
-                        appSessionId = snapshot.appSessionId,
-                        attemptId = snapshot.attemptId,
-                        happenedAtMillis = System.currentTimeMillis(),
-                        targetUrl = readinessUrl,
-                        consecutiveFailures = consecutiveFailures,
-                        failureThreshold = readyWatchdogFailureThreshold
-                    )
-                }
-                if (consecutiveFailures < readyWatchdogFailureThreshold) {
-                    continue
-                }
-
-                serverProcess = null
-                scheduleAutoRestart(
-                    message = "本地 Tavern 服务失去响应，正在自动重启。",
-                    details = "连续 $readyWatchdogFailureThreshold 次探针检测失败：$localUrl",
-                    localUrl = localUrl
-                )
-                return@launch
-            }
-        }
+        healthMonitor.startReadyWatchdog(readinessUrl = readinessUrl, localUrl = localUrl)
     }
 
     private fun stopReadyWatchdog(reason: String? = null) {
-        if (readyWatchdogJob != null && !reason.isNullOrBlank()) {
-            appendStartupLog("Ready watchdog stopped: $reason")
-        }
-        readyWatchdogJob?.cancel()
-        readyWatchdogJob = null
+        healthMonitor.stopReadyWatchdog(reason = reason)
     }
 
     private fun scheduleAutoRestart(
@@ -772,8 +799,7 @@ class BootstrapSessionManager(
         localUrl: String = localServiceUrl()
     ) {
         stopReadyWatchdog(reason = "scheduling auto-restart")
-        serverMonitorJob?.cancel()
-        serverMonitorJob = null
+        healthMonitor.stopServerMonitor()
         val attempt = autoRestartBudget.recordAttempt(System.currentTimeMillis()) ?: run {
             publishSnapshot(
                 currentSnapshot.copy(
@@ -786,7 +812,8 @@ class BootstrapSessionManager(
                         title = "本地 Tavern 服务反复异常，已停止自动重启。",
                         details = details,
                         isBlocked = false,
-                        throwableType = "AutoRestartBudgetExhausted"
+                        throwableType = "AutoRestartBudgetExhausted",
+                        errorKind = "AutoRestartBudgetExhausted"
                     ),
                     localUrl = localUrl,
                     restartBudget = buildRestartBudgetSnapshot()
@@ -846,9 +873,7 @@ class BootstrapSessionManager(
     }
 
     private suspend fun stopManagedProcesses() {
-        serverMonitorJob?.cancel()
-        serverMonitorJob = null
-        stopReadyWatchdog(reason = "stopping managed Tavern processes")
+        healthMonitor.stopAll(reason = "stopping managed Tavern processes")
         serverProcess?.stop()
         serverProcess = null
         val cleanedProcessCount = ServerProcessJanitor.cleanupLingeringServerProcesses()

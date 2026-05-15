@@ -7,9 +7,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.LifecycleOwner
+import com.jm.sillydroid.core.ui.scroll.DraggableScrollThumbController
 import com.jm.sillydroid.core.model.logs.HostLogEntry
 import com.jm.sillydroid.core.model.logs.HostLogSnapshot
 import com.jm.sillydroid.domain.logs.HostLogRepository
@@ -17,26 +17,23 @@ import com.jm.sillydroid.feature.settings.R
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.jm.sillydroid.core.common.DispatcherProvider
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class BootstrapSettingsLogsCoordinator(
     private val activity: AppCompatActivity,
     private val dispatchers: DispatcherProvider,
-    private val sessionSummaryView: TextView,
     private val metaView: TextView,
     private val emptyView: TextView,
     private val contentView: TextView,
     private val logsScrollView: NestedScrollView,
+    private val scrollThumbController: DraggableScrollThumbController,
     private val scrollToBottomButton: ImageButton,
     private val selectButton: MaterialButton,
     private val exportButton: MaterialButton,
     private val reloadButton: MaterialButton,
     private val clearButton: MaterialButton,
     private val hostLogRepository: HostLogRepository,
-    private val bootstrapSessionSummaryFlow: Flow<String>,
-    private val currentBootstrapSessionSummary: () -> String,
     private val preferTavernServerLog: () -> Boolean,
     private val setBusy: (Boolean) -> Unit,
     private val showError: (String) -> Unit,
@@ -47,7 +44,6 @@ class BootstrapSettingsLogsCoordinator(
     private var currentSnapshot: HostLogSnapshot? = null
     private var currentEntries: List<HostLogEntry> = emptyList()
     private var selectedLogFileName: String? = null
-    private var bootstrapSessionSummaryText: String = currentBootstrapSessionSummary()
 
     fun initialize() {
         selectButton.setOnClickListener {
@@ -68,17 +64,13 @@ class BootstrapSettingsLogsCoordinator(
         logsScrollView.setOnScrollChangeListener { _, _, _, _, _ ->
             updateScrollToBottomButtonVisibility()
         }
-        activity.lifecycleScope.launch {
-            activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                bootstrapSessionSummaryFlow.collect { summary ->
-                    bootstrapSessionSummaryText = summary
-                    renderSessionSummary()
-                }
-            }
-        }
-        renderSessionSummary()
+        scrollThumbController.configure()
         renderSnapshot()
         activity.lifecycle.addObserver(this)
+    }
+
+    override fun onDestroy(owner: LifecycleOwner) {
+        scrollThumbController.close()
     }
 
     fun exportLogBundle(targetUri: Uri) {
@@ -168,12 +160,6 @@ class BootstrapSettingsLogsCoordinator(
         contentView.text = snapshot.content.ifBlank { activity.getString(R.string.bootstrap_settings_logs_empty_content) }
         updateScrollToBottomButtonVisibility()
     }
-
-    private fun renderSessionSummary() {
-        sessionSummaryView.isVisible = bootstrapSessionSummaryText.isNotBlank()
-        sessionSummaryView.text = bootstrapSessionSummaryText
-    }
-
     private fun scrollToBottom() {
         contentView.post {
             logsScrollView.fullScroll(android.view.View.FOCUS_DOWN)

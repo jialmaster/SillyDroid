@@ -42,19 +42,20 @@
                 android:textColor="?attr/colorOnSurface" />
         </com.google.android.material.appbar.MaterialToolbar>
 
-        <TextView
-            android:id="@+id/bootstrapSettingsWarning"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/sillydroid_space_md"
-            android:layout_marginTop="@dimen/sillydroid_space_xxxs"
-            android:layout_marginEnd="@dimen/sillydroid_space_md"
-            android:paddingLeft="@dimen/sillydroid_space_md"
-            android:paddingTop="@dimen/sillydroid_space_sm"
-            android:paddingRight="@dimen/sillydroid_space_md"
-            android:paddingBottom="@dimen/sillydroid_space_sm"
-            android:textSize="10sp"
-            android:visibility="gone" />
+            <!-- 状态提示沿用设置页圆角面板视觉，避免切换消息时退回矩形底色。 -->
+            <TextView
+                android:id="@+id/bootstrapSettingsWarning"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/sillydroid_space_md"
+                android:layout_marginTop="@dimen/sillydroid_space_xxxs"
+                android:layout_marginEnd="@dimen/sillydroid_space_md"
+                android:paddingStart="@dimen/sillydroid_space_md"
+                android:paddingTop="@dimen/sillydroid_space_sm"
+                android:paddingEnd="@dimen/sillydroid_space_md"
+                android:paddingBottom="@dimen/sillydroid_space_sm"
+                android:textSize="10sp"
+                android:visibility="gone" />
 
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/bootstrapSettingsTabs"
@@ -116,7 +117,7 @@
         android:layout_weight="1"
         android:clipToPadding="false"
         android:fadeScrollbars="false"
-        android:fillViewport="true">
+        android:fillViewport="true"
         android:scrollbarSize="@dimen/sillydroid_scrollbar_size"
         android:scrollbars="vertical">
 
@@ -136,22 +137,18 @@
                 android:orientation="vertical">
 
                 <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.SillyDroid.SettingsPanelCard"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    app:cardBackgroundColor="?attr/colorSurface"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="0dp"
-                    app:strokeColor="?attr/colorOutlineVariant"
-                    app:strokeWidth="1dp">
+                    android:layout_height="wrap_content">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:paddingStart="8dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="8dp"
-                        android:paddingBottom="8dp">
+                        android:paddingStart="@dimen/sillydroid_panel_padding"
+                        android:paddingTop="@dimen/sillydroid_panel_padding"
+                        android:paddingEnd="@dimen/sillydroid_panel_padding"
+                        android:paddingBottom="@dimen/sillydroid_panel_padding">
 
                         <TextView
                             android:id="@+id/bootstrapSettingsSummary"
@@ -165,28 +162,24 @@
                             android:id="@+id/bootstrapSettingsQuickFieldContainer"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
+                            android:layout_marginTop="@dimen/sillydroid_field_vertical_spacing"
                             android:orientation="vertical" />
 
                         <com.google.android.material.card.MaterialCardView
+                            style="@style/Widget.SillyDroid.SettingsNestedCard"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
-                            app:cardCornerRadius="14dp"
-                            app:cardElevation="0dp"
-                            app:strokeColor="?attr/colorOutlineVariant"
-                            app:strokeWidth="1dp">
+                            android:layout_marginTop="@dimen/sillydroid_space_md">
 
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingStart="8dp"
-                                android:paddingTop="8dp"
-                                android:paddingEnd="8dp"
-                                android:paddingBottom="8dp">
+                                android:paddingStart="@dimen/sillydroid_panel_padding"
+                                android:paddingTop="@dimen/sillydroid_panel_padding"
+                                android:paddingEnd="@dimen/sillydroid_panel_padding"
+                                android:paddingBottom="@dimen/sillydroid_panel_padding">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -206,7 +199,7 @@
                                         style="@style/TextAppearance.SillyDroid.SettingsBody"
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
-                                        android:layout_marginTop="3dp"
+                                        android:layout_marginTop="@dimen/sillydroid_space_xs_half"
                                         android:text="@string/bootstrap_settings_host_floating_logs_summary"
                                         android:textColor="?attr/colorOnSurfaceVariant" />
                                 </LinearLayout>
@@ -215,7 +208,7 @@
                                     android:id="@+id/bootstrapSettingsFloatingLogsSwitch"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginStart="8dp"
+                                    android:layout_marginStart="@dimen/sillydroid_space_md"
                                     android:minHeight="0dp"
                                     android:minWidth="0dp"
                                     android:scaleX="0.68"
@@ -225,24 +218,20 @@
                         </com.google.android.material.card.MaterialCardView>
 
                         <com.google.android.material.card.MaterialCardView
+                            style="@style/Widget.SillyDroid.SettingsNestedCard"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
-                            app:cardCornerRadius="14dp"
-                            app:cardElevation="0dp"
-                            app:strokeColor="?attr/colorOutlineVariant"
-                            app:strokeWidth="1dp">
+                            android:layout_marginTop="@dimen/sillydroid_space_md">
 
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingStart="8dp"
-                                android:paddingTop="8dp"
-                                android:paddingEnd="8dp"
-                                android:paddingBottom="8dp">
+                                android:paddingStart="@dimen/sillydroid_panel_padding"
+                                android:paddingTop="@dimen/sillydroid_panel_padding"
+                                android:paddingEnd="@dimen/sillydroid_panel_padding"
+                                android:paddingBottom="@dimen/sillydroid_panel_padding">
 
                                 <LinearLayout
                                     android:layout_width="0dp"
@@ -262,7 +251,7 @@
                                         style="@style/TextAppearance.SillyDroid.SettingsBody"
                                         android:layout_width="match_parent"
                                         android:layout_height="wrap_content"
-                                        android:layout_marginTop="3dp"
+                                        android:layout_marginTop="@dimen/sillydroid_space_xs_half"
                                         android:text="@string/bootstrap_settings_host_pull_refresh_summary"
                                         android:textColor="?attr/colorOnSurfaceVariant" />
                                 </LinearLayout>
@@ -271,7 +260,7 @@
                                     android:id="@+id/bootstrapSettingsPullRefreshSwitch"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginStart="8dp"
+                                    android:layout_marginStart="@dimen/sillydroid_space_md"
                                     android:minHeight="0dp"
                                     android:minWidth="0dp"
                                     android:scaleX="0.68"
@@ -283,7 +272,7 @@
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_md"
                             android:text="@string/bootstrap_settings_config_path_label"
                             android:textColor="?attr/colorOnSurface"
                             android:textSize="10sp"
@@ -293,14 +282,14 @@
                             android:id="@+id/bootstrapSettingsConfigPath"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:background="?attr/colorSurfaceContainerHigh"
+                            android:layout_marginTop="@dimen/sillydroid_space_xs"
+                            android:background="@drawable/bg_bootstrap_settings_nested_surface_rounded"
                             android:fontFamily="monospace"
                             android:lineSpacingExtra="1dp"
-                            android:paddingLeft="8dp"
-                            android:paddingTop="6dp"
-                            android:paddingRight="8dp"
-                            android:paddingBottom="6dp"
+                            android:paddingStart="@dimen/sillydroid_panel_padding"
+                            android:paddingTop="@dimen/sillydroid_space_sm"
+                            android:paddingEnd="@dimen/sillydroid_panel_padding"
+                            android:paddingBottom="@dimen/sillydroid_space_sm"
                             android:scrollHorizontally="false"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="10sp" />
@@ -308,7 +297,7 @@
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_md"
                             android:text="@string/bootstrap_settings_actions_title"
                             android:textColor="?attr/colorOnSurface"
                             android:textSize="12sp"
@@ -317,7 +306,7 @@
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
+                            android:layout_marginTop="@dimen/sillydroid_field_vertical_spacing"
                             android:orientation="horizontal">
 
                             <com.google.android.material.button.MaterialButton
@@ -325,7 +314,7 @@
                                 style="@style/Widget.SillyDroid.SettingsButton.Outlined"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_marginEnd="4dp"
+                                android:layout_marginEnd="@dimen/sillydroid_space_xs"
                                 android:layout_weight="1"
                                 android:minHeight="@dimen/sillydroid_control_min_height"
                                 android:text="@string/bootstrap_settings_import" />
@@ -343,7 +332,7 @@
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_md"
                             android:text="@string/bootstrap_settings_clear_data_warning"
                             android:textColor="?attr/colorError"
                             android:textSize="9sp"
@@ -354,29 +343,28 @@
                             style="@style/Widget.SillyDroid.SettingsButton.Outlined"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
+                            android:layout_marginTop="@dimen/sillydroid_field_vertical_spacing"
                             android:minHeight="@dimen/sillydroid_control_min_height"
                             android:text="@string/bootstrap_settings_clear_data"
                             android:textColor="?attr/colorError"
                             app:strokeColor="?attr/colorError" />
 
                         <com.google.android.material.card.MaterialCardView
+                            style="@style/Widget.SillyDroid.SettingsNestedCard"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_md"
                             app:cardBackgroundColor="?attr/colorSecondaryContainer"
-                            app:cardCornerRadius="14dp"
-                            app:cardElevation="0dp"
                             app:strokeWidth="0dp">
 
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:orientation="vertical"
-                                android:paddingStart="8dp"
-                                android:paddingTop="8dp"
-                                android:paddingEnd="8dp"
-                                android:paddingBottom="8dp">
+                                android:paddingStart="@dimen/sillydroid_panel_padding"
+                                android:paddingTop="@dimen/sillydroid_panel_padding"
+                                android:paddingEnd="@dimen/sillydroid_panel_padding"
+                                android:paddingBottom="@dimen/sillydroid_panel_padding">
 
                                 <TextView
                                     android:layout_width="match_parent"
@@ -389,7 +377,7 @@
                                 <TextView
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginTop="3dp"
+                                    android:layout_marginTop="@dimen/sillydroid_space_xs_half"
                                     android:lineSpacingExtra="1dp"
                                     android:text="@string/bootstrap_settings_import_formats_summary"
                                     android:textColor="?attr/colorOnSecondaryContainer"
@@ -398,7 +386,7 @@
                                 <TextView
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginTop="8dp"
+                                    android:layout_marginTop="@dimen/sillydroid_space_md"
                                     android:text="@string/bootstrap_settings_backup_guide_title"
                                     android:textColor="?attr/colorOnSecondaryContainer"
                                     android:textSize="10sp"
@@ -407,7 +395,7 @@
                                 <TextView
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginTop="3dp"
+                                    android:layout_marginTop="@dimen/sillydroid_space_xs_half"
                                     android:lineSpacingExtra="1dp"
                                     android:text="@string/bootstrap_settings_backup_guide_summary"
                                     android:textColor="?attr/colorOnSecondaryContainer"
@@ -426,43 +414,34 @@
                 android:visibility="gone">
 
                 <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.SillyDroid.SettingsPanelCard"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    app:cardBackgroundColor="?attr/colorSurface"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="0dp"
-                    app:strokeColor="?attr/colorOutlineVariant"
-                    app:strokeWidth="1dp">
+                    android:layout_height="wrap_content">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:paddingStart="8dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="8dp"
-                        android:paddingBottom="8dp">
+                        android:paddingStart="@dimen/sillydroid_panel_padding"
+                        android:paddingTop="@dimen/sillydroid_panel_padding"
+                        android:paddingEnd="@dimen/sillydroid_panel_padding"
+                        android:paddingBottom="@dimen/sillydroid_panel_padding">
 
+                        <!-- 这一行保留 3 个 ImageButton 是为了 findViewById 仍然可以拿到引用；
+                             实际渲染时 BootstrapSettingsExtensionsCoordinator 会把这三个按钮重新挂到
+                             “全局扩展” 段落标题右侧，让上方不再独占一整行。 -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:gravity="center_vertical"
-                            android:orientation="horizontal">
-
-                            <TextView
-                                style="@style/TextAppearance.SillyDroid.SettingsSectionTitle"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="@string/bootstrap_settings_tab_extensions"
-                                android:textColor="?attr/colorOnSurface"
-                                android:textStyle="bold" />
+                            android:orientation="horizontal"
+                            android:visibility="gone">
 
                             <ImageButton
                                 android:id="@+id/bootstrapSettingsExtensionsInstallButton"
                                 android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
                                 android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
-                                android:layout_marginEnd="4dp"
+                                android:layout_marginEnd="@dimen/sillydroid_space_xs"
                                 android:background="?attr/selectableItemBackgroundBorderless"
                                 android:contentDescription="@string/bootstrap_settings_extensions_install"
                                 android:minWidth="0dp"
@@ -476,7 +455,7 @@
                                 android:id="@+id/bootstrapSettingsExtensionsBatchDeleteButton"
                                 android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
                                 android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
-                                android:layout_marginEnd="4dp"
+                                android:layout_marginEnd="@dimen/sillydroid_space_xs"
                                 android:background="?attr/selectableItemBackgroundBorderless"
                                 android:contentDescription="@string/bootstrap_settings_extensions_action_delete_batch"
                                 android:minWidth="0dp"
@@ -503,7 +482,7 @@
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_xs"
                             android:text="@string/bootstrap_settings_extensions_summary"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="10sp" />
@@ -512,14 +491,14 @@
                             android:id="@+id/bootstrapSettingsExtensionsProgress"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_md"
                             android:visibility="gone" />
 
                         <TextView
                             android:id="@+id/bootstrapSettingsExtensionsProgressLabel"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
+                            android:layout_marginTop="@dimen/sillydroid_field_vertical_spacing"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="10sp"
                             android:visibility="gone" />
@@ -528,12 +507,12 @@
                             android:id="@+id/bootstrapSettingsExtensionsEmpty"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:background="?attr/colorSurfaceContainerHigh"
-                            android:paddingLeft="8dp"
-                            android:paddingTop="8dp"
-                            android:paddingRight="8dp"
-                            android:paddingBottom="8dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_md"
+                            android:background="@drawable/bg_bootstrap_settings_nested_surface_rounded"
+                            android:paddingStart="@dimen/sillydroid_panel_padding"
+                            android:paddingTop="@dimen/sillydroid_panel_padding"
+                            android:paddingEnd="@dimen/sillydroid_panel_padding"
+                            android:paddingBottom="@dimen/sillydroid_panel_padding"
                             android:text="@string/bootstrap_settings_extensions_empty"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="10sp"
@@ -543,7 +522,7 @@
                             android:id="@+id/bootstrapSettingsExtensionsListContainer"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_xl"
                             android:orientation="vertical" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -591,8 +570,8 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="1dp"
-                    android:layout_marginBottom="6dp"
+                    android:layout_marginTop="@dimen/sillydroid_space_xxxs"
+                    android:layout_marginBottom="@dimen/sillydroid_space_sm"
                     android:text="@string/bootstrap_settings_settings_summary"
                     android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="10sp" />
@@ -602,6 +581,16 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/bootstrapSettingsSaveButton"
+                    style="@style/Widget.SillyDroid.SettingsButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/sillydroid_space_md"
+                    android:enabled="false"
+                    android:minHeight="@dimen/sillydroid_control_min_height"
+                    android:text="@string/bootstrap_settings_save_start" />
             </LinearLayout>
 
             <LinearLayout
@@ -612,54 +601,22 @@
                 android:visibility="gone">
 
                 <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.SillyDroid.SettingsPanelCard"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    app:cardBackgroundColor="?attr/colorSurface"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="0dp"
-                    app:strokeColor="?attr/colorOutlineVariant"
-                    app:strokeWidth="1dp">
+                    android:layout_height="wrap_content">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:paddingStart="8dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="8dp"
-                        android:paddingBottom="8dp">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="@string/bootstrap_settings_tab_about"
-                                android:textColor="?attr/colorOnSurface"
-                                android:textSize="12sp"
-                                android:textStyle="bold" />
-
-                            <ImageButton
-                                android:id="@+id/bootstrapSettingsAboutGithubButton"
-                                android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
-                                android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
-                                android:background="?attr/selectableItemBackgroundBorderless"
-                                android:contentDescription="@string/bootstrap_settings_about_github"
-                                android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
-                                android:scaleType="centerInside"
-                                android:src="@drawable/ic_github"
-                                android:tint="?attr/colorOnSurfaceVariant" />
-                        </LinearLayout>
+                        android:paddingStart="@dimen/sillydroid_panel_padding"
+                        android:paddingTop="@dimen/sillydroid_panel_padding"
+                        android:paddingEnd="@dimen/sillydroid_panel_padding"
+                        android:paddingBottom="@dimen/sillydroid_panel_padding">
 
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
                             android:lineSpacingExtra="1dp"
                             android:text="@string/bootstrap_settings_about_summary"
                             android:textColor="?attr/colorOnSurfaceVariant"
@@ -668,7 +625,7 @@
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_md"
                             android:text="@string/bootstrap_settings_about_info_title"
                             android:textColor="?attr/colorOnSurface"
                             android:textSize="11sp"
@@ -677,7 +634,7 @@
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_xs"
                             android:lineSpacingExtra="1dp"
                             android:text="@string/bootstrap_settings_about_info_body"
                             android:textColor="?attr/colorOnSurfaceVariant"
@@ -686,7 +643,7 @@
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_md"
                             android:text="@string/bootstrap_settings_about_version_title"
                             android:textColor="?attr/colorOnSurface"
                             android:textSize="11sp"
@@ -696,7 +653,7 @@
                             android:id="@+id/bootstrapSettingsAboutVersion"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_xs"
                             android:fontFamily="monospace"
                             android:lineSpacingExtra="1dp"
                             android:textColor="?attr/colorOnSurfaceVariant"
@@ -705,23 +662,19 @@
                 </com.google.android.material.card.MaterialCardView>
 
                 <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.SillyDroid.SettingsPanelCard"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    app:cardBackgroundColor="?attr/colorSurface"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="0dp"
-                    app:strokeColor="?attr/colorOutlineVariant"
-                    app:strokeWidth="1dp">
+                    android:layout_marginTop="@dimen/sillydroid_space_md">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:paddingStart="8dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="8dp"
-                        android:paddingBottom="8dp">
+                        android:paddingStart="@dimen/sillydroid_panel_padding"
+                        android:paddingTop="@dimen/sillydroid_panel_padding"
+                        android:paddingEnd="@dimen/sillydroid_panel_padding"
+                        android:paddingBottom="@dimen/sillydroid_panel_padding">
 
                         <TextView
                             android:layout_width="match_parent"
@@ -735,7 +688,7 @@
                             android:id="@+id/bootstrapSettingsAboutUpdateStatus"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_xs"
                             android:lineSpacingExtra="1dp"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="10sp" />
@@ -745,9 +698,28 @@
                             style="@style/Widget.SillyDroid.SettingsButton.Outlined"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="@dimen/sillydroid_space_md"
                             android:minHeight="@dimen/sillydroid_control_min_height"
                             android:text="@string/bootstrap_settings_about_update_action_check" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/sillydroid_space_md"
+                            android:gravity="center_vertical|end"
+                            android:orientation="horizontal">
+
+                            <ImageButton
+                                android:id="@+id/bootstrapSettingsAboutGithubButton"
+                                android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
+                                android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="@string/bootstrap_settings_about_github"
+                                android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
+                                android:scaleType="centerInside"
+                                android:src="@drawable/ic_github"
+                                android:tint="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
@@ -772,18 +744,9 @@
             android:paddingStart="@dimen/sillydroid_space_md"
             android:paddingEnd="@dimen/sillydroid_space_md">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/bootstrap_settings_tab_logs"
-                android:textColor="?attr/colorOnSurface"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
                 android:gravity="start"
                 android:orientation="horizontal">
 
@@ -793,7 +756,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:layout_marginEnd="6dp"
+                    android:layout_marginEnd="@dimen/sillydroid_space_sm"
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:minHeight="@dimen/sillydroid_control_min_height"
@@ -805,7 +768,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:layout_marginEnd="6dp"
+                    android:layout_marginEnd="@dimen/sillydroid_space_sm"
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:minHeight="@dimen/sillydroid_control_min_height"
@@ -817,7 +780,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:layout_marginEnd="6dp"
+                    android:layout_marginEnd="@dimen/sillydroid_space_sm"
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:minHeight="@dimen/sillydroid_control_min_height"
@@ -840,27 +803,18 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="@dimen/sillydroid_space_xs"
                 android:text="@string/bootstrap_settings_logs_summary"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="10sp" />
 
             <TextView
-                android:id="@+id/bootstrapSettingsLogsSessionSummary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="?attr/colorSurfaceContainerHigh"
-                android:padding="8dp"
-                android:textColor="?attr/colorOnSurface"
-                android:textSize="10sp"
-                android:visibility="gone" />
-
-            <TextView
                 android:id="@+id/bootstrapSettingsLogsMeta"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="@dimen/sillydroid_field_vertical_spacing"
+                android:background="@drawable/bg_bootstrap_settings_nested_surface_rounded"
+                android:padding="@dimen/sillydroid_panel_padding"
                 android:textColor="?attr/colorOnSurface"
                 android:textSize="10sp"
                 android:textStyle="bold"
@@ -880,10 +834,10 @@
                 android:id="@+id/bootstrapSettingsLogsScrollView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="?attr/colorSurfaceContainerHigh"
+                android:background="@drawable/bg_bootstrap_settings_nested_surface_rounded"
+                android:clipToOutline="true"
                 android:fadeScrollbars="false"
-                android:scrollbarSize="@dimen/sillydroid_scrollbar_size"
-                android:scrollbars="vertical">
+                android:scrollbars="none">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -894,7 +848,7 @@
                         android:id="@+id/bootstrapSettingsLogsEmpty"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:padding="8dp"
+                        android:padding="@dimen/sillydroid_panel_padding"
                         android:text="@string/bootstrap_settings_logs_empty"
                         android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp"
@@ -906,7 +860,7 @@
                         android:layout_height="wrap_content"
                         android:fontFamily="monospace"
                         android:lineSpacingExtra="1dp"
-                        android:padding="8dp"
+                        android:padding="@dimen/sillydroid_panel_padding"
                         android:textColor="?attr/colorOnSurfaceVariant"
                         android:textIsSelectable="true"
                         android:textSize="9sp"
@@ -914,41 +868,32 @@
                 </LinearLayout>
             </androidx.core.widget.NestedScrollView>
 
+            <View
+                android:id="@+id/bootstrapSettingsLogsScrollbarThumb"
+                android:layout_width="@dimen/sillydroid_logs_scrollbar_hit_width"
+                android:layout_height="@dimen/sillydroid_logs_scrollbar_min_height"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="@dimen/sillydroid_logs_scrollbar_vertical_margin"
+                android:layout_marginEnd="@dimen/sillydroid_logs_scrollbar_end_margin"
+                android:layout_marginBottom="@dimen/sillydroid_logs_scrollbar_vertical_margin"
+                android:background="@drawable/bg_bootstrap_settings_logs_scrollbar_thumb"
+                android:clickable="true"
+                android:visibility="gone" />
+
             <ImageButton
                 android:id="@+id/bootstrapSettingsLogsScrollToBottomButton"
                 android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
                 android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
                 android:layout_gravity="bottom|end"
-                android:layout_margin="8dp"
-                android:background="?attr/colorPrimaryContainer"
+                android:layout_margin="6dp"
+                android:background="@drawable/bg_bootstrap_settings_logs_scroll_thumb"
                 android:contentDescription="@string/bootstrap_settings_logs_scroll_to_bottom"
                 android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
                 android:scaleType="centerInside"
                 android:src="@drawable/ic_scroll_to_bottom"
-                android:tint="?attr/colorOnPrimaryContainer"
+                android:tint="?attr/colorOnSurfaceVariant"
                 android:visibility="gone" />
         </FrameLayout>
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/bootstrapSettingsActionBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurface"
-        android:elevation="8dp"
-        android:orientation="vertical"
-        android:paddingStart="@dimen/sillydroid_space_md"
-        android:paddingTop="@dimen/sillydroid_space_sm"
-        android:paddingEnd="@dimen/sillydroid_space_md"
-        android:paddingBottom="@dimen/sillydroid_space_md">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/bootstrapSettingsSaveButton"
-            style="@style/Widget.SillyDroid.SettingsButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="@dimen/sillydroid_control_min_height"
-            android:text="@string/bootstrap_settings_save_start" />
     </LinearLayout>
 
 </LinearLayout>

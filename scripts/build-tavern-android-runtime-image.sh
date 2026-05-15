@@ -196,7 +196,8 @@ sillydroid_require_command bash
 sillydroid_require_command sha256sum
 sillydroid_ensure_java_home
 
-working_root="$workspace_root/artifacts/tmp/tavern-runtime-image-$runtime_rid"
+# Stage 1 的中间解压、整理和归档目录落到本地缓存，避免 DrvFs 慢路径并避免污染工作区。
+working_root="${SILLYDROID_TAVERN_ANDROID_RUNTIME_IMAGE_WORK_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/sillydroid-tavern-runtime-image-$runtime_rid}"
 tavern_rootfs_root="$working_root/rootfs"
 tavern_jni_lib_root="$working_root/jniLibs/arm64-v8a"
 stage_root="$working_root/stage"

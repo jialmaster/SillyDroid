@@ -4,7 +4,9 @@ import android.content.res.ColorStateList
 import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout.LayoutParams
@@ -203,10 +205,9 @@ class BootstrapSettingsExtensionsCoordinator(
         val missingBundledExtensions = bundledExtensions.filterNot { it.targetExists }
         val globalExtensions = extensions.filter { it.kind == ExtensionKind.GLOBAL }
         val userExtensions = extensions.filter { it.kind == ExtensionKind.USER }
-        emptyView.isVisible = extensions.isEmpty() && missingBundledExtensions.isEmpty()
-        if (extensions.isEmpty() && missingBundledExtensions.isEmpty()) {
-            return
-        }
+        // 全局扩展段落标题永远存在并带上 3 个操作按钮，所以单独的 emptyView 已经没必要再展示；
+        // 即便没有任何已安装扩展，用户也能从段落标题右侧的按钮直接发起安装。
+        emptyView.isVisible = false
 
         var itemIndex = 0
 
@@ -221,23 +222,24 @@ class BootstrapSettingsExtensionsCoordinator(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    topMargin = dp(if (itemIndex == 0) 8 else 8)
+                    topMargin = dimen(R.dimen.sillydroid_section_card_spacing)
                 })
                 itemIndex += 1
             }
         }
 
-        if (globalExtensions.isNotEmpty()) {
-            listContainer.addView(createSectionHeader(
-                title = activity.getString(R.string.bootstrap_settings_extensions_installed_title),
-                summary = activity.getString(R.string.bootstrap_settings_extensions_installed_summary)
-            ), LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = dp(if (itemIndex == 0) 0 else 12)
-            })
-        }
+        // “全局扩展”段落标题总是展示，后面跟随 3 个操作按钮（安装/批量删除/重新加载），
+        // 即使当前未安装任何全局扩展也需要保留入口。
+        listContainer.addView(createSectionHeader(
+            title = activity.getString(R.string.bootstrap_settings_extensions_installed_title),
+            summary = activity.getString(R.string.bootstrap_settings_extensions_installed_summary),
+            actionsView = buildGlobalExtensionsActionsRow()
+        ), LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = if (itemIndex == 0) 0 else dimen(R.dimen.sillydroid_space_xl)
+        })
 
         globalExtensions.forEachIndexed { index, extension ->
             listContainer.addView(createExtensionCard(extension), LinearLayout.LayoutParams(
@@ -245,7 +247,7 @@ class BootstrapSettingsExtensionsCoordinator(
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
                 if (index > 0 || itemIndex > 0) {
-                    topMargin = dp(8)
+                    topMargin = dimen(R.dimen.sillydroid_section_card_spacing)
                 }
             })
         }
@@ -259,35 +261,69 @@ class BootstrapSettingsExtensionsCoordinator(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
-                topMargin = dp(12)
+                topMargin = dimen(R.dimen.sillydroid_space_xl)
             })
         }
 
-        userExtensions.forEachIndexed { index, extension ->
+        userExtensions.forEach { extension ->
             listContainer.addView(createExtensionCard(extension), LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
-                topMargin = dp(8)
+                topMargin = dimen(R.dimen.sillydroid_section_card_spacing)
             })
         }
     }
 
-    private fun createSectionHeader(title: String, summary: String): LinearLayout {
+    private fun createSectionHeader(
+        title: String,
+        summary: String,
+        actionsView: View? = null
+    ): LinearLayout {
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            addView(TextView(activity).apply {
-                text = title
-                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsSectionTitle)
-                setTextColor(resolveColor(MaterialR.attr.colorOnSurface))
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(TextView(activity).apply {
+                    text = title
+                    TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsSectionTitle)
+                    setTextColor(resolveColor(MaterialR.attr.colorOnSurface))
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    layoutParams = LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f
+                    )
+                })
+                if (actionsView != null) {
+                    addView(actionsView)
+                }
             })
             addView(TextView(activity).apply {
                 text = summary
                 TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsMeta)
                 setTextColor(resolveColor(MaterialR.attr.colorOnSurfaceVariant))
-                setPadding(0, dimen(R.dimen.sillydroid_space_xs), 0, 0)
+                // 下方加大 padding，让“这里列出当前宿主 xxxx”这段描述与下方卡片之间有足够呼吸空间。
+                setPadding(0, dimen(R.dimen.sillydroid_space_xs), 0, dimen(R.dimen.sillydroid_space_md))
             })
+        }
+    }
+
+    private fun buildGlobalExtensionsActionsRow(): LinearLayout {
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            // 复用 XML 里已经创建的 3 个 ImageButton 实例（initialize() 里绑定的点击事件会跟随 view 一起走），
+            // 只是把它们从 XML 顶部那个隐藏的 row 中重新挂到当前 “全局扩展” 标题右侧。
+            val size = dimen(R.dimen.sillydroid_settings_dense_icon_button_size)
+            listOf(installButton, batchDeleteButton, reloadButton).forEach { button ->
+                (button.parent as? ViewGroup)?.removeView(button)
+                button.layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                    marginStart = dimen(R.dimen.sillydroid_space_xs)
+                }
+                addView(button)
+            }
         }
     }
 
@@ -746,9 +782,6 @@ class BootstrapSettingsExtensionsCoordinator(
                 promptInstallBundledExtension(bundledExtensions)
             }
         }
-        actions += activity.getString(R.string.bootstrap_settings_extensions_action_cleanup_broken) to {
-            promptCleanupBrokenExtensions()
-        }
 
         MaterialAlertDialogBuilder(activity)
             .setTitle(R.string.bootstrap_settings_extensions_manage_title)
@@ -1016,13 +1049,27 @@ class BootstrapSettingsExtensionsCoordinator(
         val inputView = TextInputEditText(activity).apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_TEXT_FLAG_MULTI_LINE
             setSingleLine(false)
-            minLines = 4
-            maxLines = 8
+            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            isVerticalScrollBarEnabled = true
+            minLines = 5
+            maxLines = 10
             textSize = 13f
             minHeight = dimen(R.dimen.sillydroid_input_min_height)
             setPadding(dimen(R.dimen.sillydroid_control_padding_horizontal), dimen(R.dimen.sillydroid_control_padding_vertical), dimen(R.dimen.sillydroid_control_padding_horizontal), dimen(R.dimen.sillydroid_control_padding_vertical))
         }
         inputLayout.addView(inputView)
+
+        // 包在一层 FrameLayout 里，给 dialog 内容区加上水平 / 垂直边距，
+        // 避免 TextInputLayout 贴着弹窗左右边、与标题/按钮贴在一起。
+        val contentWrapper = FrameLayout(activity).apply {
+            setPadding(
+                dimen(R.dimen.sillydroid_dialog_content_padding_horizontal),
+                dimen(R.dimen.sillydroid_dialog_content_padding_vertical),
+                dimen(R.dimen.sillydroid_dialog_content_padding_horizontal),
+                dimen(R.dimen.sillydroid_dialog_content_padding_vertical)
+            )
+            addView(inputLayout)
+        }
 
         inputView.doAfterTextChanged {
             inputLayout.error = null
@@ -1031,7 +1078,7 @@ class BootstrapSettingsExtensionsCoordinator(
 
         val dialog = MaterialAlertDialogBuilder(activity)
             .setTitle(R.string.bootstrap_settings_extensions_install_prompt_title)
-            .setView(inputLayout)
+            .setView(contentWrapper)
             .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
             .setNeutralButton(R.string.bootstrap_settings_extensions_default_existing_strategy_skip, null)
             .setPositiveButton(R.string.bootstrap_settings_extensions_default_existing_strategy_overwrite, null)
@@ -1137,13 +1184,45 @@ class BootstrapSettingsExtensionsCoordinator(
             return
         }
 
-        if (extensions.isEmpty()) {
+        // 原「+ 按钮」菜单里的「清理错误插件」语义上属于删除，现完全迁移到删除按钮。
+        val brokenDirectories = findBrokenExtensionDirectories()
+        if (brokenDirectories.isNotEmpty()) {
+            val cleanupLabel = activity.getString(
+                R.string.bootstrap_settings_extensions_delete_batch_menu_cleanup_broken,
+                brokenDirectories.size
+            )
+            val pickLabel = activity.getString(
+                R.string.bootstrap_settings_extensions_delete_batch_menu_pick_extensions
+            )
+            MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.bootstrap_settings_extensions_delete_batch_menu_title)
+                .setItems(arrayOf(cleanupLabel, pickLabel)) { _, which ->
+                    when (which) {
+                        0 -> promptCleanupBrokenExtensions()
+                        1 -> showDeleteExtensionsBatchPicker()
+                    }
+                }
+                .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
+                .show()
+            return
+        }
+
+        showDeleteExtensionsBatchPicker()
+    }
+
+    private fun showDeleteExtensionsBatchPicker() {
+        // sillydroid-android-host 是宿主侧 bundled 扩展，被用户误删后会直接干掉悬浮按钮 / 下拉刷新 / 原生通知等宿主能力，
+        // 以及「安装默认扩展」里不包含它，要手动从 bundled 重装才能恢复。批量删除里直接过滤掉，避免误选。
+        val deletableExtensions = extensions.filterNot {
+            it.folderName.equals(ANDROID_HOST_EXTENSION_FOLDER, ignoreCase = true)
+        }
+        if (deletableExtensions.isEmpty()) {
             showMessage(activity.getString(R.string.bootstrap_settings_extensions_empty))
             return
         }
 
-        val checkedItems = BooleanArray(extensions.size)
-        val labels = extensions.map { extension ->
+        val checkedItems = BooleanArray(deletableExtensions.size)
+        val labels = deletableExtensions.map { extension ->
             val versionLabel = extension.version ?: activity.getString(R.string.bootstrap_settings_extensions_version_unknown)
             "${extension.displayName} | ${extension.folderName} | $versionLabel"
         }.toTypedArray()
@@ -1159,7 +1238,7 @@ class BootstrapSettingsExtensionsCoordinator(
 
         dialog.setOnShowListener {
             dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val selectedExtensions = extensions.filterIndexed { index, _ -> checkedItems[index] }
+                val selectedExtensions = deletableExtensions.filterIndexed { index, _ -> checkedItems[index] }
                 if (selectedExtensions.isEmpty()) {
                     showError(activity.getString(R.string.bootstrap_settings_extensions_delete_batch_select_required))
                     return@setOnClickListener
@@ -1843,6 +1922,10 @@ class BootstrapSettingsExtensionsCoordinator(
 
     private fun dp(value: Int): Int {
         return (value * activity.resources.displayMetrics.density).toInt()
+    }
+
+    private companion object {
+        const val ANDROID_HOST_EXTENSION_FOLDER = "sillydroid-android-host"
     }
 }
 

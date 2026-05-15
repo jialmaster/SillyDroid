@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    跟随系统夜间模式的颜色覆盖。
+    历史回归：之前 values-night/colors.xml 全套都在，后来某次重构把整个文件丢了，
+    导致 floating logs 面板/bootstrap overlay/webview 占位页在系统暗色模式下仍然是亮白色。
+    这里按 day 版 colors.xml 的命名一一补齐对应的 dark token；如果 day 版新增了颜色，
+    night 版也必须同步加，否则会触发 lint 报错（"missing dark theme color"）。
+-->
+<resources>
+    <!-- bootstrap 启动覆盖层（首次冷启动 / 重启 tavern 时） -->
+    <color name="bootstrap_overlay_background">#FF111827</color>
+    <color name="bootstrap_overlay_title">#F8FAFC</color>
+    <color name="bootstrap_overlay_body">#CBD5E1</color>
+    <color name="bootstrap_overlay_secondary_text">#9CA3AF</color>
+    <color name="bootstrap_overlay_icon_tint">#F8FAFC</color>
+    <color name="bootstrap_overlay_icon_button_background">#FF1F2937</color>
+    <color name="bootstrap_overlay_icon_button_stroke">#FF334155</color>
+    <color name="bootstrap_update_badge_background">#DC2626</color>
+
+    <!-- WebView 出现前的占位背景，避免白屏闪一下 -->
+    <color name="tavern_webview_background">#FF111827</color>
+
+    <!-- 悬浮日志气泡 + 面板 -->
+    <color name="floating_logs_panel_background">#111827</color>
+    <color name="floating_logs_panel_stroke">#334155</color>
+    <color name="floating_logs_panel_title">#F8FAFC</color>
+    <color name="floating_logs_panel_secondary_text">#CBD5E1</color>
+    <color name="floating_logs_panel_surface">#1F2937</color>
+    <color name="floating_logs_panel_content">#E5E7EB</color>
+    <color name="floating_logs_bubble_background">#E22E3B4E</color>
+    <color name="floating_logs_bubble_text">#F0FDFA</color>
+</resources>

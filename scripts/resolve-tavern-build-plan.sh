@@ -302,7 +302,9 @@ compute_android_version_code() {
 }
 
 emit() {
-    printf '%s=%s\n' "$1" "$2"
+    # 统一去掉 Windows CRLF 残留，避免计划文件里的路径值带 \r，
+    # 进而在下游拼接 artifacts 路径时出现 cp/stat 找不到文件。
+    printf '%s=%s\n' "$1" "$(printf '%s' "$2" | tr -d '\r')"
 }
 
 config_tavern_tag="$(read_build_config_value 'build.tavernVersion' 'latest')"

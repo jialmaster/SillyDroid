@@ -217,20 +217,6 @@
                 android:visibility="gone" />
 
             <TextView
-                android:id="@+id/floatingLogsSessionSummary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/sillydroid_space_sm"
-                android:background="@drawable/bg_floating_logs_panel_surface"
-                android:paddingStart="@dimen/sillydroid_space_md"
-                android:paddingTop="@dimen/sillydroid_space_sm"
-                android:paddingEnd="@dimen/sillydroid_space_md"
-                android:paddingBottom="@dimen/sillydroid_space_sm"
-                android:textColor="@color/floating_logs_panel_secondary_text"
-                android:textAppearance="@style/TextAppearance.SillyDroid.SettingsBody"
-                android:visibility="gone" />
-
-            <TextView
                 android:id="@+id/floatingLogsEmpty"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -254,9 +240,7 @@
                     android:layout_height="match_parent"
                     android:background="@drawable/bg_floating_logs_panel_surface"
                     android:fadeScrollbars="false"
-                    android:fillViewport="true"
-                    android:scrollbarSize="14dp"
-                    android:scrollbars="vertical">
+                    android:fillViewport="true">
                     <TextView
                         android:id="@+id/floatingLogsContent"
                         android:layout_width="match_parent"
@@ -269,6 +253,18 @@
                         android:textAppearance="@style/TextAppearance.SillyDroid.SettingsMeta"
                         android:visibility="gone" />
                 </androidx.core.widget.NestedScrollView>
+
+                <View
+                    android:id="@+id/floatingLogsScrollbarThumb"
+                    android:layout_width="@dimen/sillydroid_floating_logs_scrollbar_hit_width"
+                    android:layout_height="@dimen/sillydroid_floating_logs_scrollbar_min_height"
+                    android:layout_gravity="top|end"
+                    android:layout_marginTop="@dimen/sillydroid_floating_logs_scrollbar_vertical_margin"
+                    android:layout_marginEnd="@dimen/sillydroid_floating_logs_scrollbar_end_margin"
+                    android:layout_marginBottom="@dimen/sillydroid_floating_logs_scrollbar_vertical_margin"
+                    android:background="@drawable/bg_floating_logs_scrollbar_thumb"
+                    android:clickable="true"
+                    android:visibility="gone" />
 
                 <ImageButton
                     android:id="@+id/floatingLogsScrollToBottomButton"
