@@ -7,6 +7,14 @@ import org.json.JSONObject
 class AssetRuntimeMetadataRepository(context: Context) : RuntimeMetadataRepository {
     private val appContext = context.applicationContext
 
+    fun readRootfsManifestRawJson(): String? {
+        return readNormalizedJsonAssetOrNull(rootfsManifestAssetPath)
+    }
+
+    fun readServerManifestRawJson(): String? {
+        return readNormalizedJsonAssetOrNull(serverManifestAssetPath)
+    }
+
     override fun resolveRuntimeVersionLabel(): String? {
         val manifest = readJsonAssetOrNull(rootfsManifestAssetPath) ?: return null
 
@@ -87,6 +95,10 @@ class AssetRuntimeMetadataRepository(context: Context) : RuntimeMetadataReposito
                 JSONObject(reader.readText())
             }
         }.getOrNull()
+    }
+
+    private fun readNormalizedJsonAssetOrNull(assetPath: String): String? {
+        return readJsonAssetOrNull(assetPath)?.toString()
     }
 
     private fun extractFirstGroup(source: String, pattern: String): String {

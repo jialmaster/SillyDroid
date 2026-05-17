@@ -8,7 +8,7 @@ import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 
 class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
     companion object {
-        private const val preferencesName = "bootstrap-host-config"
+        internal const val preferencesName = "bootstrap-host-config"
         private const val servicePortKey = "service-port"
         private const val webViewPullRefreshEnabledKey = "webview-pull-refresh-enabled"
         private const val floatingLogBubbleEnabledKey = "floating-log-bubble-enabled"

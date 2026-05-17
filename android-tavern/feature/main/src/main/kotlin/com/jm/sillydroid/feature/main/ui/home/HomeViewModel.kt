@@ -57,12 +57,6 @@ class HomeViewModel(
         pendingLocalRetryAttempts = 0
     }
 
-    fun resetAfterRendererRecreated() {
-        hasRestoredWebViewState = false
-        loadedUrl = ""
-        pendingLocalRetryAttempts = 0
-    }
-
     class Factory(
         owner: SavedStateRegistryOwner,
         private val bootstrapController: BootstrapController,

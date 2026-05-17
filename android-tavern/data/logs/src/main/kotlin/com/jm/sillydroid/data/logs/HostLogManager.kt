@@ -47,10 +47,13 @@ object HostLogManager {
     private const val startupLogPrefix = "startup-"
     private const val tavernServerLogPrefix = "sillydroid-server-"
     private const val rootfsRuntimeLogPrefix = "rootfs-runtime-"
+    private const val hostDiagnosticsLogPrefix = "host-diagnostics-"
+    private const val jsErrorLogPrefix = "js-error-"
     private const val startupLogLegacyFileName = "startup.log"
     private const val tavernServerLogLegacyFileName = "sillydroid-server.log"
     private const val rootfsRuntimeLogLegacyFileName = "rootfs-runtime.log"
     private const val bundleInfoEntryName = "bundle-info.txt"
+    private const val bundleInfoJsonEntryName = "bundle-info.json"
     private const val bundleFilePrefix = "sillydroid-logs"
     private const val asyncWriterLogTag = "HostLogAsyncWriter"
     private const val asyncWriterShutdownTimeoutMillis = 750L
@@ -111,6 +114,10 @@ object HostLogManager {
         return File(logsDirectory(context), currentRootfsRuntimeLogFileName(context))
     }
 
+    fun currentHostDiagnosticsLogFile(context: Context): File {
+        return File(logsDirectory(context), currentHostDiagnosticsLogFileName(context))
+    }
+
     fun crashLogFile(context: Context): File {
         return File(logsDirectory(context), crashLogFileName)
     }
@@ -147,10 +154,24 @@ object HostLogManager {
         return "$rootfsRuntimeLogPrefix${requireCurrentAppSessionId(context)}.log"
     }
 
+    fun currentHostDiagnosticsLogFileName(context: Context): String {
+        return "$hostDiagnosticsLogPrefix${requireCurrentAppSessionId(context)}.log"
+    }
+
+    fun currentJsErrorLogFileName(context: Context): String {
+        return "$jsErrorLogPrefix${requireCurrentAppSessionId(context)}.log"
+    }
+
+    fun currentJsErrorLogFile(context: Context): File {
+        return File(logsDirectory(context), currentJsErrorLogFileName(context))
+    }
+
     fun isCurrentSessionHostLogFileName(context: Context, fileName: String): Boolean {
         return isCurrentStartupLogFileName(context, fileName) ||
             isCurrentServerLogFileName(context, fileName) ||
-            isCurrentRootfsRuntimeLogFileName(context, fileName)
+            isCurrentRootfsRuntimeLogFileName(context, fileName) ||
+            isCurrentHostDiagnosticsLogFileName(context, fileName) ||
+            isCurrentJsErrorLogFileName(context, fileName)
     }
 
     fun isCurrentStartupLogFileName(context: Context, fileName: String): Boolean {
@@ -165,6 +186,14 @@ object HostLogManager {
         return fileName.equals(currentRootfsRuntimeLogFileName(context), ignoreCase = true)
     }
 
+    fun isCurrentHostDiagnosticsLogFileName(context: Context, fileName: String): Boolean {
+        return fileName.equals(currentHostDiagnosticsLogFileName(context), ignoreCase = true)
+    }
+
+    fun isCurrentJsErrorLogFileName(context: Context, fileName: String): Boolean {
+        return fileName.equals(currentJsErrorLogFileName(context), ignoreCase = true)
+    }
+
     fun clearAllLogs(context: Context) {
         val applicationContext = context.applicationContext
         initializeForAppStart(applicationContext)
@@ -173,6 +202,8 @@ object HostLogManager {
         val currentStartupFileName = currentStartupLogFileName(applicationContext)
         val currentServerFileName = currentServerLogFileName(applicationContext)
         val currentRootfsFileName = currentRootfsRuntimeLogFileName(applicationContext)
+        val currentHostDiagnosticsFileName = currentHostDiagnosticsLogFileName(applicationContext)
+        val currentJsErrorFileName = currentJsErrorLogFileName(applicationContext)
 
         logsDir.listFiles().orEmpty().forEach { file ->
             if (!file.isFile || !file.extension.equals("log", ignoreCase = true)) {
@@ -182,7 +213,9 @@ object HostLogManager {
             when {
                 file.name.equals(currentStartupFileName, ignoreCase = true) ||
                     file.name.equals(currentServerFileName, ignoreCase = true) ||
-                    file.name.equals(currentRootfsFileName, ignoreCase = true) -> {
+                    file.name.equals(currentRootfsFileName, ignoreCase = true) ||
+                    file.name.equals(currentHostDiagnosticsFileName, ignoreCase = true) ||
+                    file.name.equals(currentJsErrorFileName, ignoreCase = true) -> {
                     file.writeText("")
                 }
 
@@ -658,6 +691,8 @@ object HostLogManager {
         return extractSessionId(fileName, startupLogPrefix)
             ?: extractSessionId(fileName, tavernServerLogPrefix)
             ?: extractSessionId(fileName, rootfsRuntimeLogPrefix)
+            ?: extractSessionId(fileName, hostDiagnosticsLogPrefix)
+            ?: extractSessionId(fileName, jsErrorLogPrefix)
     }
 
     private fun extractSessionId(fileName: String, prefix: String): String? {
@@ -703,6 +738,8 @@ object HostLogManager {
             normalizedName.startsWith(tavernServerLogPrefix) -> "酒馆服务日志"
             normalizedName.startsWith(startupLogPrefix) -> "启动日志"
             normalizedName.startsWith(rootfsRuntimeLogPrefix) -> "运行时日志"
+            normalizedName.startsWith(hostDiagnosticsLogPrefix) -> "宿主诊断日志"
+            normalizedName.startsWith(jsErrorLogPrefix) -> "WebView JS 报错"
             normalizedName == crashLogFileName -> "应用崩溃日志"
             normalizedName == exitInfoLogFileName -> "应用退出信息"
             normalizedName.startsWith("extension-install-preview-") -> "扩展预检日志"
@@ -718,8 +755,10 @@ object HostLogManager {
             normalizedName.startsWith(startupLogPrefix) -> 0
             normalizedName.startsWith(tavernServerLogPrefix) -> 1
             normalizedName.startsWith(rootfsRuntimeLogPrefix) -> 2
-            normalizedName == crashLogFileName -> 3
-            normalizedName == exitInfoLogFileName -> 4
+            normalizedName.startsWith(hostDiagnosticsLogPrefix) -> 3
+            normalizedName.startsWith(jsErrorLogPrefix) -> 4
+            normalizedName == crashLogFileName -> 5
+            normalizedName == exitInfoLogFileName -> 6
             else -> Int.MAX_VALUE
         }
     }
@@ -878,9 +917,16 @@ object HostLogManager {
         val logsDir = logsDirectory(context)
         logsDir.mkdirs()
         val logFiles = collectLogFiles(logsDir)
+        val baseInfo = HostLogBundleBaseInfoResolver.resolve(context, bundleFilePrefix)
+        val logSummary = HostLogBundleInfoFormatter.summarize(logFiles, logsDir)
         ZipOutputStream(output).use { zipOut ->
+            // 日志包根目录固定输出一份文本摘要和一份结构化 JSON，方便人工查看与自动分析共用同一套诊断信息。
             zipOut.putNextEntry(ZipEntry(bundleInfoEntryName))
-            zipOut.write(buildBundleInfo(context, logFiles).toByteArray(Charsets.UTF_8))
+            zipOut.write(HostLogBundleInfoFormatter.buildText(baseInfo, logSummary).toByteArray(Charsets.UTF_8))
+            zipOut.closeEntry()
+
+            zipOut.putNextEntry(ZipEntry(bundleInfoJsonEntryName))
+            zipOut.write(HostLogBundleInfoFormatter.buildJson(baseInfo, logSummary).toByteArray(Charsets.UTF_8))
             zipOut.closeEntry()
 
             logFiles.forEach { logFile ->
@@ -910,24 +956,6 @@ object HostLogManager {
             }
             .sortedBy { file -> file.relativeTo(logsDir).invariantSeparatorsPath.lowercase(Locale.ROOT) }
             .toList()
-    }
-
-    private fun buildBundleInfo(context: Context, logFiles: List<File>): String {
-        val exportedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
-            .format(Date(System.currentTimeMillis()))
-
-        return buildString {
-            appendLine("bundleFilePrefix=$bundleFilePrefix")
-            appendLine("exportedAt=$exportedAt")
-            appendLine("packageName=${context.packageName}")
-            appendLine("hostVersion=${BuildConfig.SILLYDROID_HOST_VERSION}")
-            appendLine("logFileCount=${logFiles.size}")
-            appendLine("includesCrashLog=${logFiles.any { it.name.equals(crashLogFileName, ignoreCase = true) }}")
-            appendLine("includesExitInfoLog=${logFiles.any { it.name.equals(exitInfoLogFileName, ignoreCase = true) }}")
-            if (logFiles.isEmpty()) {
-                appendLine("note=no .log files found under android-tavern/logs")
-            }
-        }
     }
 
     private fun stopCurrentServerTailLocked(clearState: Boolean) {

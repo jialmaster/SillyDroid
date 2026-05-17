@@ -132,6 +132,41 @@ class BootstrapModelsTest {
     }
 
     @Test
+    fun `isHttpReadyTransitionSnapshot true only for running wait-http success transition`() {
+        val completedWaitHttpSteps = defaultBootstrapSteps().map { step ->
+            if (step.id == BootstrapStepId.WAIT_HTTP_READY) {
+                step.copy(
+                    status = BootstrapStepStatus.COMPLETED,
+                    result = BootstrapStepResult.SUCCESS,
+                    progressPercent = 100
+                )
+            } else {
+                step
+            }
+        }
+        val transition = BootstrapSessionSnapshot(
+            lifecycle = BootstrapLifecycle.RUNNING,
+            currentStepId = BootstrapStepId.WAIT_HTTP_READY,
+            steps = completedWaitHttpSteps,
+            statusMessage = "正在等待 HTTP 服务就绪。"
+        )
+        assertTrue(transition.isHttpReadyTransitionSnapshot())
+        assertFalse(transition.copy(lifecycle = BootstrapLifecycle.READY_MONITORING).isHttpReadyTransitionSnapshot())
+        assertFalse(transition.copy(currentStepId = BootstrapStepId.START_SERVER_PROCESS).isHttpReadyTransitionSnapshot())
+        assertFalse(
+            transition.copy(
+                steps = defaultBootstrapSteps().map { step ->
+                    if (step.id == BootstrapStepId.WAIT_HTTP_READY) {
+                        step.copy(status = BootstrapStepStatus.RUNNING, result = BootstrapStepResult.NONE)
+                    } else {
+                        step
+                    }
+                }
+            ).isHttpReadyTransitionSnapshot()
+        )
+    }
+
+    @Test
     fun `shouldPreferTavernServerLog mirrors preferredKind`() {
         val tavern = BootstrapSessionSnapshot(
             currentLogTargets = BootstrapCurrentLogTargets(preferredKind = BootstrapLogKind.TAVERN_SERVER)

@@ -69,7 +69,7 @@ class BootstrapOverlayHost(
                 progress = progress,
                 progressLabel = progressLabel,
                 webViewRefreshLayout = webViewHost.webViewRefreshLayout,
-                webView = webViewHost.webView
+                webView = { webViewHost.webView }
             ),
             text = BootstrapOverlayText(
                 pausedMessage = { activity.getString(R.string.bootstrap_paused_message) },

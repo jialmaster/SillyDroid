@@ -1,7 +1,9 @@
 artifacts/
 .vs/
+.venv/
 .vscode/
 .qoder/
+.codex-tmp/
 docs/
 tmp/
 __pycache__/

@@ -23,6 +23,7 @@ import com.jm.sillydroid.feature.main.ui.home.io.HostIoController
 import com.jm.sillydroid.feature.main.ui.home.notification.AndroidSystemNotificationBridge
 import com.jm.sillydroid.feature.main.ui.home.system.SystemBarInsetsController
 import com.jm.sillydroid.feature.main.ui.home.webview.AndroidHostBridge
+import com.jm.sillydroid.feature.main.ui.home.webview.HostDiagnosticSink
 import com.jm.sillydroid.feature.main.ui.home.webview.TavernWebViewHost
 import org.json.JSONObject
 
@@ -102,7 +103,12 @@ class MainActivity : AppCompatActivity() {
                 hostIo.blobDownloadController.installBridgeScript(webView, downloadBridgeName)
             },
             onDownloadRequested = { request -> hostIo.handlePageDownload(request) },
-            onShowFileChooser = { intent, callback -> hostIo.launchFileChooser(intent, callback) }
+            onShowFileChooser = { intent, callback -> hostIo.launchFileChooser(intent, callback) },
+            jsErrorSink = { line -> hostLogRepository.recordWebViewJsError(line) },
+            hostDiagnosticSink = HostDiagnosticSink { category, body ->
+                hostLogRepository.recordHostDiagnostic(category = category, body = body)
+            },
+            refreshApplicationExitInfo = { hostLogRepository.refreshApplicationExitInfoAsync() }
         )
         bootstrapOverlayHost = BootstrapOverlayHost(
             activity = this,
@@ -155,6 +161,20 @@ class MainActivity : AppCompatActivity() {
         webViewHost.onDestroy()
         hostIo.cancelPendingFileChooser()
         super.onDestroy()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (::webViewHost.isInitialized) {
+            webViewHost.onTrimMemory(level)
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        if (::webViewHost.isInitialized) {
+            webViewHost.onLowMemory()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

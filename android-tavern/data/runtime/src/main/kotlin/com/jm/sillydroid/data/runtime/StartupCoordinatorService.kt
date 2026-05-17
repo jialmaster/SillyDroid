@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.jm.sillydroid.core.model.bootstrap.BootstrapLifecycle
 import com.jm.sillydroid.core.model.bootstrap.BootstrapSessionSnapshot
+import com.jm.sillydroid.core.model.bootstrap.isHttpReadyTransitionSnapshot
 import com.jm.sillydroid.domain.app.SillyDroidAppGraphProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -104,19 +105,18 @@ class StartupCoordinatorService : Service() {
         super.onDestroy()
     }
 
+    // 前台通知的 ready 态文案需要明确告诉用户“当前已经能回到酒馆”，
+    // 不能只停留在通用的“已启动”描述，否则用户仍然不知道点击通知后的结果。
+    private fun resolveNotificationContentText(snapshot: BootstrapSessionSnapshot): String {
+        return resolveForegroundNotificationContentText(snapshot)
+    }
+
     private fun buildNotification(snapshot: BootstrapSessionSnapshot): Notification {
         val normalizedProgress = snapshot.progressPercent.coerceIn(0, 100)
-        // 就绪后通知必须切到明确的“已启动”态，不能继续残留等待 HTTP 的进度文案。
-        val showReadyState = snapshot.lifecycle == BootstrapLifecycle.READY_MONITORING
+        val showReadyState = shouldShowForegroundReadyState(snapshot)
         val showProgress = snapshot.derivedUiFlags.showProgress && !showReadyState
         val indeterminate = normalizedProgress <= 0
-        val contentText = if (showReadyState) {
-            "SillyTavern 已启动"
-        } else if (showProgress && !indeterminate) {
-            "${snapshot.statusMessage} (${normalizedProgress}%)"
-        } else {
-            snapshot.statusMessage
-        }
+        val contentText = resolveNotificationContentText(snapshot)
         val ongoing = snapshot.lifecycle == BootstrapLifecycle.RUNNING ||
             snapshot.lifecycle == BootstrapLifecycle.READY_MONITORING ||
             snapshot.lifecycle == BootstrapLifecycle.RESTART_SCHEDULED ||
@@ -155,5 +155,25 @@ class StartupCoordinatorService : Service() {
             NotificationManager.IMPORTANCE_LOW
         )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+    }
+}
+
+internal fun shouldShowForegroundReadyState(snapshot: BootstrapSessionSnapshot): Boolean {
+    // WAIT_HTTP_READY 成功和 READY_MONITORING 生命周期切换是两条连续快照；
+    // 前台通知只要看到“HTTP 已就绪”的过渡态，就必须直接按 ready 展示，
+    // 不能把中间那条 100% 等待快照保留下来。
+    return snapshot.lifecycle == BootstrapLifecycle.READY_MONITORING ||
+        snapshot.isHttpReadyTransitionSnapshot()
+}
+
+internal fun resolveForegroundNotificationContentText(snapshot: BootstrapSessionSnapshot): String {
+    val normalizedProgress = snapshot.progressPercent.coerceIn(0, 100)
+    if (shouldShowForegroundReadyState(snapshot)) {
+        return "SillyTavern 已启动，点击返回酒馆"
+    }
+    return if (snapshot.derivedUiFlags.showProgress && normalizedProgress > 0) {
+        "${snapshot.statusMessage} (${normalizedProgress}%)"
+    } else {
+        snapshot.statusMessage
     }
 }
