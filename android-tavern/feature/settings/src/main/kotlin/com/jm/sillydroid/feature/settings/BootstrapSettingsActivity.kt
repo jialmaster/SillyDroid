@@ -30,6 +30,7 @@ import com.jm.sillydroid.domain.app.SillyDroidAppGraph
 import com.jm.sillydroid.domain.app.SillyDroidAppGraphProvider
 import com.jm.sillydroid.domain.bootstrap.BootstrapController
 import com.jm.sillydroid.feature.settings.model.SettingsActivityUiState
+import com.jm.sillydroid.feature.settings.model.SettingsTab
 import com.jm.sillydroid.feature.settings.ui.about.BootstrapSettingsAboutController
 import com.jm.sillydroid.feature.settings.ui.data.BootstrapSettingsDataCoordinator
 import com.jm.sillydroid.feature.settings.ui.extensions.BootstrapSettingsExtensionsCoordinator
@@ -38,8 +39,13 @@ import com.jm.sillydroid.feature.settings.ui.logs.BootstrapSettingsLogsCoordinat
 import com.jm.sillydroid.feature.settings.ui.screen.BootstrapSettingsScreenController
 import com.jm.sillydroid.feature.settings.ui.screen.SettingsActivityStateController
 import com.jm.sillydroid.feature.settings.ui.settings.BootstrapSettingsSettingsCoordinator
+import com.jm.sillydroid.feature.settings.ui.terminal.HostConsoleSessionStoreRegistry
+import com.jm.sillydroid.feature.settings.ui.terminal.TerminalExtraKeysStripView
+import com.jm.sillydroid.feature.settings.ui.terminal.TerminalPageController
+import com.jm.sillydroid.feature.settings.ui.terminal.TermuxHostConsoleSessionFactory
 import com.jm.sillydroid.feature.settings.viewmodel.SettingsActivityViewModel
 import com.jm.sillydroid.feature.settings.viewmodel.SettingsActivityViewModelFactory
+import com.termux.view.TerminalView
 import com.jm.sillydroid.ui.update.AppUpdateCoordinator
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -74,6 +80,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
 
     private lateinit var toolbar: MaterialToolbar
     private lateinit var toolbarTitleView: TextView
+    private lateinit var toolbarAboutEntryView: TextView
     private lateinit var tabLayout: TabLayout
     private lateinit var rootView: View
     private lateinit var topShellView: View
@@ -104,6 +111,15 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var logsExportButton: MaterialButton
     private lateinit var logsReloadButton: MaterialButton
     private lateinit var logsClearButton: MaterialButton
+    private lateinit var terminalPanelView: View
+    private lateinit var terminalView: TerminalView
+    private lateinit var terminalStatusView: TextView
+    private lateinit var terminalRetryButton: MaterialButton
+    private lateinit var terminalCtrlCButton: MaterialButton
+    private lateinit var terminalClearButton: MaterialButton
+    private lateinit var terminalResetButton: MaterialButton
+    private lateinit var terminalSelectButton: MaterialButton
+    private lateinit var terminalExtraKeysStripView: TerminalExtraKeysStripView
     private lateinit var settingsPanelView: View
     private lateinit var aboutPanelView: View
     private lateinit var aboutGithubButton: ImageButton
@@ -141,7 +157,15 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var dataCoordinator: BootstrapSettingsDataCoordinator
     private lateinit var extensionsCoordinator: BootstrapSettingsExtensionsCoordinator
     private lateinit var logsCoordinator: BootstrapSettingsLogsCoordinator
+    private lateinit var terminalPageController: TerminalPageController
     private lateinit var appUpdateCoordinator: AppUpdateCoordinator
+    private val consoleSessionStore by lazy {
+        HostConsoleSessionStoreRegistry.getOrCreate(
+            consoleRuntimeRepository = appGraph.consoleRuntimeRepository,
+            sessionFactory = TermuxHostConsoleSessionFactory(applicationContext),
+            dispatchers = appGraph.dispatchers
+        )
+    }
 
     private val exportArchiveLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { targetUri ->
         if (targetUri != null) {
@@ -177,6 +201,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         screenController.initialize()
         extensionsCoordinator.initialize()
         logsCoordinator.initialize()
+        terminalPageController.initialize()
         appUpdateCoordinator.initialize()
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -229,7 +254,9 @@ class BootstrapSettingsActivity : AppCompatActivity() {
 
         if (intent.getBooleanExtra(openExtensionsTabKey, false) || intent.getBooleanExtra(openDefaultExtensionsInstallerKey, false)) {
             tabLayout.post {
-                tabLayout.getTabAt(1)?.select()
+                SettingsTab.EXTENSIONS.tabPosition?.let { position ->
+                    tabLayout.getTabAt(position)?.select()
+                }
                 if (intent.getBooleanExtra(openDefaultExtensionsInstallerKey, false)) {
                     extensionsCoordinator.promptDefaultRepositoriesSelection()
                 }
@@ -251,6 +278,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         topShellView = findViewById(R.id.bootstrapSettingsTopShell)
         toolbar = findViewById(R.id.bootstrapSettingsToolbar)
         toolbarTitleView = findViewById(R.id.bootstrapSettingsToolbarTitle)
+        toolbarAboutEntryView = findViewById(R.id.bootstrapSettingsToolbarAboutEntry)
         tabLayout = findViewById(R.id.bootstrapSettingsTabs)
         scrollView = findViewById(R.id.bootstrapSettingsScrollView)
         loadingIndicator = findViewById(R.id.bootstrapSettingsLoading)
@@ -279,6 +307,15 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         logsExportButton = findViewById(R.id.bootstrapSettingsLogsExportButton)
         logsReloadButton = findViewById(R.id.bootstrapSettingsLogsReloadButton)
         logsClearButton = findViewById(R.id.bootstrapSettingsLogsClearButton)
+        terminalPanelView = findViewById(R.id.bootstrapSettingsTerminalPanel)
+        terminalView = findViewById(R.id.bootstrapSettingsTerminalView)
+        terminalStatusView = findViewById(R.id.bootstrapSettingsTerminalStatus)
+        terminalRetryButton = findViewById(R.id.bootstrapSettingsTerminalRetryButton)
+        terminalCtrlCButton = findViewById(R.id.bootstrapSettingsTerminalCtrlCButton)
+        terminalClearButton = findViewById(R.id.bootstrapSettingsTerminalClearButton)
+        terminalResetButton = findViewById(R.id.bootstrapSettingsTerminalResetButton)
+        terminalSelectButton = findViewById(R.id.bootstrapSettingsTerminalSelectButton)
+        terminalExtraKeysStripView = findViewById(R.id.bootstrapSettingsTerminalExtraKeysStrip)
         settingsPanelView = findViewById(R.id.bootstrapSettingsSettingsPanel)
         aboutPanelView = findViewById(R.id.bootstrapSettingsAboutPanel)
         aboutGithubButton = findViewById(R.id.bootstrapSettingsAboutGithubButton)
@@ -302,10 +339,12 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             topShellView = topShellView,
             scrollView = scrollView,
             tabLayout = tabLayout,
+            toolbarAboutEntryView = toolbarAboutEntryView,
             dataPanelView = dataPanelView,
             extensionsPanelView = extensionsPanelView,
             logsPanelView = logsPanelView,
             logsScrollView = logsScrollView,
+            terminalPanelView = terminalPanelView,
             settingsPanelView = settingsPanelView,
             aboutPanelView = aboutPanelView,
             configPathView = configPathView,
@@ -319,12 +358,15 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             exportButton = exportButton,
             clearDataButton = clearDataButton,
             saveStartButton = saveStartButton,
-            onTabChanged = { index ->
-                settingsActivityViewModel.selectTab(index)
-                if (this::extensionsCoordinator.isInitialized && index == 1) {
+            onTabChanged = { tab ->
+                settingsActivityViewModel.selectTab(tab)
+                if (this::extensionsCoordinator.isInitialized && tab == SettingsTab.EXTENSIONS) {
                     extensionsCoordinator.reloadExtensions()
-                } else if (this::logsCoordinator.isInitialized && index == 2) {
+                } else if (this::logsCoordinator.isInitialized && tab == SettingsTab.LOGS) {
                     logsCoordinator.reloadLatestLog()
+                }
+                if (this::terminalPageController.isInitialized) {
+                    terminalPageController.onTabChanged(tab)
                 }
             }
         )
@@ -439,6 +481,19 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             showError = settingsCoordinator::showValidationMessage,
             showMessage = screenController::showMessage,
             requestExport = ::requestLogExport
+        )
+        terminalPageController = TerminalPageController(
+            activity = this,
+            terminalPanelView = terminalPanelView,
+            terminalView = terminalView,
+            statusView = terminalStatusView,
+            retryButton = terminalRetryButton,
+            ctrlCButton = terminalCtrlCButton,
+            clearButton = terminalClearButton,
+            resetButton = terminalResetButton,
+            selectButton = terminalSelectButton,
+            extraKeysStripView = terminalExtraKeysStripView,
+            sessionStore = consoleSessionStore
         )
     }
 

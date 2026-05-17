@@ -3,6 +3,7 @@ package com.jm.sillydroid.feature.settings.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
+import com.jm.sillydroid.feature.settings.model.SettingsTab
 import com.jm.sillydroid.feature.settings.model.SettingsActivityUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,9 +22,9 @@ class SettingsActivityViewModel(
 
     val uiState: StateFlow<SettingsActivityUiState> = _uiState.asStateFlow()
 
-    fun selectTab(index: Int) {
+    fun selectTab(tab: SettingsTab) {
         _uiState.update { current ->
-            if (current.selectedTabIndex == index) current else current.copy(selectedTabIndex = index)
+            if (current.selectedTab == tab) current else current.copy(selectedTab = tab)
         }
     }
 

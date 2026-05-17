@@ -1,7 +1,7 @@
 package com.jm.sillydroid.feature.settings.model
 
 data class SettingsActivityUiState(
-    val selectedTabIndex: Int = 0,
+    val selectedTab: SettingsTab = SettingsTab.DATA,
     val floatingLogsEnabled: Boolean = false,
     val pullRefreshEnabled: Boolean = false,
     val shouldStartBootstrap: Boolean = false,

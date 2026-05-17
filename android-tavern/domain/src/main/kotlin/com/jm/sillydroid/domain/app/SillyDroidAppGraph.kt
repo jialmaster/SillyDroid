@@ -3,6 +3,7 @@ package com.jm.sillydroid.domain.app
 import android.app.Activity
 import android.content.Intent
 import com.jm.sillydroid.core.common.DispatcherProvider
+import com.jm.sillydroid.domain.bootstrap.ConsoleRuntimeRepository
 import com.jm.sillydroid.core.model.update.AppUpdateBuildConfig
 import com.jm.sillydroid.domain.bootstrap.BootstrapController
 import com.jm.sillydroid.domain.bootstrap.RuntimeMetadataRepository
@@ -23,6 +24,7 @@ interface SillyDroidAppGraph {
     val bootstrapController: BootstrapController
     val runtimeConfigRepository: RuntimeConfigRepository
     val runtimeMetadataRepository: RuntimeMetadataRepository
+    val consoleRuntimeRepository: ConsoleRuntimeRepository
     val appUpdateRepository: AppUpdateRepository
     val appUpdateBuildConfig: AppUpdateBuildConfig
 
