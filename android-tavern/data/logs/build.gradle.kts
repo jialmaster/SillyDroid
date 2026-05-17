@@ -46,6 +46,10 @@ android {
 
 dependencies {
     api(project(":domain"))
+    implementation(project(":data:runtime"))
+    implementation(project(":data:settings"))
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    testImplementation("junit:junit:4.13.2")
 }

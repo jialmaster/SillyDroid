@@ -272,6 +272,18 @@ fun BootstrapSessionSnapshot.shouldReportTavernStartupTail(): Boolean {
         currentLogTargets.currentStepKind == BootstrapLogKind.TAVERN_SERVER
 }
 
+fun BootstrapSessionSnapshot.isHttpReadyTransitionSnapshot(): Boolean {
+    // WAIT_HTTP_READY 成功后，bootstrap 会先发布“步骤已完成”的 RUNNING 快照，
+    // 再切到 READY_MONITORING；像前台通知这种只关心展示结果的消费者，看到这个过渡态
+    // 就必须按“已启动”处理，不能继续展示“等待 HTTP 服务就绪”的旧文案。
+    if (lifecycle != BootstrapLifecycle.RUNNING || currentStepId != BootstrapStepId.WAIT_HTTP_READY) {
+        return false
+    }
+    val waitHttpReadyStep = currentStep ?: return false
+    return waitHttpReadyStep.status == BootstrapStepStatus.COMPLETED &&
+        waitHttpReadyStep.result == BootstrapStepResult.SUCCESS
+}
+
 fun BootstrapSessionSnapshot.latestResolvedStep(): BootstrapStepSnapshot? {
     return steps
         .filter { step ->

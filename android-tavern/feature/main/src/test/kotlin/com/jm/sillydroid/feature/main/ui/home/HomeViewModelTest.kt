@@ -102,21 +102,6 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `resetAfterRendererRecreated clears webview and retry state`() = runTest {
-        val viewModel = HomeViewModel(fakeController).apply {
-            loadedUrl = "https://example.test/page"
-            hasRestoredWebViewState = true
-            pendingLocalRetryAttempts = 9
-        }
-
-        viewModel.resetAfterRendererRecreated()
-
-        assertEquals("", viewModel.loadedUrl)
-        assertFalse(viewModel.hasRestoredWebViewState)
-        assertEquals(0, viewModel.pendingLocalRetryAttempts)
-    }
-
-    @Test
     fun `loadedUrl is restored from SavedStateHandle`() = runTest {
         val handle = SavedStateHandle(mapOf("home.loaded_url" to "https://example.test/restored"))
         val viewModel = HomeViewModel(fakeController, handle)

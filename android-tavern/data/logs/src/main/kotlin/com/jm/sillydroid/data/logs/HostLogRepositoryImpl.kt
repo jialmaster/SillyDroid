@@ -6,9 +6,19 @@ import com.jm.sillydroid.core.model.logs.HostLogBundleExportResult
 import com.jm.sillydroid.core.model.logs.HostLogEntry
 import com.jm.sillydroid.core.model.logs.HostLogSnapshot
 import com.jm.sillydroid.domain.logs.HostLogRepository
+import java.util.concurrent.atomic.AtomicLong
 
 class HostLogRepositoryImpl(context: Context) : HostLogRepository {
     private val appContext = context.applicationContext
+
+    // 诊断/JS 错误都属于“当前 app session 的附属日志”。
+    // 统一复用同一套 AsyncWriter 初始化与 session token 逻辑，避免不同日志类型各自维护一套易漂移。
+    private val jsErrorWriter = SessionScopedAsyncLogWriter {
+        HostLogManager.currentJsErrorLogFile(appContext)
+    }
+    private val hostDiagnosticsWriter = SessionScopedAsyncLogWriter {
+        HostLogManager.currentHostDiagnosticsLogFile(appContext)
+    }
 
     override fun initializeForAppStart() {
         HostLogManager.initializeForAppStart(appContext)
@@ -72,6 +82,16 @@ class HostLogRepositoryImpl(context: Context) : HostLogRepository {
         return HostLogManager.exportToPublicDownloads(appContext)
     }
 
+    override fun recordWebViewJsError(line: String) {
+        jsErrorWriter.append(line)
+    }
+
+    override fun recordHostDiagnostic(category: String, body: String) {
+        hostDiagnosticsWriter.append(
+            HostDiagnosticLogLineFormatter.buildLine(category = category, body = body)
+        )
+    }
+
     override fun subscribeToLogChanges(
         matcher: (String?) -> Boolean,
         onChanged: () -> Unit
@@ -81,5 +101,34 @@ class HostLogRepositoryImpl(context: Context) : HostLogRepository {
             matcher = matcher,
             onChanged = onChanged
         )
+    }
+
+    private class SessionScopedAsyncLogWriter(
+        private val logFileProvider: () -> java.io.File
+    ) {
+        private val sessionToken = AtomicLong(0L)
+        private val writer by lazy {
+            HostLogManager.AsyncWriter(logFileProvider).also { asyncWriter ->
+                val token = sessionToken.incrementAndGet()
+                val logFile = logFileProvider()
+                if (!logFile.exists()) {
+                    asyncWriter.reset(token)
+                } else {
+                    val previous = runCatching { logFile.readText() }.getOrDefault("")
+                    asyncWriter.reset(token)
+                    if (previous.isNotEmpty()) {
+                        asyncWriter.append(token, previous)
+                    }
+                }
+            }
+        }
+
+        fun append(line: String) {
+            val token = sessionToken.get().takeIf { it > 0L } ?: run {
+                writer
+                sessionToken.get()
+            }
+            writer.append(token, line)
+        }
     }
 }

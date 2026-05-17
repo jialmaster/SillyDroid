@@ -7,6 +7,7 @@ import com.jm.sillydroid.core.model.settings.TavernDataArchiveKind
 import com.jm.sillydroid.core.model.settings.TavernDataArchivePreview
 import com.jm.sillydroid.core.model.settings.TavernDataImportResult
 import com.jm.sillydroid.domain.settings.DataArchiveRepository
+import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
@@ -23,6 +24,10 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
     }
 
     private data class UserContentRoot(val root: File)
+
+    private data class UserSettingsSnapshot(
+        val connectionProfileCount: Int
+    )
 
     private data class ArchiveImportPlan(
         val layout: ArchiveLayout,
@@ -43,11 +48,15 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
         private const val defaultUserHandle = "default-user"
         private const val layoutLabelManaged = "Docker 四目录（根目录为 config,data,plugins,extensions；Android 宿主导出同构）"
         private const val layoutLabelPublic = "Linux/Termux public 结构（根目录为 config,data,plugins,public；第三方扩展位于 public/scripts/extensions/third-party）"
-        private val presetDirectoryNames: Set<String> = setOf(
+        private val apiPresetDirectoryNames: Set<String> = setOf(
             "KoboldAI Settings",
-            "OpenAI Settings",
             "NovelAI Settings",
-            "TextGen Settings",
+            "TextGen Settings"
+        )
+
+        private val presetDirectoryNames: Set<String> = setOf(
+            "OpenAI Settings",
+            *apiPresetDirectoryNames.toTypedArray(),
             "context",
             "instruct",
             "QuickReplies",
@@ -193,12 +202,9 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
             setOf("png"),
             recursive = false
         )
-        val presetCount = countManagedContentFiles(
-            userContentRoots,
-            presetDirectoryNames,
-            setOf("json"),
-            recursive = false
-        )
+        val chatCompletionPresetCount = countChatCompletionPresetFiles(userContentRoots)
+        val apiPresetCount = countApiPresetFiles(userContentRoots)
+        val apiConnectionConfigCount = countApiConnectionProfiles(userContentRoots)
         val dialogueCount = countManagedContentFiles(
             userContentRoots,
             setOf("chats", "group chats"),
@@ -215,7 +221,9 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
 
         return listOf(
             "角色卡：$roleCardCount",
-            "预设：$presetCount",
+            "聊天补全预设：$chatCompletionPresetCount",
+            "API预设：$apiPresetCount",
+            "API连接配置：$apiConnectionConfigCount",
             "第三方扩展：$thirdPartyExtensionsCount",
             "对话：$dialogueCount",
             "世界书：$worldsCount"
@@ -237,6 +245,64 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
         return thirdPartyRoot.listFiles()
             .orEmpty()
             .count { it.isDirectory }
+    }
+
+    private fun countChatCompletionPresetFiles(contentRoots: List<UserContentRoot>): Int {
+        // 这里单独统计“聊天补全预设”。
+        // 按 1.18.0 上游实现，聊天补全预设下拉固定来自 OpenAI Settings，
+        // 它和 context / instruct / sysprompt / reasoning 这些独立模板不是同一类数据。
+        return contentRoots.sumOf { contentRoot ->
+            countManagedContentFiles(
+                contentRoots = listOf(contentRoot),
+                directoryNames = setOf("OpenAI Settings"),
+                allowedExtensions = setOf("json"),
+                recursive = false
+            )
+        }
+    }
+
+    private fun countApiPresetFiles(contentRoots: List<UserContentRoot>): Int {
+        // 这里单独统计“API 预设”。
+        // 按 1.18.0 上游 settings 接口，常规 API 预设分别从
+        // KoboldAI Settings / NovelAI Settings / TextGen Settings 三个目录独立读取；
+        // OpenAI Settings 已经在“聊天补全预设”中单列，这里不再重复计入。
+        return countManagedContentFiles(
+            contentRoots = contentRoots,
+            directoryNames = apiPresetDirectoryNames,
+            allowedExtensions = setOf("json"),
+            recursive = false
+        )
+    }
+
+    private fun countApiConnectionProfiles(contentRoots: List<UserContentRoot>): Int {
+        // API 连接配置来自 connection-manager 扩展写入的 settings.json：
+        // extension_settings.connectionManager.profiles
+        // 导入预览里单独显示这个数组长度，避免和聊天补全预设文件数混淆。
+        return contentRoots.sumOf { contentRoot ->
+            loadUserSettingsSnapshot(contentRoot.root)?.connectionProfileCount ?: 0
+        }
+    }
+
+    private fun loadUserSettingsSnapshot(userRoot: File): UserSettingsSnapshot? {
+        val settingsFile = File(userRoot, "settings.json")
+        if (!settingsFile.isFile) {
+            return null
+        }
+
+        val settingsJson = runCatching {
+            JSONObject(settingsFile.readText())
+        }.getOrNull() ?: return null
+
+        val connectionProfiles = settingsJson
+            .optJSONObject("extension_settings")
+            ?.optJSONObject("connectionManager")
+            ?.optJSONArray("profiles")
+            ?.length()
+            ?: 0
+
+        return UserSettingsSnapshot(
+            connectionProfileCount = connectionProfiles
+        )
     }
 
     private fun countManagedContentFiles(
@@ -287,7 +353,7 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
         val directChildren = dataRoot.listFiles()
             .orEmpty()
             .filter { it.isDirectory }
-        val nestedUserRoots = directChildren.filter(::looksLikeUserContentRoot)
+        val nestedUserRoots = directChildren.filter(::looksLikeNestedUserContentRoot)
         val resolvedRoots = if (nestedUserRoots.isNotEmpty()) {
             nestedUserRoots
         } else if (looksLikeUserContentRoot(dataRoot)) {
@@ -301,6 +367,17 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
 
     private fun looksLikeUserContentRoot(directory: File): Boolean {
         return userContentMarkerDirectories.any { File(directory, it).exists() }
+    }
+
+    private fun looksLikeNestedUserContentRoot(directory: File): Boolean {
+        // data/ 下除了真正用户目录，还会出现 _cache、_storage 之类宿主/上游内部目录。
+        // 这些目录可能碰巧含有 characters 等子目录，但并不代表一个完整用户。
+        // 这里要求嵌套用户根必须带 settings.json，避免把内部缓存算进导入预览。
+        if (directory.name.startsWith("_") || directory.name.startsWith(".")) {
+            return false
+        }
+
+        return File(directory, "settings.json").isFile && looksLikeUserContentRoot(directory)
     }
 
     private fun createUserContentRoot(root: File): UserContentRoot {

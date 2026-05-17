@@ -18,6 +18,16 @@ interface HostLogRepository {
     fun clearAllLogs()
     fun exportToUri(targetUri: Uri): HostLogBundleExportResult
     fun exportToPublicDownloads(): HostLogBundleExportResult
+    /**
+     * 追加一行 WebView JS 报错/资源加载错误到当前 session 的 js-error 日志文件。
+     * 传入的是完整一行（不含末尾换行），由实现用 [HostLogManager.AsyncWriter] 异步写盘。
+     */
+    fun recordWebViewJsError(line: String)
+    /**
+     * 追加一条宿主 release 诊断事件到当前 session 的 host-diagnostics 日志文件。
+     * 调用方只传分类与正文，时间戳与单行格式由实现统一补齐，避免各组件自己拼接漂移。
+     */
+    fun recordHostDiagnostic(category: String, body: String)
     fun subscribeToLogChanges(
         matcher: (String?) -> Boolean = { path -> path == null || path.endsWith(".log", ignoreCase = true) },
         onChanged: () -> Unit
