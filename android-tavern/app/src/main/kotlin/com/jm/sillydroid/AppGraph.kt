@@ -8,6 +8,7 @@ import com.jm.sillydroid.core.common.AndroidDispatcherProvider
 import com.jm.sillydroid.core.common.DispatcherProvider
 import com.jm.sillydroid.core.model.settings.SettingsNavigationContract
 import com.jm.sillydroid.core.model.update.AppUpdateBuildConfig
+import com.jm.sillydroid.data.runtime.DefaultConsoleRuntimeRepository
 import com.jm.sillydroid.data.extensions.ExtensionCommandExecutor
 import com.jm.sillydroid.data.extensions.ExtensionsLocalDataSource
 import com.jm.sillydroid.data.extensions.ExtensionsRepositoryImpl
@@ -26,6 +27,7 @@ import com.jm.sillydroid.data.update.AppUpdateRepositoryImpl
 import com.jm.sillydroid.data.update.AppUpdateStateStore
 import com.jm.sillydroid.domain.app.SillyDroidAppGraph
 import com.jm.sillydroid.domain.bootstrap.BootstrapController
+import com.jm.sillydroid.domain.bootstrap.ConsoleRuntimeRepository
 import com.jm.sillydroid.domain.bootstrap.RuntimeMetadataRepository
 import com.jm.sillydroid.domain.bootstrap.RuntimeConfigRepository
 import com.jm.sillydroid.domain.logs.HostLogRepository
@@ -71,6 +73,10 @@ class AppGraph(private val application: Application) : SillyDroidAppGraph {
 
     override val runtimeMetadataRepository: RuntimeMetadataRepository by lazy {
         AssetRuntimeMetadataRepository(application)
+    }
+
+    override val consoleRuntimeRepository: ConsoleRuntimeRepository by lazy {
+        DefaultConsoleRuntimeRepository(application)
     }
 
     private val appUpdateStateStore: AppUpdateStateStore by lazy {

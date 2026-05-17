@@ -2,6 +2,7 @@ artifacts/
 .vs/
 .venv/
 .vscode/
+site/
 .qoder/
 .codex-tmp/
 docs/
@@ -28,3 +29,4 @@ android-tavern/app/src/main/jniLibs/arm64-v8a/*
 android-tavern/app/signing/release.keystore
 android-tavern/app/signing/release-signing.properties
 AGENTS.md
+classes.jar

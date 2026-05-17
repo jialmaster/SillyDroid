@@ -16,6 +16,8 @@ dependencyResolutionManagement {
     repositories {
         // 依赖解析与插件解析保持同一组 Google Maven 入口，避免不同阶段命中不同域名导致构建行为分叉。
         maven(url = "https://dl-ssl.google.com/android/maven2")
+        // 设置页终端复用官方 Termux terminal-view/terminal-emulator 组件，避免宿主自己重写 ANSI/PTY 渲染栈。
+        maven(url = "https://jitpack.io")
         google()
         mavenCentral()
     }

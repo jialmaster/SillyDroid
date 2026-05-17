@@ -18,6 +18,7 @@ import androidx.core.widget.NestedScrollView
 import com.jm.sillydroid.core.model.settings.TavernDataArchiveKind
 import com.jm.sillydroid.core.model.settings.TavernDataArchivePreview
 import com.jm.sillydroid.feature.settings.R
+import com.jm.sillydroid.feature.settings.model.SettingsTab
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -33,10 +34,12 @@ class BootstrapSettingsScreenController(
     private val topShellView: android.view.View,
     private val scrollView: NestedScrollView,
     private val tabLayout: TabLayout,
+    private val toolbarAboutEntryView: TextView,
     private val dataPanelView: android.view.View,
     private val extensionsPanelView: android.view.View,
     private val logsPanelView: android.view.View,
     private val logsScrollView: NestedScrollView,
+    private val terminalPanelView: android.view.View,
     private val settingsPanelView: android.view.View,
     private val aboutPanelView: android.view.View,
     private val configPathView: TextView,
@@ -50,15 +53,16 @@ class BootstrapSettingsScreenController(
     private val exportButton: MaterialButton,
     private val clearDataButton: MaterialButton,
     private val saveStartButton: MaterialButton,
-    private val onTabChanged: (Int) -> Unit = {}
+    private val onTabChanged: (SettingsTab) -> Unit = {}
 ) {
-    private var selectedTabIndex = 0
+    private var selectedTab = SettingsTab.DATA
     private var bannerIsError = false
     private var busy = false
     private var hasUnsavedChanges = false
 
     fun initialize() {
         setupTabs()
+        setupAboutEntry()
         applyWindowInsets()
     }
 
@@ -90,7 +94,10 @@ class BootstrapSettingsScreenController(
     }
 
     fun focusValidationTab(isQuickField: Boolean) {
-        tabLayout.getTabAt(if (isQuickField) 0 else 3)?.select()
+        val targetTab = if (isQuickField) SettingsTab.DATA else SettingsTab.SETTINGS
+        targetTab.tabPosition?.let { position ->
+            tabLayout.getTabAt(position)?.select()
+        }
     }
 
     fun showBanner(message: String?, isError: Boolean = false) {
@@ -207,54 +214,86 @@ class BootstrapSettingsScreenController(
             tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_data))
             tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_extensions))
             tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_logs))
+            tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_terminal))
             tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_settings))
-            tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_about))
         }
 
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab) {
-                switchTab(tab.position)
+                switchTab(SettingsTab.fromTabPosition(tab.position))
             }
 
             override fun onTabUnselected(tab: TabLayout.Tab) {
             }
 
             override fun onTabReselected(tab: TabLayout.Tab) {
-                switchTab(tab.position)
+                switchTab(SettingsTab.fromTabPosition(tab.position))
             }
         })
 
-        tabLayout.getTabAt(selectedTabIndex)?.select()
-        switchTab(selectedTabIndex)
+        syncPrimaryNavigationSelection()
+        switchTab(selectedTab)
         compactTabLayout()
     }
 
-    private fun switchTab(index: Int) {
-        selectedTabIndex = index
-        val isLogsTab = index == 2
-        scrollView.isVisible = !isLogsTab
-        dataPanelView.isVisible = index == 0
-        extensionsPanelView.isVisible = index == 1
+    private fun setupAboutEntry() {
+        // 关于入口从 tab strip 移到标题右侧后，仍然复用原 about 面板，
+        // 这样版本信息、更新状态和 GitHub 跳转逻辑都继续收敛在同一块 UI 上。
+        toolbarAboutEntryView.setOnClickListener {
+            switchTab(SettingsTab.ABOUT)
+        }
+        renderAboutEntryState()
+    }
+
+    private fun switchTab(tab: SettingsTab) {
+        selectedTab = tab
+        val isLogsTab = tab == SettingsTab.LOGS
+        val isTerminalTab = tab == SettingsTab.TERMINAL
+        scrollView.isVisible = !isLogsTab && !isTerminalTab
+        dataPanelView.isVisible = tab == SettingsTab.DATA
+        extensionsPanelView.isVisible = tab == SettingsTab.EXTENSIONS
         logsPanelView.isVisible = isLogsTab
-        settingsPanelView.isVisible = index == 3
-        aboutPanelView.isVisible = index == 4
-        searchLayout.isVisible = index == 3
-        onTabChanged(index)
-        if (!isLogsTab) {
+        terminalPanelView.isVisible = isTerminalTab
+        settingsPanelView.isVisible = tab == SettingsTab.SETTINGS
+        aboutPanelView.isVisible = tab == SettingsTab.ABOUT
+        searchLayout.isVisible = tab == SettingsTab.SETTINGS
+        syncPrimaryNavigationSelection()
+        renderAboutEntryState()
+        onTabChanged(tab)
+        if (!isLogsTab && !isTerminalTab) {
             scrollView.post {
                 scrollView.scrollTo(0, 0)
             }
-        } else {
+        } else if (isLogsTab) {
             logsScrollView.post {
                 logsScrollView.fullScroll(android.view.View.FOCUS_DOWN)
             }
         }
     }
 
+    private fun syncPrimaryNavigationSelection() {
+        val tabPosition = selectedTab.tabPosition
+        if (tabPosition == null) {
+            tabLayout.selectTab(null)
+            return
+        }
+
+        if (tabLayout.selectedTabPosition != tabPosition) {
+            tabLayout.selectTab(tabLayout.getTabAt(tabPosition))
+        }
+    }
+
+    private fun renderAboutEntryState() {
+        val isAboutSelected = selectedTab == SettingsTab.ABOUT
+        toolbarAboutEntryView.isSelected = isAboutSelected
+        toolbarAboutEntryView.alpha = if (isAboutSelected) 1f else 0.78f
+    }
+
     private fun applyWindowInsets() {
         val topShellTopPadding = topShellView.paddingTop
         val scrollBottomPadding = scrollView.paddingBottom
         val logsPanelBottomPadding = logsPanelView.paddingBottom
+        val terminalPanelBottomPadding = terminalPanelView.paddingBottom
 
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -267,6 +306,9 @@ class BootstrapSettingsScreenController(
             )
             logsPanelView.updatePadding(
                 bottom = logsPanelBottomPadding + if (imeVisible) imeInsets.bottom else systemBars.bottom
+            )
+            terminalPanelView.updatePadding(
+                bottom = terminalPanelBottomPadding + if (imeVisible) imeInsets.bottom else systemBars.bottom
             )
 
             if (imeVisible) {

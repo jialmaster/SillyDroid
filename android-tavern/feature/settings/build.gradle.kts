@@ -28,7 +28,14 @@ dependencies {
     implementation("androidx.fragment:fragment-ktx:1.8.2")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
     implementation("com.google.android.material:material:1.12.0")
+    // 终端页接入后 settings 运行时会同时包含 AndroidX ProfileInstaller；
+    // 这里必须保留 concurrent-futures 提供的真实 ListenableFuture 定义，
+    // 不能再用 empty listenablefuture 占位包，否则 Android 10 / EMUI 校验
+    // ProfileVerifier 返回类型时会直接 VerifyError 并杀掉宿主进程。
+    implementation("androidx.concurrent:concurrent-futures:1.1.0")
+    implementation("com.termux.termux-app:terminal-view:0.118.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }

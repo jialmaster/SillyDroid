@@ -1,4 +1,5 @@
 package com.jm.sillydroid.data.runtime
+
 import android.content.Context
 import android.net.ConnectivityManager
 import android.system.ErrnoException
@@ -79,6 +80,57 @@ data class HostPaths(
 
 fun resolveHostLogsDir(context: Context): File {
     return File(context.applicationContext.filesDir, "android-tavern/logs")
+}
+
+fun readInstalledRootfsGuestShellPath(paths: HostPaths): String {
+    val manifestFile = File(paths.rootfsDir, "rootfs-manifest.json")
+    if (!manifestFile.isFile) {
+        return "/bin/sh"
+    }
+
+    return runCatching {
+        JSONObject(manifestFile.readText())
+            .optString("guestShellPath")
+            .trim()
+            .ifBlank { "/bin/sh" }
+    }.getOrDefault("/bin/sh")
+}
+
+/**
+ * rootfs/server manifest 是项目脚本固定生成的 JSON 文本；
+ * 这里仅去掉会随每次打包变化的字段，保留其他内容参与比较，避免“同内容重打包”触发整目录重解压。
+ */
+internal fun normalizeBootstrapManifestForComparison(content: String): String {
+    return content
+        .replace("\r\n", "\n")
+        .lineSequence()
+        .filterNot { line ->
+            line.trimStart().startsWith("\"syncedAtUtc\":")
+        }
+        .joinToString(separator = "\n")
+        .trim()
+}
+
+/**
+ * 所有进入 rootfs/proot 的入口都必须共享同一套 host 侧环境变量，
+ * 避免设置页终端、扩展命令和正式服务各自拼环境后出现 loader、挂载目录或 prefix 契约分叉。
+ */
+internal fun buildHostRuntimeEnvironment(paths: HostPaths): Map<String, String> {
+    return buildMap {
+        put("BOOTSTRAP_ROOT", paths.bootstrapRoot.absolutePath)
+        put("ROOTFS_DIR", paths.rootfsDir.absolutePath)
+        put("SERVER_DIR", paths.serverDir.absolutePath)
+        put("LOGS_DIR", paths.logsDir.absolutePath)
+        put("HOST_PROOT_BIN", paths.hostProotBinary.absolutePath)
+        put("HOST_PROOT_LIB_DIR", paths.hostLibDir.absolutePath)
+        put("HOST_PROOT_LOADER", paths.hostProotLoader.absolutePath)
+        put("HOST_PREFIX_DIR", paths.hostPrefixDir.absolutePath)
+        put("HOST_RUNTIME_PREFIX", BootConfig.guestRuntimePrefix)
+        put("HOST_TMP_DIR", paths.hostTmpDir.absolutePath)
+        if (paths.hostProotLoader32.exists()) {
+            put("HOST_PROOT_LOADER_32", paths.hostProotLoader32.absolutePath)
+        }
+    }
 }
 
 data class AssetPreparationInspection(
@@ -242,6 +294,56 @@ class AssetExtractor(private val context: Context) {
         )
         onProgress("server payload、内置扩展与宿主目录已同步完成。", 100)
         serverDirectoryRefreshed
+    }
+
+    /**
+     * 设置页终端只需要进入现有 rootfs/proot 环境并附着一个交互 shell，
+     * 不能为了懒初始化 console 而复用 bootstrap service 的启动/重启语义。
+     */
+    fun prepareConsoleAssets(
+        paths: HostPaths,
+        onProgress: (message: String, details: String, progressPercent: Int) -> Unit = { _, _, _ -> }
+    ) = synchronized(extractLock) {
+        onProgress(
+            "正在准备终端运行时目录。",
+            "正在创建 bootstrap、data 和日志目录。",
+            5
+        )
+        prepareWorkDirectories(paths)
+
+        onProgress(
+            "正在检查 Linux rootfs 资产。",
+            "终端首次进入时需要先确认 rootfs 是否已解包完成。",
+            12
+        )
+        val rootfsDirectoryRefreshed = prepareRootfsAssets(paths) { details, progressPercent ->
+            onProgress(
+                "正在准备 Linux rootfs。",
+                details,
+                12 + ((progressPercent.coerceIn(0, 100) * 28) / 100)
+            )
+        }
+
+        onProgress(
+            "正在检查 Tavern payload 资产。",
+            "终端默认工作目录固定为 /tavern/server，需要先保证 server payload 就绪。",
+            44
+        )
+        prepareServerAssets(paths, rootfsDirectoryRefreshed) { details, progressPercent ->
+            onProgress(
+                "正在准备 Tavern payload。",
+                details,
+                44 + ((progressPercent.coerceIn(0, 100) * 44) / 100)
+            )
+        }
+
+        BootstrapLayoutVerifier(paths).verify()
+        AndroidDnsConfigWriter(context).write(paths)
+        onProgress(
+            "终端运行时已准备完成。",
+            "rootfs、payload、host prefix 与 DNS 配置已经同步完成。",
+            100
+        )
     }
 
     fun extractBootstrap(
@@ -482,10 +584,33 @@ class AssetExtractor(private val context: Context) {
 
     private fun assetContentMatchesFile(assetPath: String, file: File): Boolean {
         return runCatching {
-            context.assets.open(assetPath).use { assetInput ->
-                digestOf(assetInput) == digestOf(file)
+            if (shouldIgnoreVolatileManifestFields(assetPath, file)) {
+                context.assets.open(assetPath).bufferedReader().use { assetReader ->
+                    val assetManifest = normalizeBootstrapManifestForComparison(assetReader.readText())
+                    val installedManifest = normalizeBootstrapManifestForComparison(file.readText())
+                    assetManifest == installedManifest
+                }
+            } else {
+                context.assets.open(assetPath).use { assetInput ->
+                    digestOf(assetInput) == digestOf(file)
+                }
             }
         }.getOrDefault(false)
+    }
+
+    /**
+     * APK 里的 rootfs/server manifest 会带 syncedAtUtc 这种每次打包都变化的时间戳。
+     * 如果直接按整文件 hash 对比，就会把“内容没变、只是重打了一个包”误判成资产过期，
+     * 进而删掉整套 rootfs/server 目录重新解包，破坏用户在 guest 环境里手动做过的修改。
+     */
+    private fun shouldIgnoreVolatileManifestFields(assetPath: String, file: File): Boolean {
+        if (!file.name.equals("rootfs-manifest.json", ignoreCase = true) &&
+            !file.name.equals("bootstrap-manifest.json", ignoreCase = true)
+        ) {
+            return false
+        }
+
+        return assetPath.endsWith("rootfs-manifest.json") || assetPath.endsWith("bootstrap-manifest.json")
     }
 
     private fun digestOf(file: File): String {
@@ -1134,19 +1259,7 @@ class LinuxRuntimeLauncher(private val paths: HostPaths) {
 
         val environment = processBuilder.environment()
         environment.putAll(request.environment)
-        environment["BOOTSTRAP_ROOT"] = paths.bootstrapRoot.absolutePath
-        environment["ROOTFS_DIR"] = paths.rootfsDir.absolutePath
-        environment["SERVER_DIR"] = paths.serverDir.absolutePath
-        environment["LOGS_DIR"] = paths.logsDir.absolutePath
-        environment["HOST_PROOT_BIN"] = paths.hostProotBinary.absolutePath
-        environment["HOST_PROOT_LIB_DIR"] = paths.hostLibDir.absolutePath
-        environment["HOST_PROOT_LOADER"] = paths.hostProotLoader.absolutePath
-        environment["HOST_PREFIX_DIR"] = paths.hostPrefixDir.absolutePath
-        environment["HOST_RUNTIME_PREFIX"] = BootConfig.guestRuntimePrefix
-        if (paths.hostProotLoader32.exists()) {
-            environment["HOST_PROOT_LOADER_32"] = paths.hostProotLoader32.absolutePath
-        }
-        environment["HOST_TMP_DIR"] = paths.hostTmpDir.absolutePath
+        environment.putAll(buildHostRuntimeEnvironment(paths))
 
         return ManagedProcess(request.name, processBuilder.start())
     }
