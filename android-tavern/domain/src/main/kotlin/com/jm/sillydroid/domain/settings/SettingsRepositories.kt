@@ -29,6 +29,9 @@ interface SettingsConfigRepository {
 interface HostPreferencesRepository {
     var servicePort: Int
     var webViewPullRefreshEnabled: Boolean
+    var terminalFontSizePx: Int
+    var terminalCursorBlinkEnabled: Boolean
+    var terminalExtraKeysEnabled: Boolean
     var floatingLogBubbleEnabled: Boolean
     var floatingLogRefreshIntervalMillis: Int
     var floatingLogBubblePosition: FloatingLogBubblePosition?

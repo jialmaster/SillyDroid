@@ -17,6 +17,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.button.MaterialButton
+import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 import com.jm.sillydroid.feature.settings.R
 import com.jm.sillydroid.feature.settings.model.SettingsTab
 import com.termux.view.TerminalView
@@ -38,7 +39,9 @@ class TerminalPageController(
     private val clearButton: MaterialButton,
     private val resetButton: MaterialButton,
     private val selectButton: MaterialButton,
+    private val settingsButton: MaterialButton,
     private val extraKeysStripView: TerminalExtraKeysStripView,
+    private val hostPreferencesRepository: HostPreferencesRepository,
     private val sessionStore: HostConsoleSessionStore
 ) : DefaultLifecycleObserver {
     companion object {
@@ -68,13 +71,15 @@ class TerminalPageController(
     private var selectionModeActive = false
     private var extraKeysState = TerminalExtraKeysState()
     private var currentSessionState = HostConsoleSessionState()
-    private val terminalFontSizeDp by lazy {
-        // TerminalView 这里仍按 dp 语义收口，字号改资源即可，不需要每次再回代码里找硬编码常量。
-        (activity.resources.getDimension(R.dimen.sillydroid_terminal_font_size) /
-            activity.resources.displayMetrics.density).roundToInt()
-    }
     private val textSelectionBridge = TermuxTextSelectionBridge(terminalView)
     private var longPressMenuAnchorView: View? = null
+    private val terminalSettingsDialogController = TerminalSettingsDialogController(
+        activity = activity,
+        hostPreferencesRepository = hostPreferencesRepository,
+        onTerminalFontSizeChanged = ::applyTerminalFontSize,
+        onTerminalCursorBlinkChanged = ::applyTerminalCursorBlinkSettings,
+        onTerminalExtraKeysChanged = { renderExtraKeysStrip() }
+    )
     private val terminalViewClient = SettingsTerminalViewClient(
         activity = activity,
         terminalView = terminalView,
@@ -85,7 +90,10 @@ class TerminalPageController(
         onLongPressRequested = ::showLongPressMenu
     )
     private val terminalSessionClient by lazy {
-        SettingsTerminalSessionClient(terminalView)
+        SettingsTerminalSessionClient(
+            terminalView = terminalView,
+            isCursorBlinkEnabled = { hostPreferencesRepository.terminalCursorBlinkEnabled }
+        )
     }
 
     fun initialize() {
@@ -93,8 +101,8 @@ class TerminalPageController(
         // 因此这里必须先绑定 TerminalViewClient，再做任何可能访问 mClient 的初始化调用，
         // 否则设置页一打开就会因为空 client 直接崩溃。
         terminalViewClient.initialize()
-        terminalView.setTextSize(terminalFontSizeDp)
-        terminalView.setTerminalCursorBlinkerRate(terminalCursorBlinkRateMillis)
+        applyTerminalFontSize(hostPreferencesRepository.terminalFontSizePx)
+        applyTerminalCursorBlinkSettings(hostPreferencesRepository.terminalCursorBlinkEnabled)
 
         retryButton.setOnClickListener {
             initializeOrReconnect(resetSession = false)
@@ -113,6 +121,9 @@ class TerminalPageController(
         }
         selectButton.setOnClickListener {
             toggleSelectionMode()
+        }
+        settingsButton.setOnClickListener {
+            terminalSettingsDialogController.show()
         }
         extraKeysStripView.setOnActionPressedListener(::handleExtraKeyAction)
 
@@ -177,11 +188,29 @@ class TerminalPageController(
                 session.attach(terminalView, terminalSessionClient)
                 terminalView.onScreenUpdated()
                 terminalViewClient.attachToVisibleTerminal(showKeyboard = false)
-                terminalView.setTerminalCursorBlinkerState(true, true)
+                applyTerminalCursorBlinkSettings(hostPreferencesRepository.terminalCursorBlinkEnabled)
                 renderExtraKeysStrip()
             }.onFailure { exception ->
                 Log.e(logTag, "Failed to initialize terminal session.", exception)
             }
+        }
+    }
+
+    // 终端字号修改后需要立即回写当前 TerminalView，
+    // 这样用户在终端设置里拖动字号时，能直接看到真实宿主终端的渲染变化。
+    private fun applyTerminalFontSize(fontSizePx: Int) {
+        terminalView.setTextSize(fontSizePx)
+        terminalView.onScreenUpdated()
+    }
+
+    // 光标闪烁配置需要同时控制 blinker rate 和当前可见态；
+    // 关闭闪烁时仍保留静态光标，避免终端看起来像失焦或无法输入。
+    private fun applyTerminalCursorBlinkSettings(enabled: Boolean) {
+        terminalView.setTerminalCursorBlinkerRate(
+            if (enabled) terminalCursorBlinkRateMillis else 0
+        )
+        if (selectedTab == SettingsTab.TERMINAL && currentSessionState.isRunning) {
+            terminalView.setTerminalCursorBlinkerState(true, true)
         }
     }
 
@@ -221,7 +250,8 @@ class TerminalPageController(
         extraKeysStripView.isVisible = TerminalInteractionPolicy.shouldShowExtraKeys(
             selectedTab = selectedTab,
             imeVisible = imeVisible,
-            selectionModeActive = selectionModeActive
+            selectionModeActive = selectionModeActive,
+            extraKeysEnabled = hostPreferencesRepository.terminalExtraKeysEnabled
         )
         extraKeysStripView.render(
             state = extraKeysState,

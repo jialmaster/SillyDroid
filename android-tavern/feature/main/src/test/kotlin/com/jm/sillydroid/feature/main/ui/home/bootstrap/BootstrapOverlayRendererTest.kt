@@ -6,7 +6,6 @@ import android.widget.Button
 import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.TextView
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.jm.sillydroid.core.model.bootstrap.BootstrapDerivedUiFlags
 import com.jm.sillydroid.core.model.bootstrap.BootstrapLifecycle
 import com.jm.sillydroid.core.model.bootstrap.BootstrapSessionSnapshot
@@ -25,7 +24,7 @@ class BootstrapOverlayRendererTest {
     private fun newRenderer(
         webViewRef: () -> WebView,
         overlay: View = mock(),
-        refreshLayout: SwipeRefreshLayout = mock(),
+        refreshLayout: View = mock(),
         onShowWebView: (String) -> Unit = {},
         onReadyMonitoring: () -> Unit = {},
         updateRefreshLayoutEnabled: () -> Unit = {}

@@ -952,6 +952,18 @@
                         android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp"
                         android:textStyle="bold" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/bootstrapSettingsTerminalSettingsButton"
+                        style="@style/Widget.SillyDroid.SettingsButton.Outlined"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/bootstrap_settings_terminal_settings_entry" />
                 </LinearLayout>
 
                 <LinearLayout

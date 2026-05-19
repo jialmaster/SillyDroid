@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+    <FrameLayout
         android:id="@+id/webViewRefreshLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -17,7 +17,65 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="@color/tavern_webview_background" />
-    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+    </FrameLayout>
+
+    <View
+        android:id="@+id/webViewPullRefreshHintArc"
+        android:layout_width="match_parent"
+        android:layout_height="88dp"
+        android:layout_gravity="top"
+        android:alpha="0"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/webViewPullRefreshHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:alpha="0"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <FrameLayout
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_bootstrap_overlay_icon_button"
+            android:backgroundTint="?attr/colorSurface"
+            android:elevation="6dp"
+            android:foregroundGravity="center"
+            android:outlineProvider="background"
+            android:translationZ="10dp">
+
+            <ImageView
+                android:id="@+id/webViewPullRefreshHintIcon"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:alpha="0.45"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_restore_defaults"
+                android:tint="?attr/colorOnSurface" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/webViewPullRefreshHintText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/sillydroid_space_xs"
+            android:alpha="0"
+            android:background="@drawable/bg_bootstrap_overlay_icon_button"
+            android:backgroundTint="?attr/colorSurface"
+            android:elevation="4dp"
+            android:outlineProvider="background"
+            android:paddingStart="@dimen/sillydroid_space_sm"
+            android:paddingTop="@dimen/sillydroid_space_xs"
+            android:paddingEnd="@dimen/sillydroid_space_sm"
+            android:paddingBottom="@dimen/sillydroid_space_xs"
+            android:text="@string/webview_pull_refresh_pull"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+            android:textColor="?attr/colorOnSurface" />
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/bootstrapOverlay"

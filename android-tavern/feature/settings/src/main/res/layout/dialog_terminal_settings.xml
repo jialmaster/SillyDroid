@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/sillydroid_dialog_content_padding_horizontal"
+        android:layout_marginTop="@dimen/sillydroid_dialog_content_padding_vertical"
+        android:layout_marginEnd="@dimen/sillydroid_dialog_content_padding_horizontal"
+        android:layout_marginBottom="@dimen/sillydroid_dialog_content_padding_vertical"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/bootstrap_settings_terminal_settings_summary"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/sillydroid_space_md"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/bootstrap_settings_terminal_settings_font_size_label"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/terminalSettingsFontSizeValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/terminalSettingsFontSizeSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/sillydroid_space_xs_half"
+            app:haloRadius="18dp"
+            app:labelBehavior="gone"
+            app:thumbRadius="10dp"
+            app:trackHeight="4dp" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/terminalSettingsCursorBlinkSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/sillydroid_space_sm"
+            android:text="@string/bootstrap_settings_terminal_settings_cursor_blink_label" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/terminalSettingsExtraKeysSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/bootstrap_settings_terminal_settings_extra_keys_label" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/sillydroid_space_sm"
+            android:text="@string/bootstrap_settings_terminal_settings_preview_label"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/terminalSettingsPreview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/sillydroid_space_xs_half"
+            android:background="@drawable/bg_bootstrap_settings_nested_surface_rounded"
+            android:padding="@dimen/sillydroid_panel_padding"
+            android:text="@string/bootstrap_settings_terminal_settings_preview_text"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="16sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/terminalSettingsResetButton"
+            style="@style/Widget.SillyDroid.SettingsButton.Outlined"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/sillydroid_space_md"
+            android:text="@string/bootstrap_settings_terminal_settings_reset_default" />
+    </LinearLayout>
+</FrameLayout>

@@ -2,12 +2,11 @@ package com.jm.sillydroid.feature.main.ui.home.webview
 
 import android.view.View
 import android.webkit.WebView
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import org.junit.Test
-import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
-import org.mockito.kotlin.doReturn
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -15,13 +14,13 @@ import org.mockito.kotlin.whenever
 
 /**
  * 覆盖 renderer 重建后控制器是否会切换到新 WebView 实例。
- * 通过 mockito-inline mock 掉 final 类（WebView/SwipeRefreshLayout/View/WebReloadTracer），
+ * 通过 mockito-inline mock 掉 final 类（WebView/View/WebReloadTracer），
  * 不依赖真实 Android runtime。
  */
 class HomeWebViewRefreshControllerTest {
 
     private fun newController(
-        refreshLayout: SwipeRefreshLayout,
+        refreshLayout: View,
         overlay: View,
         webViewRef: () -> WebView,
         tracer: WebReloadTracer = mock(),
@@ -30,8 +29,14 @@ class HomeWebViewRefreshControllerTest {
         imeVisible: Boolean = false
     ): HomeWebViewRefreshController {
         return HomeWebViewRefreshController(
-            refreshLayout = refreshLayout,
+            refreshContainer = refreshLayout,
             webViewProvider = webViewRef,
+            pullRefreshHintViews = PullRefreshHintViews(
+                container = mock<LinearLayout>(),
+                arc = mock(),
+                icon = mock<ImageView>(),
+                text = mock<TextView>()
+            ),
             bootstrapOverlay = overlay,
             pullRefreshEnabled = { pullRefreshEnabled },
             pullGestureRefreshing = { pullGestureRefreshing },
@@ -41,15 +46,11 @@ class HomeWebViewRefreshControllerTest {
         )
     }
 
-    private fun visibleMock(): View = mock<View>().also {
-        whenever(it.visibility).thenReturn(View.VISIBLE)
-    }
-
     private fun visibleWebView(): WebView = mock<WebView>().also {
         whenever(it.visibility).thenReturn(View.VISIBLE)
     }
 
-    private fun visibleRefreshLayout(): SwipeRefreshLayout = mock<SwipeRefreshLayout>().also {
+    private fun visibleRefreshLayout(): View = mock<View>().also {
         whenever(it.visibility).thenReturn(View.VISIBLE)
     }
 
@@ -117,7 +118,7 @@ class HomeWebViewRefreshControllerTest {
     }
 
     @Test
-    fun `canStartSwipeRefresh respects fresh webView visibility`() {
+    fun `canHandlePullRefreshGesture respects fresh webView visibility`() {
         val refreshLayout = visibleRefreshLayout()
         val overlay = mock<View>().also { whenever(it.visibility).thenReturn(View.GONE) }
         var current: WebView = mock<WebView>().also { whenever(it.visibility).thenReturn(View.GONE) }
@@ -128,8 +129,42 @@ class HomeWebViewRefreshControllerTest {
             webViewRef = { current }
         )
 
-        assert(!controller.canStartSwipeRefresh())
+        assert(!controller.canHandlePullRefreshGesture())
         current = visibleWebView()
-        assert(controller.canStartSwipeRefresh())
+        assert(controller.canHandlePullRefreshGesture())
+    }
+
+    @Test
+    fun `canHandlePullRefreshGesture is blocked while ime visible`() {
+        val refreshLayout = visibleRefreshLayout()
+        val overlay = mock<View>().also { whenever(it.visibility).thenReturn(View.GONE) }
+        val webView = visibleWebView()
+
+        val controller = newController(
+            refreshLayout = refreshLayout,
+            overlay = overlay,
+            webViewRef = { webView },
+            imeVisible = true
+        )
+
+        assert(!controller.canHandlePullRefreshGesture())
+    }
+
+    @Test
+    fun `updateEnabled disables refresh while pull refresh setting is off`() {
+        val refreshLayout = visibleRefreshLayout()
+        val overlay = mock<View>().also { whenever(it.visibility).thenReturn(View.GONE) }
+        val webView = visibleWebView()
+
+        val controller = newController(
+            refreshLayout = refreshLayout,
+            overlay = overlay,
+            webViewRef = { webView },
+            pullRefreshEnabled = false
+        )
+
+        controller.updateEnabled()
+
+        verify(refreshLayout).isEnabled = false
     }
 }

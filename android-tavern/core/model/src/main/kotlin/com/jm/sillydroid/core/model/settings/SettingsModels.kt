@@ -70,3 +70,16 @@ object FloatingLogRefreshIntervals {
         FIVE_SECONDS_MILLIS
     )
 }
+
+object TerminalFontSizeOptions {
+    const val MIN_PX: Int = 10
+    const val DEFAULT_PX: Int = 16
+    const val MAX_PX: Int = 24
+
+    // TerminalView.setTextSize(int) 直接吃像素值，不做 dp/sp 转换。
+    // 终端字号会同时被 SharedPreferences、真实 TerminalView 和设置弹窗预览复用，
+    // 范围必须收敛到同一处，避免各层各自写一套 clamp 后出现显示和存储不一致。
+    fun sanitize(value: Int): Int {
+        return value.coerceIn(MIN_PX, MAX_PX)
+    }
+}

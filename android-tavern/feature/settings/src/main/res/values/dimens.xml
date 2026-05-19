@@ -38,7 +38,6 @@
     <dimen name="sillydroid_logs_scrollbar_vertical_margin">6dp</dimen>
     <dimen name="sillydroid_dialog_content_padding_horizontal">24dp</dimen>
     <dimen name="sillydroid_dialog_content_padding_vertical">12dp</dimen>
-    <dimen name="sillydroid_terminal_font_size">16dp</dimen>
     <dimen name="sillydroid_terminal_extra_keys_bar_padding">4dp</dimen>
     <dimen name="sillydroid_terminal_extra_key_min_height">24dp</dimen>
     <dimen name="sillydroid_terminal_extra_key_min_width">28dp</dimen>

@@ -13,7 +13,13 @@ internal object TerminalInteractionPolicy {
         return isTerminalTabSelected || terminalHasFocus
     }
 
-    fun shouldShowExtraKeys(selectedTab: SettingsTab, imeVisible: Boolean, selectionModeActive: Boolean): Boolean {
-        return selectedTab == SettingsTab.TERMINAL && (imeVisible || selectionModeActive)
+    fun shouldShowExtraKeys(
+        selectedTab: SettingsTab,
+        imeVisible: Boolean,
+        selectionModeActive: Boolean,
+        extraKeysEnabled: Boolean
+    ): Boolean {
+        return selectedTab == SettingsTab.TERMINAL &&
+            (selectionModeActive || (extraKeysEnabled && imeVisible))
     }
 }

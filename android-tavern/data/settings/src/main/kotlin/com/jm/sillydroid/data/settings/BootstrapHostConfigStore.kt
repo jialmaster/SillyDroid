@@ -4,6 +4,7 @@ import android.content.Context
 import com.jm.sillydroid.core.model.bootstrap.defaultBootstrapServicePort
 import com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition
 import com.jm.sillydroid.core.model.settings.FloatingLogRefreshIntervals
+import com.jm.sillydroid.core.model.settings.TerminalFontSizeOptions
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 
 class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
@@ -11,6 +12,9 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         internal const val preferencesName = "bootstrap-host-config"
         private const val servicePortKey = "service-port"
         private const val webViewPullRefreshEnabledKey = "webview-pull-refresh-enabled"
+        private const val terminalFontSizePxKey = "terminal-font-size-px"
+        private const val terminalCursorBlinkEnabledKey = "terminal-cursor-blink-enabled"
+        private const val terminalExtraKeysEnabledKey = "terminal-extra-keys-enabled"
         private const val floatingLogBubbleEnabledKey = "floating-log-bubble-enabled"
         private const val floatingLogRefreshIntervalMillisKey = "floating-log-refresh-interval-millis"
         private const val floatingLogBubbleXKey = "floating-log-bubble-x"
@@ -45,6 +49,32 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         set(value) {
             preferences.edit()
                 .putBoolean(webViewPullRefreshEnabledKey, value)
+                .apply()
+        }
+
+    override var terminalFontSizePx: Int
+        get() = TerminalFontSizeOptions.sanitize(
+            preferences.getInt(terminalFontSizePxKey, TerminalFontSizeOptions.DEFAULT_PX)
+        )
+        set(value) {
+            preferences.edit()
+                .putInt(terminalFontSizePxKey, TerminalFontSizeOptions.sanitize(value))
+                .apply()
+        }
+
+    override var terminalCursorBlinkEnabled: Boolean
+        get() = preferences.getBoolean(terminalCursorBlinkEnabledKey, true)
+        set(value) {
+            preferences.edit()
+                .putBoolean(terminalCursorBlinkEnabledKey, value)
+                .apply()
+        }
+
+    override var terminalExtraKeysEnabled: Boolean
+        get() = preferences.getBoolean(terminalExtraKeysEnabledKey, true)
+        set(value) {
+            preferences.edit()
+                .putBoolean(terminalExtraKeysEnabledKey, value)
                 .apply()
         }
 

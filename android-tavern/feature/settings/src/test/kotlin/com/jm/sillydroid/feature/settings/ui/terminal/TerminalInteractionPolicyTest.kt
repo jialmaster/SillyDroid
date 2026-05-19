@@ -21,9 +21,45 @@ class TerminalInteractionPolicyTest {
 
     @Test
     fun `extra keys strip only shows when terminal tab is active and ime is visible`() {
-        assertTrue(TerminalInteractionPolicy.shouldShowExtraKeys(SettingsTab.TERMINAL, imeVisible = true, selectionModeActive = false))
-        assertTrue(TerminalInteractionPolicy.shouldShowExtraKeys(SettingsTab.TERMINAL, imeVisible = false, selectionModeActive = true))
-        assertFalse(TerminalInteractionPolicy.shouldShowExtraKeys(SettingsTab.TERMINAL, imeVisible = false, selectionModeActive = false))
-        assertFalse(TerminalInteractionPolicy.shouldShowExtraKeys(SettingsTab.LOGS, imeVisible = true, selectionModeActive = true))
+        assertTrue(
+            TerminalInteractionPolicy.shouldShowExtraKeys(
+                SettingsTab.TERMINAL,
+                imeVisible = true,
+                selectionModeActive = false,
+                extraKeysEnabled = true
+            )
+        )
+        assertTrue(
+            TerminalInteractionPolicy.shouldShowExtraKeys(
+                SettingsTab.TERMINAL,
+                imeVisible = false,
+                selectionModeActive = true,
+                extraKeysEnabled = false
+            )
+        )
+        assertFalse(
+            TerminalInteractionPolicy.shouldShowExtraKeys(
+                SettingsTab.TERMINAL,
+                imeVisible = false,
+                selectionModeActive = false,
+                extraKeysEnabled = true
+            )
+        )
+        assertFalse(
+            TerminalInteractionPolicy.shouldShowExtraKeys(
+                SettingsTab.TERMINAL,
+                imeVisible = true,
+                selectionModeActive = false,
+                extraKeysEnabled = false
+            )
+        )
+        assertFalse(
+            TerminalInteractionPolicy.shouldShowExtraKeys(
+                SettingsTab.LOGS,
+                imeVisible = true,
+                selectionModeActive = true,
+                extraKeysEnabled = true
+            )
+        )
     }
 }

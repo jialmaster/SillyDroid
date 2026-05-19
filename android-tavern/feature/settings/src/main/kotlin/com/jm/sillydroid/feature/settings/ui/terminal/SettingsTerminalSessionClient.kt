@@ -11,7 +11,8 @@ import com.termux.view.TerminalView
  * 它不管理全局 shell 生命周期，避免页面销毁后把进程级会话一起带走。
  */
 internal class SettingsTerminalSessionClient(
-    private val terminalView: TerminalView
+    private val terminalView: TerminalView,
+    private val isCursorBlinkEnabled: () -> Boolean
 ) : TerminalSessionClient {
     override fun onTextChanged(changedSession: TerminalSession) {
         postToTerminalView {
@@ -48,7 +49,10 @@ internal class SettingsTerminalSessionClient(
 
     override fun onTerminalCursorStateChange(state: Boolean) {
         postToTerminalView {
-            terminalView.setTerminalCursorBlinkerState(state, true)
+            terminalView.setTerminalCursorBlinkerState(
+                if (isCursorBlinkEnabled()) state else true,
+                true
+            )
         }
     }
 

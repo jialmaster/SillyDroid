@@ -17,12 +17,14 @@ import android.util.Log
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebView
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.WebViewCompat
 import com.jm.sillydroid.core.model.bootstrap.BootstrapSessionSnapshot
 import com.jm.sillydroid.domain.bootstrap.BootstrapController
@@ -35,7 +37,7 @@ import com.jm.sillydroid.feature.main.model.download.BrowserDownloadRequest
 import com.jm.sillydroid.feature.main.ui.home.HomeViewModel
 
 /**
- * 把 WebView 与下拉刷新栈、Web 会话持久化、page lifecycle、本地重试、renderer crash 恢复、
+ * 把 WebView 与宿主侧下拉刷新、Web 会话持久化、page lifecycle、本地重试、renderer crash 恢复、
  * URL 工具函数（local 判断 / 外开浏览器）等收拢到一个 host。
  *
  * MainActivity 持有一个实例，并通过构造参数注入需要的跨 host 回调（JS 桥安装、blob 下载桥脚本、
@@ -81,8 +83,12 @@ class TavernWebViewHost(
         private val RENDERER_EXIT_INFO_REFRESH_DELAYS_MS = longArrayOf(1_500L, 5_000L)
     }
 
-    val webViewRefreshLayout: SwipeRefreshLayout = activity.findViewById(R.id.webViewRefreshLayout)
+    val webViewRefreshLayout: View = activity.findViewById(R.id.webViewRefreshLayout)
     val webView: WebView = activity.findViewById(R.id.webView)
+    private val webViewPullRefreshHint: LinearLayout = activity.findViewById(R.id.webViewPullRefreshHint)
+    private val webViewPullRefreshHintArc: View = activity.findViewById(R.id.webViewPullRefreshHintArc)
+    private val webViewPullRefreshHintIcon: ImageView = activity.findViewById(R.id.webViewPullRefreshHintIcon)
+    private val webViewPullRefreshHintText: TextView = activity.findViewById(R.id.webViewPullRefreshHintText)
 
     // overlay view 同时被 BootstrapOverlayHost 持有；这里只读它的 isVisible 来配合下拉刷新逻辑，
     // 以及在 showWebView / hideForBootstrapRestart 时一并切换可见性，保持一对一互斥。
@@ -148,14 +154,23 @@ class TavernWebViewHost(
 
     private val homeWebViewRefreshController by lazy {
         HomeWebViewRefreshController(
-            refreshLayout = webViewRefreshLayout,
+            refreshContainer = webViewRefreshLayout,
             webViewProvider = { webView },
+            pullRefreshHintViews = PullRefreshHintViews(
+                container = webViewPullRefreshHint,
+                arc = webViewPullRefreshHintArc,
+                icon = webViewPullRefreshHintIcon,
+                text = webViewPullRefreshHintText
+            ),
             bootstrapOverlay = bootstrapOverlay,
             pullRefreshEnabled = { hostConfigStore.webViewPullRefreshEnabled },
             pullGestureRefreshing = { homeViewModel.isPullGestureRefreshing },
             setPullGestureRefreshing = { refreshing -> homeViewModel.isPullGestureRefreshing = refreshing },
             imeVisible = { homeViewModel.isImeVisible },
-            reloadTracer = webReloadTracer
+            reloadTracer = webReloadTracer,
+            diagnosticSink = { body ->
+                recordHostDiagnostic(category = "pull_refresh", body = body)
+            }
         )
     }
 
@@ -354,6 +369,8 @@ class TavernWebViewHost(
         // 仅隐藏不重建 WebView 时，恢复态 watchdog 里的 capturedWebView !== webView 门控不会生效；
         // 必须在这里主动取消，避免 6s 后被 loadUrl 打变 bootstrap 重启流程。
         cancelRestoredStateWatchdog()
+        homeViewModel.isPullGestureRefreshing = false
+        homeWebViewRefreshController.reset()
         webViewRefreshLayout.isVisible = false
         webView.isVisible = false
     }
@@ -374,13 +391,13 @@ class TavernWebViewHost(
     }
 
     fun resetRefreshOnBootstrapEvent() {
-        webViewRefreshLayout.isRefreshing = false
         homeViewModel.isPullGestureRefreshing = false
+        homeWebViewRefreshController.reset()
     }
 
     fun onImeVisibilityChanged(visible: Boolean) {
         if (visible) {
-            webViewRefreshLayout.isRefreshing = false
+            homeWebViewRefreshController.reset()
         }
         updateRefreshLayoutEnabled()
     }
@@ -502,7 +519,7 @@ class TavernWebViewHost(
         // page_finished 同样代表本次 navigation 跑完，需要兑底取消 watchdog，避免 6s 后多余的 reload。
         cancelRestoredStateWatchdog()
         homeViewModel.isPullGestureRefreshing = false
-        webViewRefreshLayout.isRefreshing = false
+        homeWebViewRefreshController.reset()
         updateRefreshLayoutEnabled()
         CookieManager.getInstance().flush()
         installBlobBridgeScriptOnPageFinished(sourceWebView)
@@ -522,8 +539,8 @@ class TavernWebViewHost(
         }
         homeViewModel.hasRestoredWebViewState = false
         cancelRestoredStateWatchdog()
-        webViewRefreshLayout.isRefreshing = false
         homeViewModel.isPullGestureRefreshing = false
+        homeWebViewRefreshController.reset()
         updateRefreshLayoutEnabled()
         clearActiveWebReloadTrace()
         if (rendererRecoveryActivityRecreateScheduled) {
@@ -788,7 +805,6 @@ class TavernWebViewHost(
             append(" webViewVisible=${webView.isVisible}")
             append(" refreshVisible=${webViewRefreshLayout.isVisible}")
             append(" refreshEnabled=${webViewRefreshLayout.isEnabled}")
-            append(" swipeRefreshing=${webViewRefreshLayout.isRefreshing}")
             append(" pullGestureRefreshing=${homeViewModel.isPullGestureRefreshing}")
             append(" overlayVisible=${bootstrapOverlay.isVisible}")
             append(" activityFinishing=${activity.isFinishing}")

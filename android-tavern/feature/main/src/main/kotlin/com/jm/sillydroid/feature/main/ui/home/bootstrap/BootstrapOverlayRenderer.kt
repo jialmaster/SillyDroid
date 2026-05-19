@@ -8,7 +8,6 @@ import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.view.isVisible
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.jm.sillydroid.core.model.bootstrap.BootstrapLifecycle
 import com.jm.sillydroid.core.model.bootstrap.BootstrapSessionSnapshot
 
@@ -47,7 +46,6 @@ class BootstrapOverlayRenderer(
             views.overlay.isVisible = true
             views.webViewRefreshLayout.isVisible = false
             views.webViewRefreshLayout.isEnabled = false
-            views.webViewRefreshLayout.isRefreshing = false
             setPullGestureRefreshing(false)
             views.webView().isVisible = false
         }
@@ -137,7 +135,7 @@ class BootstrapOverlayRenderer(
 /**
  * `webView` 用 provider 形式暴露：renderer crash 后 [com.jm.sillydroid.feature.main.ui.home.webview.TavernWebViewHost]
  * 会替换底层 WebView 实例，这里每次访问都取最新引用，避免操作已 destroy 的旧 WebView。
- * `webViewRefreshLayout`、`overlay` 等在布局里不会被替换，仍用直接引用。
+ * `webViewRefreshLayout`、`overlay` 等容器视图在布局里不会被替换，仍用直接引用。
  */
 data class BootstrapOverlayViews(
     val overlay: View,
@@ -146,7 +144,7 @@ data class BootstrapOverlayViews(
     val settingsButton: ImageButton,
     val progress: ProgressBar,
     val progressLabel: TextView,
-    val webViewRefreshLayout: SwipeRefreshLayout,
+    val webViewRefreshLayout: View,
     val webView: () -> WebView
 )
 
