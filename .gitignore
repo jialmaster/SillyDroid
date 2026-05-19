@@ -2,7 +2,6 @@ artifacts/
 .vs/
 .venv/
 .vscode/
-site/
 .qoder/
 .codex-tmp/
 docs/

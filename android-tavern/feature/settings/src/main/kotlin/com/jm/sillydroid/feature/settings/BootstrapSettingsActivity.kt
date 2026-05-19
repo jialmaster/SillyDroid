@@ -122,6 +122,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var terminalExtraKeysStripView: TerminalExtraKeysStripView
     private lateinit var settingsPanelView: View
     private lateinit var aboutPanelView: View
+    private lateinit var bottomActionBarView: View
     private lateinit var aboutGithubButton: ImageButton
     private lateinit var aboutVersionView: TextView
     private lateinit var aboutUpdateStatusView: TextView
@@ -318,6 +319,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         terminalExtraKeysStripView = findViewById(R.id.bootstrapSettingsTerminalExtraKeysStrip)
         settingsPanelView = findViewById(R.id.bootstrapSettingsSettingsPanel)
         aboutPanelView = findViewById(R.id.bootstrapSettingsAboutPanel)
+        bottomActionBarView = findViewById(R.id.bootstrapSettingsBottomActionBar)
         aboutGithubButton = findViewById(R.id.bootstrapSettingsAboutGithubButton)
         aboutVersionView = findViewById(R.id.bootstrapSettingsAboutVersion)
         aboutUpdateStatusView = findViewById(R.id.bootstrapSettingsAboutUpdateStatus)
@@ -347,6 +349,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             terminalPanelView = terminalPanelView,
             settingsPanelView = settingsPanelView,
             aboutPanelView = aboutPanelView,
+            bottomActionBarView = bottomActionBarView,
             configPathView = configPathView,
             warningView = warningView,
             loadingIndicator = loadingIndicator,

@@ -300,8 +300,9 @@ if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
     exit 1
 fi
 
+# 监听开关与监听地址必须交由用户 config.yaml 决定，不能在宿主入口里写死；
+# 否则“启用外部访问”会被 CLI 参数覆盖，最终只能监听 127.0.0.1。
 exec "$NODE_BIN" server.js \
-    --listen false \
     --port "$TAVERN_PORT" \
     --browserLaunchEnabled false \
     --dataRoot "$TAVERN_DATA_ROOT/data" \

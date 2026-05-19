@@ -63,6 +63,8 @@ chmod 1777 "$PROOT_TMP_DIR"
 
 CONSOLE_RC_FILE_HOST="$APP_DATA_ROOT/.sillydroid-terminal-home/.sillydroid-console-rc"
 CONSOLE_RC_FILE_GUEST="$SILLYDROID_CONSOLE_HOME/.sillydroid-console-rc"
+TERMUX_COMPAT_TAVERN_LINK_HOST="$APP_DATA_ROOT/.sillydroid-terminal-home/SillyTavern"
+TERMUX_COMPAT_TAVERN_LINK_GUEST="$SILLYDROID_CONSOLE_HOME/SillyTavern"
 # Android /system/bin/sh 处理 here-doc 时会尝试在 /data/local 下创建临时文件；
 # 应用 UID 对该目录没有写权限。如果这里退回 cat <<EOF，rc 文件会被先截断成 0 字节，
 # 然后整个 console shell 直接 exit 1，首屏既没有 prompt，也无法进入真实交互 shell。
@@ -76,6 +78,14 @@ CONSOLE_RC_FILE_GUEST="$SILLYDROID_CONSOLE_HOME/.sillydroid-console-rc"
 	printf '%s\n' 'export PS1'
 } > "$CONSOLE_RC_FILE_HOST"
 chmod 600 "$CONSOLE_RC_FILE_HOST"
+
+# 终端真实服务目录仍然固定挂载在 /tavern/server；
+# 这里只额外补一个 ~/SillyTavern 软链接，兼容依赖 Termux 常见目录约定的脚本，
+# 不能把它理解成真实安装路径迁移，否则宿主运行时和终端看到的目录语义会再次分叉。
+if ! ln -sfn "$SERVER_MOUNT" "$TERMUX_COMPAT_TAVERN_LINK_HOST"; then
+	echo "创建 Termux 兼容软链接失败：$TERMUX_COMPAT_TAVERN_LINK_GUEST -> $SERVER_MOUNT" >&2
+	exit 1
+fi
 
 if [ -d "$PROOT_LIB_DIR" ]; then
 	export LD_LIBRARY_PATH="$PROOT_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"

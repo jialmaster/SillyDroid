@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import android.util.Log
 import com.jm.sillydroid.core.model.logs.HostLogBundleExportResult
 import com.jm.sillydroid.core.model.logs.HostLogEntry
+import com.jm.sillydroid.core.model.logs.HostLogExportOption
 import com.jm.sillydroid.core.model.logs.HostLogSnapshot
 import com.jm.sillydroid.core.model.logs.HostLogTailWindowProfile
 import java.io.File
@@ -263,6 +264,14 @@ object HostLogManager {
             .sortedWith(compareBy<HostLogEntry>({ displayOrder(it.fileName) }).thenByDescending { it.lastModified })
     }
 
+    fun listExportOptions(context: Context): List<HostLogExportOption> {
+        val logsDir = logsDirectory(context).apply { mkdirs() }
+        return buildExportOptions(
+            logFiles = collectLogFiles(logsDir),
+            logsDir = logsDir
+        )
+    }
+
     fun readPreferredSnapshot(
         context: Context,
         preferTavernServerLog: Boolean,
@@ -455,16 +464,23 @@ object HostLogManager {
     fun exportToUri(
         context: Context,
         targetUri: Uri,
-        bundleFileName: String = buildBundleFileName()
+        bundleFileName: String = buildBundleFileName(),
+        includedRelativePaths: Set<String>? = null
     ): HostLogBundleExportResult {
         context.contentResolver.openOutputStream(targetUri)?.use { output ->
-            return writeBundle(context, output, bundleFileName)
+            return writeBundle(
+                context = context,
+                output = output,
+                bundleFileName = bundleFileName,
+                includedRelativePaths = includedRelativePaths
+            )
         } ?: throw IllegalStateException("Failed to open export target.")
     }
 
     fun exportToPublicDownloads(
         context: Context,
-        bundleFileName: String = buildBundleFileName()
+        bundleFileName: String = buildBundleFileName(),
+        includedRelativePaths: Set<String>? = null
     ): HostLogBundleExportResult {
         val resolver = context.contentResolver
         val values = ContentValues().apply {
@@ -477,7 +493,12 @@ object HostLogManager {
             ?: throw IllegalStateException("Failed to create Downloads entry.")
 
         return try {
-            val exportResult = exportToUri(context, targetUri, bundleFileName)
+            val exportResult = exportToUri(
+                context = context,
+                targetUri = targetUri,
+                bundleFileName = bundleFileName,
+                includedRelativePaths = includedRelativePaths
+            )
             resolver.update(
                 targetUri,
                 ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) },
@@ -733,34 +754,15 @@ object HostLogManager {
     }
 
     private fun resolveDisplayName(context: Context, fileName: String): String {
-        val normalizedName = fileName.lowercase(Locale.ROOT)
-        return when {
-            normalizedName.startsWith(tavernServerLogPrefix) -> "酒馆服务日志"
-            normalizedName.startsWith(startupLogPrefix) -> "启动日志"
-            normalizedName.startsWith(rootfsRuntimeLogPrefix) -> "运行时日志"
-            normalizedName.startsWith(hostDiagnosticsLogPrefix) -> "宿主诊断日志"
-            normalizedName.startsWith(jsErrorLogPrefix) -> "WebView JS 报错"
-            normalizedName == crashLogFileName -> "应用崩溃日志"
-            normalizedName == exitInfoLogFileName -> "应用退出信息"
-            normalizedName.startsWith("extension-install-preview-") -> "扩展预检日志"
-            normalizedName.startsWith("extension-reinstall-") -> "扩展重装日志"
-            normalizedName.startsWith("extension-") -> "扩展运行日志"
-            else -> "其他日志"
-        }
+        return HostLogExportPlanner.resolveDisplayName(fileName)
     }
 
     private fun displayOrder(fileName: String): Int {
-        val normalizedName = fileName.lowercase(Locale.ROOT)
-        return when {
-            normalizedName.startsWith(startupLogPrefix) -> 0
-            normalizedName.startsWith(tavernServerLogPrefix) -> 1
-            normalizedName.startsWith(rootfsRuntimeLogPrefix) -> 2
-            normalizedName.startsWith(hostDiagnosticsLogPrefix) -> 3
-            normalizedName.startsWith(jsErrorLogPrefix) -> 4
-            normalizedName == crashLogFileName -> 5
-            normalizedName == exitInfoLogFileName -> 6
-            else -> Int.MAX_VALUE
-        }
+        return HostLogExportPlanner.displayOrder(fileName)
+    }
+
+    internal fun buildExportOptions(logFiles: List<File>, logsDir: File): List<HostLogExportOption> {
+        return HostLogExportPlanner.buildExportOptions(logFiles, logsDir)
     }
 
     private fun ensureSharedLogsObserverLocked(context: Context) {
@@ -912,11 +914,18 @@ object HostLogManager {
     private fun writeBundle(
         context: Context,
         output: OutputStream,
-        bundleFileName: String
+        bundleFileName: String,
+        includedRelativePaths: Set<String>? = null
     ): HostLogBundleExportResult {
         val logsDir = logsDirectory(context)
         logsDir.mkdirs()
-        val logFiles = collectLogFiles(logsDir)
+        val normalizedIncludedPaths = includedRelativePaths
+            ?.map { path -> path.replace('\\', '/').trimStart('/') }
+            ?.toSet()
+        if (normalizedIncludedPaths != null && normalizedIncludedPaths.isEmpty()) {
+            throw IllegalArgumentException("No log files were selected for export.")
+        }
+        val logFiles = collectLogFiles(logsDir, normalizedIncludedPaths)
         val baseInfo = HostLogBundleBaseInfoResolver.resolve(context, bundleFilePrefix)
         val logSummary = HostLogBundleInfoFormatter.summarize(logFiles, logsDir)
         ZipOutputStream(output).use { zipOut ->
@@ -945,17 +954,11 @@ object HostLogManager {
         )
     }
 
-    private fun collectLogFiles(logsDir: File): List<File> {
-        if (!logsDir.isDirectory) {
-            return emptyList()
-        }
-
-        return logsDir.walkTopDown()
-            .filter { file ->
-                file.isFile && file.extension.equals("log", ignoreCase = true)
-            }
-            .sortedBy { file -> file.relativeTo(logsDir).invariantSeparatorsPath.lowercase(Locale.ROOT) }
-            .toList()
+    internal fun collectLogFiles(logsDir: File, includedRelativePaths: Set<String>? = null): List<File> {
+        return HostLogExportPlanner.collectLogFiles(
+            logsDir = logsDir,
+            includedRelativePaths = includedRelativePaths
+        )
     }
 
     private fun stopCurrentServerTailLocked(clearState: Boolean) {

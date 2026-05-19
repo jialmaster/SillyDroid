@@ -14,6 +14,18 @@ data class HostLogEntry(
     val lastModified: Long
 )
 
+/**
+ * 导出日志时给 UI 的分组视图模型。
+ * 一个分组代表一种日志类型，内部会携带当前命中的相对路径列表，供导出时精确筛选 ZIP 内容。
+ */
+data class HostLogExportOption(
+    val typeKey: String,
+    val displayName: String,
+    val relativePaths: Set<String>,
+    val selectedByDefault: Boolean,
+    val containsSensitiveContent: Boolean
+)
+
 enum class HostLogTailWindowProfile {
     FULL,
     COMPACT

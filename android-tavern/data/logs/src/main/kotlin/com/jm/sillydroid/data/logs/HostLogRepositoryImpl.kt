@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.jm.sillydroid.core.model.logs.HostLogBundleExportResult
 import com.jm.sillydroid.core.model.logs.HostLogEntry
+import com.jm.sillydroid.core.model.logs.HostLogExportOption
 import com.jm.sillydroid.core.model.logs.HostLogSnapshot
 import com.jm.sillydroid.domain.logs.HostLogRepository
 import java.util.concurrent.atomic.AtomicLong
@@ -40,6 +41,10 @@ class HostLogRepositoryImpl(context: Context) : HostLogRepository {
         return HostLogManager.listEntries(appContext)
     }
 
+    override fun listExportOptions(): List<HostLogExportOption> {
+        return HostLogManager.listExportOptions(appContext)
+    }
+
     override fun readPreferredSnapshot(
         preferTavernServerLog: Boolean,
         entries: List<HostLogEntry>?
@@ -74,12 +79,12 @@ class HostLogRepositoryImpl(context: Context) : HostLogRepository {
         HostLogManager.clearAllLogs(appContext)
     }
 
-    override fun exportToUri(targetUri: Uri): HostLogBundleExportResult {
-        return HostLogManager.exportToUri(appContext, targetUri)
+    override fun exportToUri(targetUri: Uri, includedRelativePaths: Set<String>?): HostLogBundleExportResult {
+        return HostLogManager.exportToUri(appContext, targetUri, includedRelativePaths = includedRelativePaths)
     }
 
-    override fun exportToPublicDownloads(): HostLogBundleExportResult {
-        return HostLogManager.exportToPublicDownloads(appContext)
+    override fun exportToPublicDownloads(includedRelativePaths: Set<String>?): HostLogBundleExportResult {
+        return HostLogManager.exportToPublicDownloads(appContext, includedRelativePaths = includedRelativePaths)
     }
 
     override fun recordWebViewJsError(line: String) {

@@ -38,13 +38,14 @@ data class AppDownloadRecord(
 )
 
 data class AppUpdateRequestConfig(
-    val githubRepository: String,
+    val latestReleaseMetadataUrl: String,
     val buildType: String,
     val currentVersionName: String
 )
 
 data class AppUpdateBuildConfig(
     val githubRepository: String,
+    val latestReleaseMetadataUrl: String,
     val buildType: String,
     val hostVersion: String,
     val upstreamVersion: String

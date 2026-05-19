@@ -78,7 +78,19 @@ object BootstrapSettingsFormValidator {
             return BootstrapSettingsValidationIssue("basicAuthUser.username", "启用基础认证时必须填写用户名和密码。")
         }
 
-        if (booleanValue(values, "perUserBasicAuth") && (!basicAuthEnabled || !booleanValue(values, "enableUserAccounts"))) {
+        // SillyTavern 在启用外部监听时会执行启动安全检查；若既没有白名单、基础认证、多用户账户，
+        // 也没有显式允许跳过安全检查，就会直接拒绝启动，必须在保存前拦住这类无效组合。
+        val listenEnabled = booleanValue(values, "listen")
+        val userAccountsEnabled = booleanValue(values, "enableUserAccounts")
+        val securityOverrideEnabled = booleanValue(values, "securityOverride")
+        if (listenEnabled && !whitelistModeEnabled && !basicAuthEnabled && !userAccountsEnabled && !securityOverrideEnabled) {
+            return BootstrapSettingsValidationIssue(
+                "listen",
+                "启用外部监听时，至少要启用 IP 白名单、基础认证、多用户账户之一；如仅用于排障，可改为开启“跳过启动安全检查”。"
+            )
+        }
+
+        if (booleanValue(values, "perUserBasicAuth") && (!basicAuthEnabled || !userAccountsEnabled)) {
             return BootstrapSettingsValidationIssue("perUserBasicAuth", "按用户复用基础认证需要同时启用基础认证和多用户账户。")
         }
 
