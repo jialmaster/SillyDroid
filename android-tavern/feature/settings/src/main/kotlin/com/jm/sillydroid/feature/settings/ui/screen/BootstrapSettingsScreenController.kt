@@ -42,6 +42,7 @@ class BootstrapSettingsScreenController(
     private val terminalPanelView: android.view.View,
     private val settingsPanelView: android.view.View,
     private val aboutPanelView: android.view.View,
+    private val bottomActionBarView: android.view.View,
     private val configPathView: TextView,
     private val warningView: TextView,
     private val loadingIndicator: LinearProgressIndicator,
@@ -59,6 +60,13 @@ class BootstrapSettingsScreenController(
     private var bannerIsError = false
     private var busy = false
     private var hasUnsavedChanges = false
+    private val scrollBottomBasePadding = scrollView.paddingBottom
+    private val logsPanelBottomBasePadding = logsPanelView.paddingBottom
+    private val terminalPanelBottomBasePadding = terminalPanelView.paddingBottom
+    private val bottomActionBarBottomBasePadding = bottomActionBarView.paddingBottom
+    private var latestSystemBarsBottomInset = 0
+    private var latestImeBottomInset = 0
+    private var latestImeVisible = false
 
     fun initialize() {
         setupTabs()
@@ -257,6 +265,9 @@ class BootstrapSettingsScreenController(
         settingsPanelView.isVisible = tab == SettingsTab.SETTINGS
         aboutPanelView.isVisible = tab == SettingsTab.ABOUT
         searchLayout.isVisible = tab == SettingsTab.SETTINGS
+        // 保存按钮必须常驻在设置页底部，不再跟随设置内容滚动。
+        bottomActionBarView.isVisible = tab == SettingsTab.SETTINGS
+        applyBottomInsets()
         syncPrimaryNavigationSelection()
         renderAboutEntryState()
         onTabChanged(tab)
@@ -291,27 +302,18 @@ class BootstrapSettingsScreenController(
 
     private fun applyWindowInsets() {
         val topShellTopPadding = topShellView.paddingTop
-        val scrollBottomPadding = scrollView.paddingBottom
-        val logsPanelBottomPadding = logsPanelView.paddingBottom
-        val terminalPanelBottomPadding = terminalPanelView.paddingBottom
 
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
-            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            latestSystemBarsBottomInset = systemBars.bottom
+            latestImeBottomInset = imeInsets.bottom
+            latestImeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
 
             topShellView.updatePadding(top = topShellTopPadding + systemBars.top)
-            scrollView.updatePadding(
-                bottom = scrollBottomPadding + if (imeVisible) imeInsets.bottom + dimen(R.dimen.sillydroid_scroll_focus_spacing_top) else systemBars.bottom
-            )
-            logsPanelView.updatePadding(
-                bottom = logsPanelBottomPadding + if (imeVisible) imeInsets.bottom else systemBars.bottom
-            )
-            terminalPanelView.updatePadding(
-                bottom = terminalPanelBottomPadding + if (imeVisible) imeInsets.bottom else systemBars.bottom
-            )
+            applyBottomInsets()
 
-            if (imeVisible) {
+            if (latestImeVisible) {
                 scrollView.doOnNextLayout {
                     ensureFocusedViewVisible()
                 }
@@ -319,6 +321,27 @@ class BootstrapSettingsScreenController(
             insets
         }
         ViewCompat.requestApplyInsets(rootView)
+    }
+
+    private fun applyBottomInsets() {
+        val settingsActionBarVisible = bottomActionBarView.isVisible
+        // 设置页底部操作条可见时，由操作条自己承接底部 inset，避免滚动区再把按钮一起卷走。
+        scrollView.updatePadding(
+            bottom = scrollBottomBasePadding + when {
+                latestImeVisible -> dimen(R.dimen.sillydroid_scroll_focus_spacing_top)
+                settingsActionBarVisible -> 0
+                else -> latestSystemBarsBottomInset
+            }
+        )
+        logsPanelView.updatePadding(
+            bottom = logsPanelBottomBasePadding + if (latestImeVisible) latestImeBottomInset else latestSystemBarsBottomInset
+        )
+        terminalPanelView.updatePadding(
+            bottom = terminalPanelBottomBasePadding + if (latestImeVisible) latestImeBottomInset else latestSystemBarsBottomInset
+        )
+        bottomActionBarView.updatePadding(
+            bottom = bottomActionBarBottomBasePadding + if (latestImeVisible) latestImeBottomInset else latestSystemBarsBottomInset
+        )
     }
 
     private fun ensureFocusedViewVisible() {

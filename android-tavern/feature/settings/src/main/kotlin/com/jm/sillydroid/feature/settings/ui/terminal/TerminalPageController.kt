@@ -43,7 +43,6 @@ class TerminalPageController(
 ) : DefaultLifecycleObserver {
     companion object {
         private const val logTag = "SettingsTerminal"
-        private const val terminalFontSizeDp = 14
         private const val terminalCursorBlinkRateMillis = 500
         private val normalShortcutActions = listOf(
             TerminalExtraKeyAction.ESC,
@@ -69,6 +68,11 @@ class TerminalPageController(
     private var selectionModeActive = false
     private var extraKeysState = TerminalExtraKeysState()
     private var currentSessionState = HostConsoleSessionState()
+    private val terminalFontSizeDp by lazy {
+        // TerminalView 这里仍按 dp 语义收口，字号改资源即可，不需要每次再回代码里找硬编码常量。
+        (activity.resources.getDimension(R.dimen.sillydroid_terminal_font_size) /
+            activity.resources.displayMetrics.density).roundToInt()
+    }
     private val textSelectionBridge = TermuxTextSelectionBridge(terminalView)
     private var longPressMenuAnchorView: View? = null
     private val terminalViewClient = SettingsTerminalViewClient(

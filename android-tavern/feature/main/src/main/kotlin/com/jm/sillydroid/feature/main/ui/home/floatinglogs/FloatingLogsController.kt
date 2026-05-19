@@ -16,6 +16,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.jm.sillydroid.core.model.bootstrap.BootstrapLogKind
 import com.jm.sillydroid.core.model.bootstrap.BootstrapSessionSnapshot
 import com.jm.sillydroid.core.model.bootstrap.shouldPreferTavernServerLog
+import com.jm.sillydroid.core.ui.logs.HostLogExportSelectionDialogText
+import com.jm.sillydroid.core.ui.logs.showHostLogExportSelectionDialog
 import com.jm.sillydroid.core.ui.scroll.DraggableScrollThumbController
 import com.jm.sillydroid.core.model.logs.HostLogEntry
 import com.jm.sillydroid.core.model.logs.HostLogSnapshot
@@ -296,7 +298,7 @@ class FloatingLogsController(
             showIntervalDialog()
         }
         views.downloadButton.setOnClickListener {
-            downloadLogsAsZip()
+            showExportDialog()
         }
         views.clearButton.setOnClickListener {
             confirmClearLogs()
@@ -562,11 +564,40 @@ class FloatingLogsController(
         }
     }
 
-    private fun downloadLogsAsZip() {
+    private fun showExportDialog() {
+        scope.launch {
+            // 悬浮日志这里直接导出到下载目录，所以先在面板内完成一次类型确认，再执行真正写包。
+            val result = withContext(dispatchers.io) {
+                runCatching { logRepository.listExportOptions() }
+            }
+            result.onSuccess { options ->
+                if (options.isEmpty()) {
+                    Toast.makeText(activity, text.exportEmpty(), Toast.LENGTH_SHORT).show()
+                    return@onSuccess
+                }
+                showHostLogExportSelectionDialog(
+                    activity = activity,
+                    options = options,
+                    text = HostLogExportSelectionDialogText(
+                        title = text.exportDialogTitle(),
+                        message = text.exportDialogMessage(),
+                        sensitiveSuffix = text.exportSensitiveSuffix(),
+                        confirmLabel = text.exportConfirmLabel()
+                    )
+                ) { selectedRelativePaths ->
+                    exportLogsAsZip(selectedRelativePaths)
+                }
+            }.onFailure {
+                Toast.makeText(activity, text.downloadFailed(), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun exportLogsAsZip(selectedRelativePaths: Set<String>) {
         scope.launch {
             val result = withContext(dispatchers.io) {
                 runCatching {
-                    logRepository.exportToPublicDownloads()
+                    logRepository.exportToPublicDownloads(includedRelativePaths = selectedRelativePaths)
                 }
             }
             result.onSuccess { export ->
@@ -645,6 +676,11 @@ data class FloatingLogsText(
     val fiveSecondsIntervalLabel: () -> String,
     val logsMeta: (displayName: String, updatedAt: String) -> String,
     val emptyContent: () -> String,
+    val exportDialogTitle: () -> String,
+    val exportDialogMessage: () -> String,
+    val exportSensitiveSuffix: () -> String,
+    val exportConfirmLabel: () -> String,
+    val exportEmpty: () -> String,
     val downloadSuccess: (zipFileName: String, zipPath: String) -> String,
     val downloadFailed: () -> String,
     val clearConfirmTitle: () -> String,

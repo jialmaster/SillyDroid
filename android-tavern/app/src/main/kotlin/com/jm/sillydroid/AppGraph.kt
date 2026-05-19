@@ -99,6 +99,7 @@ class AppGraph(private val application: Application) : SillyDroidAppGraph {
     override val appUpdateBuildConfig: AppUpdateBuildConfig by lazy {
         AppUpdateBuildConfig(
             githubRepository = BuildConfig.SILLYDROID_GITHUB_REPOSITORY,
+            latestReleaseMetadataUrl = BuildConfig.SILLYDROID_LATEST_RELEASE_METADATA_URL,
             buildType = BuildConfig.BUILD_TYPE,
             hostVersion = BuildConfig.SILLYDROID_HOST_VERSION,
             upstreamVersion = BuildConfig.SILLYDROID_UPSTREAM_VERSION

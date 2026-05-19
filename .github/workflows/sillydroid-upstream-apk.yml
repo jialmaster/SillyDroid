@@ -867,6 +867,13 @@ jobs:
             echo '- APK size bytes: ${{ needs.build.outputs.apk_size_bytes }}'
           } > "$release_notes_file"
 
+          # The site and in-app updater both consume the public GitHub release state.
+          # New releases must not become public before the APK and update metadata
+          # are attached, otherwise latest resolution can observe an incomplete release.
+          release_apk_asset="$release_dir/$release_asset_name"
+          release_sha_asset="$release_dir/$release_asset_name.sha256"
+          release_update_asset="$release_dir/${{ needs.plan.outputs.artifact_name }}.update.json"
+
           if ! gh release view '${{ needs.plan.outputs.release_tag }}' --repo '${{ github.repository }}' > /dev/null 2>&1; then
             if [ -n "$prerelease_flag" ]; then
               gh release create '${{ needs.plan.outputs.release_tag }}' \
@@ -874,27 +881,35 @@ jobs:
                 --target '${{ github.sha }}' \
                 --title '${{ needs.plan.outputs.release_title }}' \
                 --notes-file "$release_notes_file" \
-                --prerelease
+                --prerelease \
+                "$release_apk_asset" \
+                "$release_sha_asset" \
+                "$release_update_asset"
             else
               gh release create '${{ needs.plan.outputs.release_tag }}' \
                 --repo '${{ github.repository }}' \
                 --target '${{ github.sha }}' \
                 --title '${{ needs.plan.outputs.release_title }}' \
-                --notes-file "$release_notes_file"
+                --notes-file "$release_notes_file" \
+                "$release_apk_asset" \
+                "$release_sha_asset" \
+                "$release_update_asset"
             fi
           else
+            # Existing releases keep the previous public assets until the replacement
+            # files finish uploading; only then do we emit the post-upload edit event.
+            gh release upload '${{ needs.plan.outputs.release_tag }}' \
+              "$release_apk_asset" \
+              "$release_sha_asset" \
+              "$release_update_asset" \
+              --repo '${{ github.repository }}' \
+              --clobber
+
             gh release edit '${{ needs.plan.outputs.release_tag }}' \
               --repo '${{ github.repository }}' \
               --title '${{ needs.plan.outputs.release_title }}' \
               --notes-file "$release_notes_file" > /dev/null
           fi
-
-          gh release upload '${{ needs.plan.outputs.release_tag }}' \
-            "$release_dir/$release_asset_name" \
-            "$release_dir/$release_asset_name.sha256" \
-            "$release_dir/${{ needs.plan.outputs.artifact_name }}.update.json" \
-            --repo '${{ github.repository }}' \
-            --clobber
 
       - name: Append publish summary
         run: |

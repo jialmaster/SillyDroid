@@ -3,6 +3,7 @@ package com.jm.sillydroid.domain.logs
 import android.net.Uri
 import com.jm.sillydroid.core.model.logs.HostLogBundleExportResult
 import com.jm.sillydroid.core.model.logs.HostLogEntry
+import com.jm.sillydroid.core.model.logs.HostLogExportOption
 import com.jm.sillydroid.core.model.logs.HostLogSnapshot
 
 interface HostLogRepository {
@@ -11,13 +12,14 @@ interface HostLogRepository {
     fun refreshApplicationExitInfoAsync()
     fun buildBundleFileName(): String
     fun listEntries(): List<HostLogEntry>
+    fun listExportOptions(): List<HostLogExportOption>
     fun readPreferredSnapshot(preferTavernServerLog: Boolean, entries: List<HostLogEntry>? = null): HostLogSnapshot?
     fun readPreferredRealtimeSnapshot(preferTavernServerLog: Boolean, entries: List<HostLogEntry>? = null): HostLogSnapshot?
     fun readSnapshot(entry: HostLogEntry): HostLogSnapshot?
     fun readRealtimeSnapshot(entry: HostLogEntry): HostLogSnapshot?
     fun clearAllLogs()
-    fun exportToUri(targetUri: Uri): HostLogBundleExportResult
-    fun exportToPublicDownloads(): HostLogBundleExportResult
+    fun exportToUri(targetUri: Uri, includedRelativePaths: Set<String>? = null): HostLogBundleExportResult
+    fun exportToPublicDownloads(includedRelativePaths: Set<String>? = null): HostLogBundleExportResult
     /**
      * 追加一行 WebView JS 报错/资源加载错误到当前 session 的 js-error 日志文件。
      * 传入的是完整一行（不含末尾换行），由实现用 [HostLogManager.AsyncWriter] 异步写盘。

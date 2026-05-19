@@ -161,7 +161,7 @@ class AppUpdateCoordinator(
             runCatching {
                 appUpdateRepository.fetchLatestAvailableRelease(
                     AppUpdateRequestConfig(
-                        githubRepository = buildConfig.githubRepository,
+                        latestReleaseMetadataUrl = buildConfig.latestReleaseMetadataUrl,
                         buildType = buildConfig.buildType,
                         currentVersionName = resolveCurrentVersionName()
                     )

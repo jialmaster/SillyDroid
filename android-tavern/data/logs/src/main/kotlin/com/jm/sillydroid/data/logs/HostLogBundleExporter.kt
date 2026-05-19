@@ -11,15 +11,26 @@ object HostLogBundleExporter {
     fun exportToUri(
         context: android.content.Context,
         targetUri: android.net.Uri,
-        bundleFileName: String = buildBundleFileName()
+        bundleFileName: String = buildBundleFileName(),
+        includedRelativePaths: Set<String>? = null
     ): HostLogBundleExportResult {
-        return HostLogManager.exportToUri(context, targetUri, bundleFileName)
+        return HostLogManager.exportToUri(
+            context = context,
+            targetUri = targetUri,
+            bundleFileName = bundleFileName,
+            includedRelativePaths = includedRelativePaths
+        )
     }
 
     fun exportToPublicDownloads(
         context: android.content.Context,
-        bundleFileName: String = buildBundleFileName()
+        bundleFileName: String = buildBundleFileName(),
+        includedRelativePaths: Set<String>? = null
     ): HostLogBundleExportResult {
-        return HostLogManager.exportToPublicDownloads(context, bundleFileName)
+        return HostLogManager.exportToPublicDownloads(
+            context = context,
+            bundleFileName = bundleFileName,
+            includedRelativePaths = includedRelativePaths
+        )
     }
 }

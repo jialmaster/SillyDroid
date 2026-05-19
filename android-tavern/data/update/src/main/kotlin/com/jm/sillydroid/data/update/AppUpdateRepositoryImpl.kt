@@ -16,7 +16,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.util.Locale
-import org.json.JSONArray
 import org.json.JSONObject
 
 class AppUpdateRepositoryImpl(
@@ -49,55 +48,50 @@ class AppUpdateRepositoryImpl(
     }
 
     override suspend fun fetchLatestAvailableRelease(config: AppUpdateRequestConfig): AvailableAppRelease? {
-        val releases = fetchJsonArray("$githubApiBaseUrl/repos/${config.githubRepository}/releases?per_page=12")
-
-        for (index in 0 until releases.length()) {
-            val release = releases.optJSONObject(index) ?: continue
-            val releaseTag = release.optString("tag_name").trim()
-            if (!releaseTag.endsWith("-${config.buildType}")) {
-                continue
-            }
-
-            val releaseTitle = release.optString("name").trim().ifBlank { releaseTag }
-            val assets = release.optJSONArray("assets") ?: continue
-            val metadataAsset = findAssetBySuffix(assets, metadataAssetSuffix) ?: continue
-            val metadata = fetchJsonObject(metadataAsset.optString("browser_download_url").trim())
-            if (!metadata.optString("build_type").trim().equals(config.buildType, ignoreCase = true)) {
-                continue
-            }
-
-            val versionName = metadata.optString("version_name").trim()
-            val hostVersion = metadata.optString("host_version").trim()
-            val apkAssetName = metadata.optString("apk_asset_name").trim()
-            val apkSha256 = metadata.optString("apk_sha256").trim().lowercase(Locale.US)
-            if (
-                versionName.isBlank() ||
-                hostVersion.isBlank() ||
-                apkAssetName.isBlank() ||
-                apkSha256.length != 64 ||
-                compareVersionNames(versionName, config.currentVersionName) <= 0
-            ) {
-                continue
-            }
-
-            val apkAsset = findAssetByName(assets, apkAssetName) ?: continue
-            val apkDownloadUrl = apkAsset.optString("browser_download_url").trim()
-            if (apkDownloadUrl.isBlank()) {
-                continue
-            }
-
-            return AvailableAppRelease(
-                releaseTag = releaseTag,
-                releaseTitle = releaseTitle,
-                versionName = versionName,
-                hostVersion = hostVersion,
-                apkAssetName = apkAssetName,
-                apkDownloadUrl = apkDownloadUrl,
-                apkSha256 = apkSha256
-            )
+        // The public site JSON is the only repo-owned latest pointer.
+        // Device-side update checks must consume it directly so release delete /
+        // edit events stop depending on GitHub `latest` redirects or API scans.
+        val latestReleaseState = fetchJsonObject(config.latestReleaseMetadataUrl)
+        val statusCode = latestReleaseState.optJSONObject("status")?.optString("code")?.trim().orEmpty()
+        if (!statusCode.equals("ready", ignoreCase = true)) {
+            return null
         }
 
-        return null
+        val release = latestReleaseState.optJSONObject("release") ?: return null
+        if (!release.optString("buildType").trim().equals(config.buildType, ignoreCase = true)) {
+            return null
+        }
+
+        val releaseTag = release.optString("tag").trim()
+        val releaseTitle = release.optString("title").trim().ifBlank { releaseTag }
+        val versionName = release.optString("versionName").trim()
+        val hostVersion = release.optString("hostVersion").trim()
+        val apk = release.optJSONObject("apk") ?: return null
+        val apkAssetName = apk.optString("assetName").trim()
+        val apkDownloadUrl = apk.optString("downloadUrl").trim()
+        val apkSha256 = apk.optString("sha256").trim().lowercase(Locale.US)
+        if (
+            releaseTag.isBlank() ||
+            releaseTitle.isBlank() ||
+            versionName.isBlank() ||
+            hostVersion.isBlank() ||
+            apkAssetName.isBlank() ||
+            apkDownloadUrl.isBlank() ||
+            apkSha256.length != 64 ||
+            compareVersionNames(versionName, config.currentVersionName) <= 0
+        ) {
+            return null
+        }
+
+        return AvailableAppRelease(
+            releaseTag = releaseTag,
+            releaseTitle = releaseTitle,
+            versionName = versionName,
+            hostVersion = hostVersion,
+            apkAssetName = apkAssetName,
+            apkDownloadUrl = apkDownloadUrl,
+            apkSha256 = apkSha256
+        )
     }
 
     override suspend fun startDownload(release: AvailableAppRelease): AppDownloadState {
@@ -221,10 +215,6 @@ class AppUpdateRepositoryImpl(
         return digest.digest().joinToString(separator = "") { byte -> "%02x".format(Locale.US, byte) }
     }
 
-    private fun fetchJsonArray(url: String): JSONArray {
-        return JSONArray(fetchText(url))
-    }
-
     private fun fetchJsonObject(url: String): JSONObject {
         return JSONObject(fetchText(url))
     }
@@ -234,7 +224,7 @@ class AppUpdateRepositoryImpl(
             requestMethod = "GET"
             connectTimeout = 10_000
             readTimeout = 10_000
-            setRequestProperty("Accept", "application/vnd.github+json")
+            setRequestProperty("Accept", "application/json")
             setRequestProperty("User-Agent", userAgent)
         }
 
@@ -253,26 +243,6 @@ class AppUpdateRepositoryImpl(
         } finally {
             connection.disconnect()
         }
-    }
-
-    private fun findAssetBySuffix(assets: JSONArray, suffix: String): JSONObject? {
-        for (index in 0 until assets.length()) {
-            val asset = assets.optJSONObject(index) ?: continue
-            if (asset.optString("name").trim().endsWith(suffix)) {
-                return asset
-            }
-        }
-        return null
-    }
-
-    private fun findAssetByName(assets: JSONArray, name: String): JSONObject? {
-        for (index in 0 until assets.length()) {
-            val asset = assets.optJSONObject(index) ?: continue
-            if (asset.optString("name").trim() == name) {
-                return asset
-            }
-        }
-        return null
     }
 
     private fun compareVersionNames(left: String, right: String): Int {
@@ -300,8 +270,6 @@ class AppUpdateRepositoryImpl(
     }
 
     private companion object {
-        private const val githubApiBaseUrl = "https://api.github.com"
-        private const val metadataAssetSuffix = ".update.json"
         private const val apkMimeType = "application/vnd.android.package-archive"
         private const val userAgent = "SillyDroid-Android-Updater"
 

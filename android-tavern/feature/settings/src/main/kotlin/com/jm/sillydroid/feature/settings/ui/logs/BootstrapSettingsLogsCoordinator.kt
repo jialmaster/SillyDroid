@@ -10,6 +10,8 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.LifecycleOwner
 import com.jm.sillydroid.core.ui.scroll.DraggableScrollThumbController
+import com.jm.sillydroid.core.ui.logs.HostLogExportSelectionDialogText
+import com.jm.sillydroid.core.ui.logs.showHostLogExportSelectionDialog
 import com.jm.sillydroid.core.model.logs.HostLogEntry
 import com.jm.sillydroid.core.model.logs.HostLogSnapshot
 import com.jm.sillydroid.domain.logs.HostLogRepository
@@ -44,13 +46,15 @@ class BootstrapSettingsLogsCoordinator(
     private var currentSnapshot: HostLogSnapshot? = null
     private var currentEntries: List<HostLogEntry> = emptyList()
     private var selectedLogFileName: String? = null
+    // SAF 导出需要先弹系统文件创建器；这里暂存用户刚刚确认的导出范围，等 targetUri 返回后再真正写包。
+    private var pendingExportRelativePaths: Set<String>? = null
 
     fun initialize() {
         selectButton.setOnClickListener {
             showLogSelectionDialog()
         }
         exportButton.setOnClickListener {
-            requestExport()
+            showExportDialog()
         }
         reloadButton.setOnClickListener {
             reloadLatestLog()
@@ -78,15 +82,56 @@ class BootstrapSettingsLogsCoordinator(
             setBusyState(true)
             val result = withContext(dispatchers.io) {
                 runCatching {
-                    hostLogRepository.exportToUri(targetUri)
+                    hostLogRepository.exportToUri(
+                        targetUri = targetUri,
+                        includedRelativePaths = pendingExportRelativePaths
+                    )
                 }
             }
+            pendingExportRelativePaths = null
             setBusyState(false)
 
             result.onSuccess { export ->
                 showMessage(activity.getString(R.string.bootstrap_settings_logs_export_success, export.bundleFileName))
             }.onFailure {
                 showError(activity.getString(R.string.bootstrap_settings_logs_export_failed))
+            }
+        }
+    }
+
+    private fun showExportDialog() {
+        if (busy) {
+            return
+        }
+
+        activity.lifecycleScope.launch {
+            // 导出前先按“日志类型”聚合提示，避免把敏感酒馆日志默认静默带出。
+            setBusyState(true)
+            val result = withContext(dispatchers.io) {
+                runCatching { hostLogRepository.listExportOptions() }
+            }
+            setBusyState(false)
+
+            result.onSuccess { options ->
+                if (options.isEmpty()) {
+                    showMessage(activity.getString(R.string.bootstrap_settings_logs_export_empty))
+                    return@onSuccess
+                }
+                showHostLogExportSelectionDialog(
+                    activity = activity,
+                    options = options,
+                    text = HostLogExportSelectionDialogText(
+                        title = activity.getString(R.string.bootstrap_settings_logs_export_dialog_title),
+                        message = activity.getString(R.string.bootstrap_settings_logs_export_dialog_message),
+                        sensitiveSuffix = activity.getString(R.string.bootstrap_settings_logs_export_sensitive_suffix),
+                        confirmLabel = activity.getString(R.string.bootstrap_settings_logs_export)
+                    )
+                ) { selectedRelativePaths ->
+                    pendingExportRelativePaths = selectedRelativePaths
+                    requestExport()
+                }
+            }.onFailure { exception ->
+                showError(exception.message ?: activity.getString(R.string.bootstrap_settings_logs_export_failed))
             }
         }
     }

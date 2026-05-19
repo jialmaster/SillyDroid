@@ -33,9 +33,10 @@
     <string name="floating_logs_panel_select_label">日志</string>
     <string name="floating_logs_panel_interval_label">刷新</string>
     <string name="floating_logs_scroll_to_bottom">滚动到底部</string>
-    <string name="floating_logs_download_button">下载日志</string>
-    <string name="floating_logs_download_success">已下载日志 ZIP“%1$s”。\n路径：%2$s</string>
-    <string name="floating_logs_download_failed">下载实时日志失败。</string>
+    <string name="floating_logs_export_button">导出日志</string>
+    <string name="floating_logs_download_button">导出日志</string>
+    <string name="floating_logs_download_success">已导出日志 ZIP“%1$s”。\n路径：%2$s</string>
+    <string name="floating_logs_download_failed">导出日志失败。</string>
     <string name="bootstrap_settings_host_floating_logs_refresh_interval_realtime">实时</string>
     <string name="bootstrap_settings_host_floating_logs_refresh_interval_one_second">1 秒</string>
     <string name="bootstrap_settings_host_floating_logs_refresh_interval_three_seconds">3 秒</string>
@@ -43,6 +44,10 @@
     <string name="bootstrap_settings_logs_empty">当前还没有可显示的日志文件。</string>
     <string name="bootstrap_settings_logs_meta">当前日志：%1$s  更新时间：%2$s</string>
     <string name="bootstrap_settings_logs_empty_content">日志文件目前为空。</string>
+    <string name="bootstrap_settings_logs_export_dialog_title">选择要导出的日志</string>
+    <string name="bootstrap_settings_logs_export_dialog_message">请按需勾选要导出的日志类型。默认不包含酒馆服务日志。</string>
+    <string name="bootstrap_settings_logs_export_sensitive_suffix">（包含发出/接收的消息等敏感信息）</string>
+    <string name="bootstrap_settings_logs_export_empty">当前还没有可导出的日志文件。</string>
     <string name="bootstrap_settings_logs_clear_confirm_title">清空所有日志？</string>
     <string name="bootstrap_settings_logs_clear_confirm_message">会清空 android-tavern/logs 下的所有日志文件。当前这次 app 启动正在写入的宿主日志会被截断为 0，再继续写入。此操作不可撤销。</string>
     <string name="bootstrap_settings_logs_clear">清空日志</string>

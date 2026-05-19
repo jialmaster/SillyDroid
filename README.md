@@ -2,8 +2,8 @@
 
 [![APK Action](https://img.shields.io/github/actions/workflow/status/jialmaster/SillyDroid/sillydroid-upstream-apk.yml?label=SillyDroid%20APK)](https://github.com/jialmaster/SillyDroid/actions/workflows/sillydroid-upstream-apk.yml)
 [![Runtime Release Tag](https://img.shields.io/badge/Runtime%20Release%20Tag-tavern--runtime--linux--arm64-2563eb)](https://github.com/jialmaster/SillyDroid/releases/tag/tavern-runtime-linux-arm64)
-[![Latest Release](https://img.shields.io/github/v/release/jialmaster/SillyDroid?display_name=tag&label=SillyDroid%20Version)](https://github.com/jialmaster/SillyDroid/releases/latest)
-[![Release Time](https://img.shields.io/github/release-date/jialmaster/SillyDroid?label=SillyDroid%20Release%20Time)](https://github.com/jialmaster/SillyDroid/releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/jialmaster/SillyDroid?display_name=tag&label=SillyDroid%20Version)](https://github.com/jialmaster/SillyDroid/releases)
+[![Release Time](https://img.shields.io/github/release-date/jialmaster/SillyDroid?label=SillyDroid%20Release%20Time)](https://github.com/jialmaster/SillyDroid/releases)
 
 这个仓库维护 SillyDroid Android 宿主、离线运行时打包链，以及基于指定 SillyTavern tag 的 APK 构建与发布流程。
 
@@ -62,7 +62,8 @@ curl -fsSL https://raw.githubusercontent.com/jialmaster/SillyDroid/master/script
 ## 下载
 
 - Wiki：<https://github.com/jialmaster/SillyDroid/wiki>
-- 最新 APK 下载 / 源码仓库：<https://github.com/jialmaster/SillyDroid/releases/latest>
+- 官网下载页 / 最新状态：<https://jialmaster.github.io/SillyDroid/download>
+- Release 列表 / 源码仓库：<https://github.com/jialmaster/SillyDroid/releases>
 - 安装说明：下载 `.apk` 后直接安装即可。APK 为自签名包，安装时会出现系统安全提示；根据机型允许安装未知来源应用后即可正常使用。
 
 ## 碎碎念

@@ -602,16 +602,6 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/bootstrapSettingsSaveButton"
-                    style="@style/Widget.SillyDroid.SettingsButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/sillydroid_space_md"
-                    android:enabled="false"
-                    android:minHeight="@dimen/sillydroid_control_min_height"
-                    android:text="@string/bootstrap_settings_save_start" />
             </LinearLayout>
 
             <LinearLayout
@@ -1047,6 +1037,29 @@
             android:layout_marginStart="@dimen/sillydroid_space_md"
             android:layout_marginEnd="@dimen/sillydroid_space_md"
             android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- 保存并启动固定在设置页底部，避免跟随设置内容一起滚出可视区。 -->
+    <LinearLayout
+        android:id="@+id/bootstrapSettingsBottomActionBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurfaceContainerLowest"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/sillydroid_space_md"
+        android:paddingTop="@dimen/sillydroid_space_sm"
+        android:paddingEnd="@dimen/sillydroid_space_md"
+        android:paddingBottom="@dimen/sillydroid_space_md"
+        android:visibility="gone">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/bootstrapSettingsSaveButton"
+            style="@style/Widget.SillyDroid.SettingsButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:enabled="false"
+            android:minHeight="@dimen/sillydroid_control_min_height"
+            android:text="@string/bootstrap_settings_save_start" />
     </LinearLayout>
 
 </LinearLayout>

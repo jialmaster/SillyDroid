@@ -105,6 +105,34 @@ done
 
 configured_build_type="$(read_build_config_value 'build.buildType' 'release')"
 configured_tavern_tag="$(read_build_config_value 'build.tavernVersion' 'latest')"
+resolve_build_plan_script="$workspace_root/scripts/resolve-tavern-build-plan.sh"
+
+resolve_stage4_version_metadata() {
+    local plan_file resolved_tavern_tag resolved_build_type
+    plan_file="$(mktemp)"
+    bash "$resolve_build_plan_script" \
+        --tavern-tag "$tavern_tag" \
+        --build-type "$build_type" > "$plan_file"
+
+    get_stage4_plan_value() {
+        local key="$1"
+        sed -n "s/^${key}=//p" "$plan_file" | tail -n 1 | tr -d '\r'
+    }
+
+    resolved_tavern_tag="$(get_stage4_plan_value tavern_tag)"
+    resolved_build_type="$(get_stage4_plan_value build_type)"
+    stage4_host_version="$(get_stage4_plan_value host_version)"
+    stage4_version_name="$(get_stage4_plan_value version_name)"
+    stage4_version_code="$(get_stage4_plan_value version_code)"
+    rm -f "$plan_file"
+
+    if [[ -z "$resolved_tavern_tag" || -z "$resolved_build_type" || -z "$stage4_host_version" || -z "$stage4_version_name" || -z "$stage4_version_code" ]]; then
+        sillydroid_fail 'stage-4 无法从构建计划解析 APK 版本信息。'
+    fi
+
+    tavern_tag="$resolved_tavern_tag"
+    build_type="$resolved_build_type"
+}
 
 read_termux_packages_from_config() {
     if ! command -v python3 >/dev/null 2>&1; then
@@ -773,6 +801,27 @@ case "$build_type" in
         exit 1
         ;;
 esac
+
+stage4_host_version="${SILLYDROID_ANDROID_HOST_VERSION:-}"
+stage4_upstream_version="${SILLYDROID_ANDROID_UPSTREAM_VERSION:-}"
+stage4_version_name="${SILLYDROID_ANDROID_VERSION_NAME:-}"
+stage4_version_code="${SILLYDROID_ANDROID_VERSION_CODE:-}"
+
+# stage-4 允许被单独调用，因此这里也必须补齐和本地总入口一致的版本解析；
+# 否则 Gradle 会回退为默认 versionCode/versionName，产出无法覆盖安装的降级包。
+if [[ -z "$stage4_host_version" || -z "$stage4_version_name" || -z "$stage4_version_code" ]]; then
+    resolve_stage4_version_metadata
+fi
+
+if [[ -z "$stage4_upstream_version" ]]; then
+    stage4_upstream_version="$tavern_tag"
+fi
+
+export SILLYDROID_ANDROID_HOST_VERSION="$stage4_host_version"
+export SILLYDROID_ANDROID_UPSTREAM_VERSION="$stage4_upstream_version"
+export SILLYDROID_ANDROID_VERSION_NAME="$stage4_version_name"
+export SILLYDROID_ANDROID_VERSION_CODE="$stage4_version_code"
+sillydroid_log "注入 APK 版本信息：host=$stage4_host_version upstream=$stage4_upstream_version versionName=$stage4_version_name versionCode=$stage4_version_code"
 
 if [[ -z "$runtime_image_path" ]]; then
     runtime_image_path="$workspace_root/artifacts/releases/rootfs/$runtime_rid/tavern-rootfs-$runtime_rid.zip"
