@@ -80,6 +80,7 @@ class MainActivity : AppCompatActivity() {
         hostIo = HostIoController(
             activity = this,
             runtimeConfigRepository = runtimeConfigRepository,
+            hostPreferencesRepository = hostConfigStore,
             blobDownloadBridgeName = downloadBridgeName,
             downloadDiagnosticSink = { body ->
                 recordDetailedHostDiagnostic(category = "download", body = body)
@@ -111,7 +112,7 @@ class MainActivity : AppCompatActivity() {
                 )
             },
             onDownloadRequested = { request -> hostIo.handlePageDownload(request) },
-            onShowFileChooser = { intent, callback -> hostIo.launchFileChooser(intent, callback) },
+            onShowFileChooser = { fileChooserParams, callback -> hostIo.launchFileChooser(fileChooserParams, callback) },
             jsErrorSink = ::recordDetailedWebViewJsError,
             hostDiagnosticSink = HostDiagnosticSink { category, body ->
                 recordDetailedHostDiagnostic(category = category, body = body)
@@ -277,6 +278,7 @@ class MainActivity : AppCompatActivity() {
             .put("apkVersionCode", packageInfo.longVersionCode.toString())
             .put("floatingLogBubbleEnabled", hostConfigStore.floatingLogBubbleEnabled)
             .put("webViewPullRefreshEnabled", hostConfigStore.webViewPullRefreshEnabled)
+            .put("unrestrictedFileImportSelectionEnabled", hostConfigStore.unrestrictedFileImportSelectionEnabled)
             .put("serverReady", processManager.currentSnapshot().isReady)
             .toString()
     }

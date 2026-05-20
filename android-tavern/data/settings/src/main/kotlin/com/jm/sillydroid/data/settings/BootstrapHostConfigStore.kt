@@ -13,6 +13,7 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         private const val servicePortKey = "service-port"
         private const val webViewPullRefreshEnabledKey = "webview-pull-refresh-enabled"
         private const val debugDiagnosticsEnabledKey = "debug-diagnostics-enabled"
+        private const val unrestrictedFileImportSelectionEnabledKey = "unrestricted-file-import-selection-enabled"
         private const val terminalFontSizePxKey = "terminal-font-size-px"
         private const val terminalCursorBlinkEnabledKey = "terminal-cursor-blink-enabled"
         private const val terminalExtraKeysEnabledKey = "terminal-extra-keys-enabled"
@@ -58,6 +59,14 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         set(value) {
             preferences.edit()
                 .putBoolean(debugDiagnosticsEnabledKey, value)
+                .apply()
+        }
+
+    override var unrestrictedFileImportSelectionEnabled: Boolean
+        get() = preferences.getBoolean(unrestrictedFileImportSelectionEnabledKey, false)
+        set(value) {
+            preferences.edit()
+                .putBoolean(unrestrictedFileImportSelectionEnabledKey, value)
                 .apply()
         }
 

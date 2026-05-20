@@ -5,6 +5,7 @@ data class SettingsActivityUiState(
     val floatingLogsEnabled: Boolean = false,
     val pullRefreshEnabled: Boolean = false,
     val debugDiagnosticsEnabled: Boolean = false,
+    val unrestrictedFileImportSelectionEnabled: Boolean = false,
     val shouldStartBootstrap: Boolean = false,
     val shouldReloadTavernUi: Boolean = false
 )

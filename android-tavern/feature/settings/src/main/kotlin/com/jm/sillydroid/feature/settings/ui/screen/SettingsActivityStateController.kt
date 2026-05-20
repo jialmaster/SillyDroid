@@ -15,6 +15,7 @@ class SettingsActivityStateController(
     private val floatingLogsSwitch: MaterialSwitch,
     private val pullRefreshSwitch: MaterialSwitch,
     private val debugDiagnosticsSwitch: MaterialSwitch,
+    private val unrestrictedFileImportSelectionSwitch: MaterialSwitch,
     private val renderResultFlags: (SettingsActivityUiState) -> Unit
 ) {
     fun initialize() {
@@ -30,6 +31,10 @@ class SettingsActivityStateController(
         debugDiagnosticsSwitch.isChecked = initialState.debugDiagnosticsEnabled
         debugDiagnosticsSwitch.setOnCheckedChangeListener { _, isChecked ->
             viewModel.setDebugDiagnosticsEnabled(isChecked)
+        }
+        unrestrictedFileImportSelectionSwitch.isChecked = initialState.unrestrictedFileImportSelectionEnabled
+        unrestrictedFileImportSelectionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            viewModel.setUnrestrictedFileImportSelectionEnabled(isChecked)
         }
 
         activity.lifecycleScope.launch {
@@ -50,6 +55,9 @@ class SettingsActivityStateController(
         }
         if (debugDiagnosticsSwitch.isChecked != state.debugDiagnosticsEnabled) {
             debugDiagnosticsSwitch.isChecked = state.debugDiagnosticsEnabled
+        }
+        if (unrestrictedFileImportSelectionSwitch.isChecked != state.unrestrictedFileImportSelectionEnabled) {
+            unrestrictedFileImportSelectionSwitch.isChecked = state.unrestrictedFileImportSelectionEnabled
         }
         renderResultFlags(state)
     }
