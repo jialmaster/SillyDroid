@@ -16,7 +16,8 @@ class SettingsActivityViewModel(
     private val _uiState = MutableStateFlow(
         SettingsActivityUiState(
             floatingLogsEnabled = hostPreferencesRepository.floatingLogBubbleEnabled,
-            pullRefreshEnabled = hostPreferencesRepository.webViewPullRefreshEnabled
+            pullRefreshEnabled = hostPreferencesRepository.webViewPullRefreshEnabled,
+            debugDiagnosticsEnabled = hostPreferencesRepository.debugDiagnosticsEnabled
         )
     )
 
@@ -40,6 +41,13 @@ class SettingsActivityViewModel(
             hostPreferencesRepository.webViewPullRefreshEnabled = enabled
         }
         _uiState.update { current -> current.copy(pullRefreshEnabled = enabled) }
+    }
+
+    fun setDebugDiagnosticsEnabled(enabled: Boolean) {
+        if (hostPreferencesRepository.debugDiagnosticsEnabled != enabled) {
+            hostPreferencesRepository.debugDiagnosticsEnabled = enabled
+        }
+        _uiState.update { current -> current.copy(debugDiagnosticsEnabled = enabled) }
     }
 
     fun markResultFlags(

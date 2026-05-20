@@ -92,6 +92,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var quickFieldContainer: LinearLayout
     private lateinit var floatingLogsSwitch: MaterialSwitch
     private lateinit var pullRefreshSwitch: MaterialSwitch
+    private lateinit var debugDiagnosticsSwitch: MaterialSwitch
     private lateinit var extensionsPanelView: View
     private lateinit var extensionsListContainer: LinearLayout
     private lateinit var extensionsEmptyView: TextView
@@ -290,6 +291,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         quickFieldContainer = findViewById(R.id.bootstrapSettingsQuickFieldContainer)
         floatingLogsSwitch = findViewById(R.id.bootstrapSettingsFloatingLogsSwitch)
         pullRefreshSwitch = findViewById(R.id.bootstrapSettingsPullRefreshSwitch)
+        debugDiagnosticsSwitch = findViewById(R.id.bootstrapSettingsDebugDiagnosticsSwitch)
         extensionsPanelView = findViewById(R.id.bootstrapSettingsExtensionsPanel)
         extensionsListContainer = findViewById(R.id.bootstrapSettingsExtensionsListContainer)
         extensionsEmptyView = findViewById(R.id.bootstrapSettingsExtensionsEmpty)
@@ -380,6 +382,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             viewModel = settingsActivityViewModel,
             floatingLogsSwitch = floatingLogsSwitch,
             pullRefreshSwitch = pullRefreshSwitch,
+            debugDiagnosticsSwitch = debugDiagnosticsSwitch,
             renderResultFlags = ::renderResultFlags
         )
         aboutController = BootstrapSettingsAboutController(

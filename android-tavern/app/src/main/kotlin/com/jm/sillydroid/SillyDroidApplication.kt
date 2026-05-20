@@ -24,7 +24,7 @@ class SillyDroidApplication : Application(), SillyDroidAppGraphProvider {
         appGraph.hostLogRepository.installCrashLogCapture()
         appGraph.hostLogRepository.refreshApplicationExitInfoAsync()
         installReleaseDiagnosticsLifecycleCallbacks()
-        recordHostDiagnostic(
+        recordDetailedHostDiagnostic(
             category = "application",
             body = buildString {
                 append("event=on_create")
@@ -43,7 +43,7 @@ class SillyDroidApplication : Application(), SillyDroidAppGraphProvider {
         if (!::appGraph.isInitialized) {
             return
         }
-        recordHostDiagnostic(
+        recordDetailedHostDiagnostic(
             category = "memory",
             body = "scope=application event=on_trim_memory level=${formatTrimMemoryLevel(level)} rawLevel=$level"
         )
@@ -54,7 +54,7 @@ class SillyDroidApplication : Application(), SillyDroidAppGraphProvider {
         if (!::appGraph.isInitialized) {
             return
         }
-        recordHostDiagnostic(
+        recordDetailedHostDiagnostic(
             category = "memory",
             body = "scope=application event=on_low_memory"
         )
@@ -101,7 +101,7 @@ class SillyDroidApplication : Application(), SillyDroidAppGraphProvider {
     }
 
     private fun recordActivityLifecycle(activity: Activity, event: String, extra: String) {
-        recordHostDiagnostic(
+        recordDetailedHostDiagnostic(
             category = "activity",
             body = buildString {
                 append("activity=${normalizeDiagnosticValue(resolveActivityLabel(activity))}")
@@ -111,7 +111,12 @@ class SillyDroidApplication : Application(), SillyDroidAppGraphProvider {
         )
     }
 
-    private fun recordHostDiagnostic(category: String, body: String) {
+    // “调试模式”关闭时，只保留 startup/server/crash 等核心日志；
+    // 这些 Activity/WebView 过程诊断属于高频细节，统一在这里收口，避免 release 常态下刷满宿主诊断文件。
+    private fun recordDetailedHostDiagnostic(category: String, body: String) {
+        if (!appGraph.hostConfigStore.debugDiagnosticsEnabled) {
+            return
+        }
         appGraph.hostLogRepository.recordHostDiagnostic(category = category, body = body)
     }
 

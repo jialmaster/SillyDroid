@@ -29,6 +29,7 @@ interface SettingsConfigRepository {
 interface HostPreferencesRepository {
     var servicePort: Int
     var webViewPullRefreshEnabled: Boolean
+    var debugDiagnosticsEnabled: Boolean
     var terminalFontSizePx: Int
     var terminalCursorBlinkEnabled: Boolean
     var terminalExtraKeysEnabled: Boolean
