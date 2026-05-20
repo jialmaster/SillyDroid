@@ -14,6 +14,7 @@ class SettingsActivityStateController(
     private val viewModel: SettingsActivityViewModel,
     private val floatingLogsSwitch: MaterialSwitch,
     private val pullRefreshSwitch: MaterialSwitch,
+    private val debugDiagnosticsSwitch: MaterialSwitch,
     private val renderResultFlags: (SettingsActivityUiState) -> Unit
 ) {
     fun initialize() {
@@ -25,6 +26,10 @@ class SettingsActivityStateController(
         pullRefreshSwitch.isChecked = initialState.pullRefreshEnabled
         pullRefreshSwitch.setOnCheckedChangeListener { _, isChecked ->
             viewModel.setPullRefreshEnabled(isChecked)
+        }
+        debugDiagnosticsSwitch.isChecked = initialState.debugDiagnosticsEnabled
+        debugDiagnosticsSwitch.setOnCheckedChangeListener { _, isChecked ->
+            viewModel.setDebugDiagnosticsEnabled(isChecked)
         }
 
         activity.lifecycleScope.launch {
@@ -42,6 +47,9 @@ class SettingsActivityStateController(
         }
         if (pullRefreshSwitch.isChecked != state.pullRefreshEnabled) {
             pullRefreshSwitch.isChecked = state.pullRefreshEnabled
+        }
+        if (debugDiagnosticsSwitch.isChecked != state.debugDiagnosticsEnabled) {
+            debugDiagnosticsSwitch.isChecked = state.debugDiagnosticsEnabled
         }
         renderResultFlags(state)
     }

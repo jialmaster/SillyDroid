@@ -12,6 +12,7 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         internal const val preferencesName = "bootstrap-host-config"
         private const val servicePortKey = "service-port"
         private const val webViewPullRefreshEnabledKey = "webview-pull-refresh-enabled"
+        private const val debugDiagnosticsEnabledKey = "debug-diagnostics-enabled"
         private const val terminalFontSizePxKey = "terminal-font-size-px"
         private const val terminalCursorBlinkEnabledKey = "terminal-cursor-blink-enabled"
         private const val terminalExtraKeysEnabledKey = "terminal-extra-keys-enabled"
@@ -49,6 +50,14 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         set(value) {
             preferences.edit()
                 .putBoolean(webViewPullRefreshEnabledKey, value)
+                .apply()
+        }
+
+    override var debugDiagnosticsEnabled: Boolean
+        get() = preferences.getBoolean(debugDiagnosticsEnabledKey, false)
+        set(value) {
+            preferences.edit()
+                .putBoolean(debugDiagnosticsEnabledKey, value)
                 .apply()
         }
 

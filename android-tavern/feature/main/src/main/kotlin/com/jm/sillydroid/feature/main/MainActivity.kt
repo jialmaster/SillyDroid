@@ -82,7 +82,7 @@ class MainActivity : AppCompatActivity() {
             runtimeConfigRepository = runtimeConfigRepository,
             blobDownloadBridgeName = downloadBridgeName,
             downloadDiagnosticSink = { body ->
-                hostLogRepository.recordHostDiagnostic(category = "download", body = body)
+                recordDetailedHostDiagnostic(category = "download", body = body)
             }
         )
         floatingLogsHost = FloatingLogsHost(
@@ -112,9 +112,9 @@ class MainActivity : AppCompatActivity() {
             },
             onDownloadRequested = { request -> hostIo.handlePageDownload(request) },
             onShowFileChooser = { intent, callback -> hostIo.launchFileChooser(intent, callback) },
-            jsErrorSink = { line -> hostLogRepository.recordWebViewJsError(line) },
+            jsErrorSink = ::recordDetailedWebViewJsError,
             hostDiagnosticSink = HostDiagnosticSink { category, body ->
-                hostLogRepository.recordHostDiagnostic(category = category, body = body)
+                recordDetailedHostDiagnostic(category = category, body = body)
             },
             refreshApplicationExitInfo = { hostLogRepository.refreshApplicationExitInfoAsync() }
         )
@@ -222,7 +222,7 @@ class MainActivity : AppCompatActivity() {
                 },
                 onFailure = hostIo::showDownloadFailure,
                 diagnosticSink = { body ->
-                    hostLogRepository.recordHostDiagnostic(category = "download", body = body)
+                    recordDetailedHostDiagnostic(category = "download", body = body)
                 }
             ),
             downloadBridgeName
@@ -279,6 +279,22 @@ class MainActivity : AppCompatActivity() {
             .put("webViewPullRefreshEnabled", hostConfigStore.webViewPullRefreshEnabled)
             .put("serverReady", processManager.currentSnapshot().isReady)
             .toString()
+    }
+
+    // 宿主详细诊断日志只在“调试模式”开启时写盘；
+    // 默认模式下保留启动日志、服务日志和崩溃日志，避免常态运行时把 host-diagnostics / js-error 写得过于噪杂。
+    private fun recordDetailedHostDiagnostic(category: String, body: String) {
+        if (!hostConfigStore.debugDiagnosticsEnabled) {
+            return
+        }
+        hostLogRepository.recordHostDiagnostic(category = category, body = body)
+    }
+
+    private fun recordDetailedWebViewJsError(line: String) {
+        if (!hostConfigStore.debugDiagnosticsEnabled) {
+            return
+        }
+        hostLogRepository.recordWebViewJsError(line)
     }
 
     private fun maybePromptDefaultExtensionsAfterBootstrapReady() {

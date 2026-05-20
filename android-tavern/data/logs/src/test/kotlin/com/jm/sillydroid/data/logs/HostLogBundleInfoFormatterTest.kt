@@ -149,6 +149,7 @@ class HostLogBundleInfoFormatterTest {
         assertTrue(bundleInfoJson.contains("\"terminalFontSizePx\": 16"))
         assertTrue(bundleInfoJson.contains("\"terminalCursorBlinkEnabled\": true"))
         assertTrue(bundleInfoJson.contains("\"terminalExtraKeysEnabled\": true"))
+        assertTrue(bundleInfoJson.contains("\"debugDiagnosticsEnabled\": false"))
         assertTrue(bundleInfoJson.contains("\"floatingLogBubblePosition\": {\"horizontalFraction\": 0.75, \"verticalFraction\": 0.25}"))
         assertTrue(bundleInfoJson.contains("\"fileCount\": 2"))
         assertTrue(bundleInfoJson.contains("\"files\": [\"startup-20260517.log\", \"${HostLogManager.crashLogFileName}\"]"))
@@ -162,6 +163,7 @@ class HostLogBundleInfoFormatterTest {
             snapshotPolicy = "explicit-host-preferences-only",
             servicePort = 8000,
             webViewPullRefreshEnabled = true,
+            debugDiagnosticsEnabled = false,
             terminalFontSizePx = 16,
             terminalCursorBlinkEnabled = true,
             terminalExtraKeysEnabled = true,
