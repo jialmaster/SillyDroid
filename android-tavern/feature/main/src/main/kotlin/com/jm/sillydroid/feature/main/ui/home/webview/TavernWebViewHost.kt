@@ -56,7 +56,7 @@ class TavernWebViewHost(
     private val installJavascriptInterfaces: (WebView) -> Unit,
     private val installBlobBridgeScriptOnPageFinished: (WebView) -> Unit,
     private val onDownloadRequested: (BrowserDownloadRequest) -> Unit,
-    private val onShowFileChooser: (Intent, android.webkit.ValueCallback<Array<Uri>>) -> Unit,
+    private val onShowFileChooser: (android.webkit.WebChromeClient.FileChooserParams, android.webkit.ValueCallback<Array<Uri>>) -> Unit,
     private val jsErrorSink: WebViewJsErrorSink = WebViewJsErrorSink { /* no-op */ },
     private val hostDiagnosticSink: HostDiagnosticSink = HostDiagnosticSink { _, _ -> },
     private val refreshApplicationExitInfo: () -> Unit = {},
@@ -146,7 +146,7 @@ class TavernWebViewHost(
             onRendererGone = ::handleWebViewRendererGone,
             onDownloadRequested = onDownloadRequested,
             onShowFileChooser = { filePathCallback, fileChooserParams ->
-                onShowFileChooser(fileChooserParams.createIntent(), filePathCallback)
+                onShowFileChooser(fileChooserParams, filePathCallback)
             },
             downloadDiagnosticSink = { body ->
                 recordHostDiagnostic(category = "download", body = body)

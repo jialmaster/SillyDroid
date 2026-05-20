@@ -93,6 +93,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var floatingLogsSwitch: MaterialSwitch
     private lateinit var pullRefreshSwitch: MaterialSwitch
     private lateinit var debugDiagnosticsSwitch: MaterialSwitch
+    private lateinit var unrestrictedFileImportSelectionSwitch: MaterialSwitch
     private lateinit var extensionsPanelView: View
     private lateinit var extensionsListContainer: LinearLayout
     private lateinit var extensionsEmptyView: TextView
@@ -292,6 +293,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         floatingLogsSwitch = findViewById(R.id.bootstrapSettingsFloatingLogsSwitch)
         pullRefreshSwitch = findViewById(R.id.bootstrapSettingsPullRefreshSwitch)
         debugDiagnosticsSwitch = findViewById(R.id.bootstrapSettingsDebugDiagnosticsSwitch)
+        unrestrictedFileImportSelectionSwitch = findViewById(R.id.bootstrapSettingsUnrestrictedFileImportSelectionSwitch)
         extensionsPanelView = findViewById(R.id.bootstrapSettingsExtensionsPanel)
         extensionsListContainer = findViewById(R.id.bootstrapSettingsExtensionsListContainer)
         extensionsEmptyView = findViewById(R.id.bootstrapSettingsExtensionsEmpty)
@@ -360,6 +362,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             searchLayout = searchLayout,
             floatingLogsSwitch = floatingLogsSwitch,
             pullRefreshSwitch = pullRefreshSwitch,
+            unrestrictedFileImportSelectionSwitch = unrestrictedFileImportSelectionSwitch,
             restoreDefaultsButton = restoreDefaultsButton,
             importButton = importButton,
             exportButton = exportButton,
@@ -383,6 +386,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             floatingLogsSwitch = floatingLogsSwitch,
             pullRefreshSwitch = pullRefreshSwitch,
             debugDiagnosticsSwitch = debugDiagnosticsSwitch,
+            unrestrictedFileImportSelectionSwitch = unrestrictedFileImportSelectionSwitch,
             renderResultFlags = ::renderResultFlags
         )
         aboutController = BootstrapSettingsAboutController(

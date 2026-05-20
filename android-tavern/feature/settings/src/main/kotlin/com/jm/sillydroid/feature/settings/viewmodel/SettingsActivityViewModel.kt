@@ -17,7 +17,8 @@ class SettingsActivityViewModel(
         SettingsActivityUiState(
             floatingLogsEnabled = hostPreferencesRepository.floatingLogBubbleEnabled,
             pullRefreshEnabled = hostPreferencesRepository.webViewPullRefreshEnabled,
-            debugDiagnosticsEnabled = hostPreferencesRepository.debugDiagnosticsEnabled
+            debugDiagnosticsEnabled = hostPreferencesRepository.debugDiagnosticsEnabled,
+            unrestrictedFileImportSelectionEnabled = hostPreferencesRepository.unrestrictedFileImportSelectionEnabled
         )
     )
 
@@ -48,6 +49,13 @@ class SettingsActivityViewModel(
             hostPreferencesRepository.debugDiagnosticsEnabled = enabled
         }
         _uiState.update { current -> current.copy(debugDiagnosticsEnabled = enabled) }
+    }
+
+    fun setUnrestrictedFileImportSelectionEnabled(enabled: Boolean) {
+        if (hostPreferencesRepository.unrestrictedFileImportSelectionEnabled != enabled) {
+            hostPreferencesRepository.unrestrictedFileImportSelectionEnabled = enabled
+        }
+        _uiState.update { current -> current.copy(unrestrictedFileImportSelectionEnabled = enabled) }
     }
 
     fun markResultFlags(

@@ -15,6 +15,8 @@
     <string name="bootstrap_settings_host_floating_logs_summary">在主界面右下角显示悬浮球，点击后可实时查看最新酒馆日志。该开关立即生效，不需要重新保存配置。</string>
     <string name="bootstrap_settings_host_debug_diagnostics_title">调试模式</string>
     <string name="bootstrap_settings_host_debug_diagnostics_summary">关闭时只保留启动、服务和崩溃等关键日志；打开后额外输出宿主诊断、WebView 错误和下载等详细调试日志，方便排查问题。</string>
+    <string name="bootstrap_settings_host_unrestricted_file_import_selection_title">无限制文件扩展名导入选择</string>
+    <string name="bootstrap_settings_host_unrestricted_file_import_selection_summary">谨慎开启。关闭时沿用原始文件类型过滤；开启后仅在 WebView 导入包含 .jsonl 的场景放开系统文件选择器扩展名过滤，并在选中文件后由宿主按原始 accept 再校验。</string>
     <string name="bootstrap_settings_settings_summary">端口和服务配置集中在这里，按分组折叠显示。</string>
     <string name="bootstrap_settings_about_summary">这里集中显示当前宿主说明、版本信息和应用更新入口，主界面不再单独保留更新按钮。</string>
     <string name="bootstrap_settings_about_github">打开 GitHub 项目主页</string>
