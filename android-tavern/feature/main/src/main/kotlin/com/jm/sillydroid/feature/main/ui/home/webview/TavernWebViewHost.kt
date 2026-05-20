@@ -148,6 +148,9 @@ class TavernWebViewHost(
             onShowFileChooser = { filePathCallback, fileChooserParams ->
                 onShowFileChooser(fileChooserParams.createIntent(), filePathCallback)
             },
+            downloadDiagnosticSink = { body ->
+                recordHostDiagnostic(category = "download", body = body)
+            },
             jsErrorSink = jsErrorSink
         )
     }

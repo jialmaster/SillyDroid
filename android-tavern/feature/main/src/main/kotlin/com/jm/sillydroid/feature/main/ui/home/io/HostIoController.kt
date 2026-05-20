@@ -34,13 +34,22 @@ import com.jm.sillydroid.feature.main.ui.home.notification.SystemNotificationCon
 class HostIoController(
     private val activity: AppCompatActivity,
     private val runtimeConfigRepository: RuntimeConfigRepository,
+    private val blobDownloadBridgeName: String,
+    private val downloadDiagnosticSink: (String) -> Unit = {},
 ) {
     private val downloadManager by lazy { activity.getSystemService(DownloadManager::class.java) }
+
+    private fun recordDownloadDiagnostic(body: String) {
+        runCatching { downloadDiagnosticSink(body) }
+    }
 
     val browserDownloadController: BrowserDownloadController by lazy {
         BrowserDownloadController(
             downloadManager = downloadManager,
-            pendingDescription = { fileName -> activity.getString(R.string.download_status_pending, fileName) }
+            pendingDescription = { fileName -> activity.getString(R.string.download_status_pending, fileName) },
+            blobDownloadController = blobDownloadController,
+            blobDownloadBridgeName = blobDownloadBridgeName,
+            diagnosticSink = ::recordDownloadDiagnostic
         )
     }
 
@@ -103,15 +112,31 @@ class HostIoController(
 
     @Suppress("DEPRECATION")
     fun handlePageDownload(request: BrowserDownloadRequest) {
+        // 这里把 DownloadListener 进入宿主后的第一手参数再记一次，便于和 WebView 侧“监听是否触发”对齐。
+        recordDownloadDiagnostic(
+            "event=handle_page_download url=${request.url} mime=${request.mimeType.ifBlank { "-" }} " +
+                "contentDisposition=${request.contentDisposition.ifBlank { "-" }}"
+        )
+        val handledByBlobCapture = maybeHandleBlobDownload(request)
+        if (handledByBlobCapture) {
+            return
+        }
         when (val result = browserDownloadController.enqueue(request)) {
             is BrowserDownloadResult.Started -> {
+                recordDownloadDiagnostic("event=handle_page_download_started fileName=${result.fileName}")
                 Toast.makeText(
                     activity,
                     activity.getString(R.string.download_started, result.fileName),
                     Toast.LENGTH_SHORT
                 ).show()
             }
+            is BrowserDownloadResult.Delegated -> {
+                recordDownloadDiagnostic("event=handle_page_download_delegated fileName=${result.fileName}")
+            }
             is BrowserDownloadResult.Failed -> {
+                recordDownloadDiagnostic(
+                    "event=handle_page_download_failed fileName=${result.fileName} error=${result.message.ifBlank { activity.getString(R.string.download_failed_unknown) }}"
+                )
                 showDownloadFailure(
                     DownloadFailureReport(
                         fileName = result.fileName,
@@ -119,11 +144,36 @@ class HostIoController(
                     )
                 )
             }
-            null -> Unit
+            null -> {
+                recordDownloadDiagnostic("event=handle_page_download_noop reason=controller_returned_null")
+            }
         }
     }
 
+    private fun maybeHandleBlobDownload(request: BrowserDownloadRequest): Boolean {
+        val scheme = Uri.parse(request.url).scheme.orEmpty()
+        if (!scheme.equals("blob", ignoreCase = true) && !scheme.equals("data", ignoreCase = true)) {
+            return false
+        }
+
+        // 这条路径只在真机已经确认命中的 DownloadListener(blob/data) 上执行：
+        // 当前页面有时不会被前置 anchor 拦截命中，所以宿主需要在这里再次要求页面把同一个 URL 回传成 base64。
+        recordDownloadDiagnostic(
+            "event=handle_page_download_delegate_blob_capture scheme=$scheme url=${request.url}"
+        )
+        blobDownloadController.captureFromDownloadListener(
+            webView = request.sourceWebView,
+            bridgeName = blobDownloadBridgeName,
+            request = request,
+            diagnosticSink = ::recordDownloadDiagnostic
+        )
+        return true
+    }
+
     fun showDownloadFailure(report: DownloadFailureReport) {
+        recordDownloadDiagnostic(
+            "event=show_download_failure fileName=${report.fileName} error=${report.message.ifBlank { activity.getString(R.string.download_failed_unknown) }}"
+        )
         Toast.makeText(activity, buildDownloadFailureMessage(report), Toast.LENGTH_LONG).show()
     }
 

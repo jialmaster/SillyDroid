@@ -41,6 +41,7 @@ class HomeWebViewController(
     private val onRendererGone: (didCrash: Boolean) -> Unit,
     private val onDownloadRequested: (BrowserDownloadRequest) -> Unit,
     private val onShowFileChooser: (ValueCallback<Array<Uri>>, WebChromeClient.FileChooserParams) -> Unit,
+    private val downloadDiagnosticSink: (String) -> Unit = {},
     private val jsErrorSink: WebViewJsErrorSink = WebViewJsErrorSink { /* no-op */ }
 ) {
     private val jsErrorTimestampFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
@@ -53,6 +54,20 @@ class HomeWebViewController(
         val line = "[${jsErrorTimestamp()}] [$category] $safeBody\n"
         runCatching { jsErrorSink.append(line) }
     }
+
+    private fun recordDownloadDiagnostic(body: String) {
+        runCatching { downloadDiagnosticSink(body) }
+    }
+
+    // 下载诊断要长期留在 release 里定位真机分支，因此统一在这里裁剪字段，避免日志被超长 URL 或 UA 污染。
+    private fun String?.compactForDiagnostic(limit: Int = 160): String {
+        val normalized = this.orEmpty().replace("\r", " ").replace("\n", " ").trim()
+        if (normalized.isBlank()) {
+            return "-"
+        }
+        return if (normalized.length <= limit) normalized else normalized.take(limit) + "..."
+    }
+
     fun configure() {
         val webView = webViewProvider()
         webView.settings.javaScriptEnabled = true
@@ -75,6 +90,11 @@ class HomeWebViewController(
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val targetUri = request?.url ?: return false
                 if (request.isForMainFrame && shouldOpenExternally(targetUri)) {
+                    // 记录主 frame 被外开的 URL，区分“下载没接管”与“实际上被新窗口或外链分支提前带走”。
+                    recordDownloadDiagnostic(
+                        "event=main_frame_external_open source=shouldOverrideUrlLoading scheme=${targetUri.scheme.orEmpty()} " +
+                            "url=${targetUri.toString().compactForDiagnostic()}"
+                    )
                     return openExternalBrowser(targetUri)
                 }
                 return false
@@ -83,6 +103,10 @@ class HomeWebViewController(
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                 val targetUri = url?.let(Uri::parse) ?: return false
                 return if (shouldOpenExternally(targetUri)) {
+                    recordDownloadDiagnostic(
+                        "event=main_frame_external_open source=shouldOverrideUrlLoading_legacy scheme=${targetUri.scheme.orEmpty()} " +
+                            "url=${targetUri.toString().compactForDiagnostic()}"
+                    )
                     openExternalBrowser(targetUri)
                 } else {
                     false
@@ -161,8 +185,14 @@ class HomeWebViewController(
         }
 
         webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+            recordDownloadDiagnostic(
+                "event=download_listener_fired scheme=${Uri.parse(url).scheme.orEmpty()} " +
+                    "url=${url.compactForDiagnostic()} mime=${mimeType.compactForDiagnostic(80)} " +
+                    "contentDisposition=${contentDisposition.compactForDiagnostic()} ua=${userAgent.compactForDiagnostic(120)}"
+            )
             onDownloadRequested(
                 BrowserDownloadRequest(
+                    sourceWebView = webView,
                     url = url,
                     userAgent = userAgent,
                     contentDisposition = contentDisposition,
@@ -176,6 +206,9 @@ class HomeWebViewController(
                 val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
                 val proxyWebView = WebView(context)
                 var handled = false
+                recordDownloadDiagnostic(
+                    "event=create_window requested isDialog=$isDialog isUserGesture=$isUserGesture"
+                )
 
                 fun forwardToBrowser(targetUrl: String?) {
                     if (handled || targetUrl.isNullOrBlank() || targetUrl == "about:blank") {
@@ -183,6 +216,11 @@ class HomeWebViewController(
                     }
 
                     handled = true
+                    // 这个分支是真机下载漏接管的高风险点：新窗口 URL 会直接外开，不会复用主 WebView 的 DownloadListener。
+                    recordDownloadDiagnostic(
+                        "event=create_window_forward_to_external scheme=${Uri.parse(targetUrl).scheme.orEmpty()} " +
+                            "url=${targetUrl.compactForDiagnostic()}"
+                    )
                     openExternalBrowser(Uri.parse(targetUrl))
                     proxyWebView.stopLoading()
                     proxyWebView.destroy()

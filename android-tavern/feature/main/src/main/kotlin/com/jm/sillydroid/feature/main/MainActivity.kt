@@ -79,7 +79,11 @@ class MainActivity : AppCompatActivity() {
     private fun composeHosts() {
         hostIo = HostIoController(
             activity = this,
-            runtimeConfigRepository = runtimeConfigRepository
+            runtimeConfigRepository = runtimeConfigRepository,
+            blobDownloadBridgeName = downloadBridgeName,
+            downloadDiagnosticSink = { body ->
+                hostLogRepository.recordHostDiagnostic(category = "download", body = body)
+            }
         )
         floatingLogsHost = FloatingLogsHost(
             activity = this,
@@ -100,7 +104,11 @@ class MainActivity : AppCompatActivity() {
             processManager = processManager,
             installJavascriptInterfaces = ::installWebViewJavascriptInterfaces,
             installBlobBridgeScriptOnPageFinished = { webView ->
-                hostIo.blobDownloadController.installBridgeScript(webView, downloadBridgeName)
+                hostIo.blobDownloadController.installBridgeScript(
+                    webView = webView,
+                    bridgeName = downloadBridgeName,
+                    allowedOrigin = runtimeConfigRepository.localServiceUrl()
+                )
             },
             onDownloadRequested = { request -> hostIo.handlePageDownload(request) },
             onShowFileChooser = { intent, callback -> hostIo.launchFileChooser(intent, callback) },
@@ -160,6 +168,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         webViewHost.onDestroy()
         hostIo.cancelPendingFileChooser()
+        hostIo.blobDownloadController.close()
         super.onDestroy()
     }
 
@@ -211,9 +220,19 @@ class MainActivity : AppCompatActivity() {
                 onSaved = { fileName ->
                     Toast.makeText(this, getString(R.string.download_saved, fileName), Toast.LENGTH_SHORT).show()
                 },
-                onFailure = hostIo::showDownloadFailure
+                onFailure = hostIo::showDownloadFailure,
+                diagnosticSink = { body ->
+                    hostLogRepository.recordHostDiagnostic(category = "download", body = body)
+                }
             ),
             downloadBridgeName
+        )
+        // 角色导出这类 blob 下载要求在页面脚本执行前就接管 createObjectURL/blob 响应；
+        // 这里先注册 document-start 脚本，再由 pageFinished 对当前可见页面补打一遍。
+        hostIo.blobDownloadController.installBridgeScript(
+            webView = targetWebView,
+            bridgeName = downloadBridgeName,
+            allowedOrigin = runtimeConfigRepository.localServiceUrl()
         )
         // 浏览器通知统一走宿主桥，避免 Android WebView 里再退回不可用的 Notification API。
         targetWebView.addJavascriptInterface(

@@ -1,6 +1,9 @@
 package com.jm.sillydroid.feature.main.model.download
 
+import android.webkit.WebView
+
 data class BrowserDownloadRequest(
+    val sourceWebView: WebView,
     val url: String,
     val userAgent: String,
     val contentDisposition: String,
@@ -9,6 +12,7 @@ data class BrowserDownloadRequest(
 
 sealed interface BrowserDownloadResult {
     data class Started(val fileName: String) : BrowserDownloadResult
+    data class Delegated(val fileName: String) : BrowserDownloadResult
     data class Failed(val fileName: String, val message: String) : BrowserDownloadResult
 }
 
