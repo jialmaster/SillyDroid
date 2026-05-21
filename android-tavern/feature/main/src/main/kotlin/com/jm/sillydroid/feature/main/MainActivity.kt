@@ -2,15 +2,19 @@ package com.jm.sillydroid.feature.main
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.webkit.WebView
 import android.widget.Toast
+import androidx.annotation.ColorInt
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
+import com.jm.sillydroid.core.ui.window.SystemBarAppearanceController
 import com.jm.sillydroid.domain.app.SillyDroidAppGraph
 import com.jm.sillydroid.domain.app.SillyDroidAppGraphProvider
 import com.jm.sillydroid.domain.bootstrap.BootstrapController
@@ -61,12 +65,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webViewHost: TavernWebViewHost
     private lateinit var bootstrapOverlayHost: BootstrapOverlayHost
     private lateinit var systemBarInsetsController: SystemBarInsetsController
+    private var lastWebViewSystemBarsColorHex: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
         contentRoot = findViewById(R.id.contentRoot)
+        // 主界面刚启动时先显示 bootstrap overlay；系统栏先跟宿主遮罩底色走，
+        // 等 WebView 页面拿到真实背景色后再由页面桥持续同步过去。
+        applyHostSurfaceSystemBars()
 
         composeHosts()
         bootstrapOverlayHost.installAppUpdateCoordinator()
@@ -111,6 +119,7 @@ class MainActivity : AppCompatActivity() {
                     allowedOrigin = runtimeConfigRepository.localServiceUrl()
                 )
             },
+            restoreHostSystemBarAppearance = ::applyHostSurfaceSystemBars,
             onDownloadRequested = { request -> hostIo.handlePageDownload(request) },
             onShowFileChooser = { fileChooserParams, callback -> hostIo.launchFileChooser(fileChooserParams, callback) },
             jsErrorSink = ::recordDetailedWebViewJsError,
@@ -131,6 +140,7 @@ class MainActivity : AppCompatActivity() {
         systemBarInsetsController = SystemBarInsetsController(
             contentRoot = contentRoot,
             homeViewModel = homeViewModel,
+            displayModeProvider = { hostConfigStore.hostDisplayMode },
             onImeChanged = { visible -> webViewHost.onImeVisibilityChanged(visible) },
             onContentBoundsChanged = { floatingLogsHost.onContentBoundsChanged() }
         )
@@ -157,6 +167,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        reapplyCurrentSystemBars()
         floatingLogsHost.refreshVisibility()
         webViewHost.updateRefreshLayoutEnabled()
     }
@@ -257,11 +268,58 @@ class MainActivity : AppCompatActivity() {
                     hostConfigStore.webViewPullRefreshEnabled = enabled
                     webViewHost.updateRefreshLayoutEnabled()
                 },
+                applySystemBarsBackgroundColor = ::applyWebViewSurfaceSystemBars,
                 reloadTavern = { webViewHost.reloadTavernWebView(source = "android_host_bridge") },
                 hostVersionInfoJson = ::buildAndroidHostVersionInfoJson
             ),
             androidHostBridgeName
         )
+    }
+
+    private fun applyHostSurfaceSystemBars() {
+        applyMainSurfaceSystemBars(
+            backgroundColor = ContextCompat.getColor(this, R.color.bootstrap_overlay_background)
+        )
+    }
+
+    private fun applyWebViewSurfaceSystemBars(hexColor: String) {
+        lastWebViewSystemBarsColorHex = hexColor
+        val parsedColor = runCatching { Color.parseColor(hexColor.trim()) }
+            .getOrDefault(ContextCompat.getColor(this, R.color.tavern_webview_background))
+        applyMainSurfaceSystemBars(parsedColor)
+    }
+
+    private fun applyMainSurfaceSystemBars(@ColorInt backgroundColor: Int) {
+        // contentRoot 会为系统栏安全区留 padding；这块区域本身也必须跟着宿主/WebView 背景走，
+        // 否则即使系统栏颜色切对了，仍会看到一条宿主默认白底的空带。
+        contentRoot.setBackgroundColor(backgroundColor)
+        SystemBarAppearanceController.applyForColor(
+            activity = this,
+            mode = hostConfigStore.hostDisplayMode,
+            backgroundColor = backgroundColor
+        )
+        if (::systemBarInsetsController.isInitialized) {
+            systemBarInsetsController.refresh()
+        }
+    }
+
+    private fun reapplyCurrentSystemBars() {
+        // 从设置页返回主界面时，系统栏显示模式可能已经变化；
+        // 这里按“当前宿主实际显示的是启动遮罩还是 WebView 页面”重新应用一次，保证设置立即生效。
+        if (!::webViewHost.isInitialized || !webViewHost.webViewRefreshLayout.isShown) {
+            applyHostSurfaceSystemBars()
+            return
+        }
+
+        val webViewColor = lastWebViewSystemBarsColorHex
+        if (webViewColor.isNullOrBlank()) {
+            applyMainSurfaceSystemBars(
+                backgroundColor = ContextCompat.getColor(this, R.color.tavern_webview_background)
+            )
+            return
+        }
+
+        applyWebViewSurfaceSystemBars(webViewColor)
     }
 
     private fun buildAndroidHostVersionInfoJson(): String {
@@ -276,6 +334,7 @@ class MainActivity : AppCompatActivity() {
             .put("hostVersion", appGraph.appUpdateBuildConfig.hostVersion)
             .put("apkVersionName", packageInfo.versionName.orEmpty().trim())
             .put("apkVersionCode", packageInfo.longVersionCode.toString())
+            .put("hostDisplayMode", hostConfigStore.hostDisplayMode.name)
             .put("floatingLogBubbleEnabled", hostConfigStore.floatingLogBubbleEnabled)
             .put("webViewPullRefreshEnabled", hostConfigStore.webViewPullRefreshEnabled)
             .put("unrestrictedFileImportSelectionEnabled", hostConfigStore.unrestrictedFileImportSelectionEnabled)

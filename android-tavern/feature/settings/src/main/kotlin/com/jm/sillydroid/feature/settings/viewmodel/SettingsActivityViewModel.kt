@@ -2,6 +2,7 @@ package com.jm.sillydroid.feature.settings.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 import com.jm.sillydroid.feature.settings.model.SettingsTab
 import com.jm.sillydroid.feature.settings.model.SettingsActivityUiState
@@ -15,6 +16,7 @@ class SettingsActivityViewModel(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
         SettingsActivityUiState(
+            hostDisplayMode = hostPreferencesRepository.hostDisplayMode,
             floatingLogsEnabled = hostPreferencesRepository.floatingLogBubbleEnabled,
             pullRefreshEnabled = hostPreferencesRepository.webViewPullRefreshEnabled,
             debugDiagnosticsEnabled = hostPreferencesRepository.debugDiagnosticsEnabled,
@@ -35,6 +37,13 @@ class SettingsActivityViewModel(
             hostPreferencesRepository.floatingLogBubbleEnabled = enabled
         }
         _uiState.update { current -> current.copy(floatingLogsEnabled = enabled) }
+    }
+
+    fun setHostDisplayMode(mode: HostDisplayMode) {
+        if (hostPreferencesRepository.hostDisplayMode != mode) {
+            hostPreferencesRepository.hostDisplayMode = mode
+        }
+        _uiState.update { current -> current.copy(hostDisplayMode = mode) }
     }
 
     fun setPullRefreshEnabled(enabled: Boolean) {

@@ -15,6 +15,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.ViewModelProvider
+import com.google.android.material.R as MaterialR
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.DynamicColors
@@ -23,7 +24,9 @@ import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import com.jm.sillydroid.core.ui.window.SystemBarAppearanceController
 import com.jm.sillydroid.core.model.bootstrap.shouldPreferTavernServerLog
+import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.core.ui.scroll.DraggableScrollThumbController
 import com.jm.sillydroid.core.model.settings.SettingsNavigationContract
 import com.jm.sillydroid.domain.app.SillyDroidAppGraph
@@ -92,6 +95,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var quickFieldContainer: LinearLayout
     private lateinit var floatingLogsSwitch: MaterialSwitch
     private lateinit var pullRefreshSwitch: MaterialSwitch
+    private lateinit var displayModeRow: View
+    private lateinit var displayModeValueView: TextView
     private lateinit var debugDiagnosticsSwitch: MaterialSwitch
     private lateinit var unrestrictedFileImportSelectionSwitch: MaterialSwitch
     private lateinit var extensionsPanelView: View
@@ -198,6 +203,9 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_bootstrap_settings)
+        // 设置页顶部本来就是 Material surface；这里直接让系统栏跟 surface 颜色对齐，
+        // 避免浅色主题下出现白底白字，也避免顶部留一条和页面断开的系统底色。
+        applySettingsSurfaceSystemBars()
         bindViews()
         initializeControllers()
         stateController.initialize()
@@ -292,6 +300,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         quickFieldContainer = findViewById(R.id.bootstrapSettingsQuickFieldContainer)
         floatingLogsSwitch = findViewById(R.id.bootstrapSettingsFloatingLogsSwitch)
         pullRefreshSwitch = findViewById(R.id.bootstrapSettingsPullRefreshSwitch)
+        displayModeRow = findViewById(R.id.bootstrapSettingsDisplayModeRow)
+        displayModeValueView = findViewById(R.id.bootstrapSettingsDisplayModeValue)
         debugDiagnosticsSwitch = findViewById(R.id.bootstrapSettingsDebugDiagnosticsSwitch)
         unrestrictedFileImportSelectionSwitch = findViewById(R.id.bootstrapSettingsUnrestrictedFileImportSelectionSwitch)
         extensionsPanelView = findViewById(R.id.bootstrapSettingsExtensionsPanel)
@@ -362,6 +372,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             searchLayout = searchLayout,
             floatingLogsSwitch = floatingLogsSwitch,
             pullRefreshSwitch = pullRefreshSwitch,
+            hostDisplayModeRow = displayModeRow,
             unrestrictedFileImportSelectionSwitch = unrestrictedFileImportSelectionSwitch,
             restoreDefaultsButton = restoreDefaultsButton,
             importButton = importButton,
@@ -385,8 +396,11 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             viewModel = settingsActivityViewModel,
             floatingLogsSwitch = floatingLogsSwitch,
             pullRefreshSwitch = pullRefreshSwitch,
+            hostDisplayModeRow = displayModeRow,
+            hostDisplayModeValueView = displayModeValueView,
             debugDiagnosticsSwitch = debugDiagnosticsSwitch,
             unrestrictedFileImportSelectionSwitch = unrestrictedFileImportSelectionSwitch,
+            applyHostDisplayMode = ::applySettingsSurfaceSystemBars,
             renderResultFlags = ::renderResultFlags
         )
         aboutController = BootstrapSettingsAboutController(
@@ -537,5 +551,15 @@ class BootstrapSettingsActivity : AppCompatActivity() {
 
     private fun requestLogExport() {
         exportLogLauncher.launch(hostLogRepository.buildBundleFileName())
+    }
+
+    private fun applySettingsSurfaceSystemBars(mode: HostDisplayMode = hostConfigStore.hostDisplayMode) {
+        // 设置页本身也属于宿主界面；这里按用户选择的显示模式统一处理系统栏显示状态，
+        // 但背景继续跟随设置页 surface，避免切到设置页后出现和主界面无关的系统底色。
+        SystemBarAppearanceController.applyForThemeSurface(
+            activity = this,
+            mode = mode,
+            surfaceColorAttr = MaterialR.attr.colorSurfaceContainerLowest
+        )
     }
 }
