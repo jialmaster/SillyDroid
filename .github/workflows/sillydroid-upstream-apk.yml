@@ -830,6 +830,7 @@ jobs:
           path: ${{ needs.plan.outputs.apk_release_dir }}
 
       - name: Publish GitHub release
+        id: publish_release
         run: |
           set -euo pipefail
 
@@ -910,6 +911,7 @@ jobs:
           release_apk_asset="$release_dir/$release_asset_name"
           release_sha_asset="$release_dir/$release_asset_name.sha256"
           release_update_asset="$release_dir/${{ needs.plan.outputs.artifact_name }}.update.json"
+          site_release_action='published'
 
           if ! gh release view '${{ needs.plan.outputs.release_tag }}' --repo '${{ github.repository }}' > /dev/null 2>&1; then
             if [ -n "$prerelease_flag" ]; then
@@ -933,6 +935,7 @@ jobs:
                 "$release_update_asset"
             fi
           else
+            site_release_action='edited'
             # Existing releases keep the previous public assets until the replacement
             # files finish uploading; only then do we emit the post-upload edit event.
             gh release upload '${{ needs.plan.outputs.release_tag }}' \
@@ -947,6 +950,20 @@ jobs:
               --title '${{ needs.plan.outputs.release_title }}' \
               --notes-file "$release_notes_file" > /dev/null
           fi
+
+          printf 'site_release_action=%s\n' "$site_release_action" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch site release state publish
+        run: |
+          set -euo pipefail
+
+          # GitHub suppresses release-triggered workflow runs when the release is
+          # created or edited by this workflow's GITHUB_TOKEN. Dispatch the site
+          # state workflow explicitly after APK assets and update metadata exist.
+          gh workflow run sillydroid-site-release-state.yml \
+            --repo '${{ github.repository }}' \
+            --ref '${{ github.event.repository.default_branch }}' \
+            -f release_event_action='${{ steps.publish_release.outputs.site_release_action }}'
 
       - name: Append publish summary
         run: |

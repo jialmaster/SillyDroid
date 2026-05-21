@@ -2,6 +2,17 @@ name: SillyDroid Site Release State
 
 on:
   workflow_dispatch:
+    inputs:
+      release_event_action:
+        description: Manual trigger reason used in the generated site release state.
+        required: false
+        default: manual-rebuild
+        type: choice
+        options:
+          - published
+          - edited
+          - deleted
+          - manual-rebuild
   release:
     types:
       - published
@@ -27,7 +38,7 @@ jobs:
       - name: Build latest release state
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_EVENT_ACTION: ${{ github.event_name == 'release' && github.event.action || 'manual-rebuild' }}
+          RELEASE_EVENT_ACTION: ${{ github.event_name == 'release' && github.event.action || github.event.inputs.release_event_action || 'manual-rebuild' }}
         run: |
           set -euo pipefail
 
