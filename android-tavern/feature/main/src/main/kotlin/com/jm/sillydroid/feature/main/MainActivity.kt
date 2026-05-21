@@ -169,6 +169,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         reapplyCurrentSystemBars()
         floatingLogsHost.refreshVisibility()
+        webViewHost.onResume()
         webViewHost.updateRefreshLayoutEnabled()
     }
 

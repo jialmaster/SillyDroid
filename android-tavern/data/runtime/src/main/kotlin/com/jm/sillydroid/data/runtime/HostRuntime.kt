@@ -1118,22 +1118,6 @@ class ManagedProcess(
 }
 
 object ServerProcessJanitor {
-    private data class ProcInfo(
-        val pid: Int,
-        val ppid: Int,
-        val name: String,
-        val cmdline: String
-    ) {
-        fun isBootstrapServerProcess(): Boolean {
-            return name == "libproot.so" ||
-                cmdline.contains("libproot.so") ||
-                cmdline.contains("server.js") ||
-                cmdline.contains("start-server.sh") ||
-                cmdline.contains("tavern-entrypoint.sh") ||
-                cmdline.contains("/tavern/server")
-        }
-    }
-
     suspend fun cleanupLingeringServerProcesses(): Int {
         val processes = listOwnedProcesses()
         if (processes.isEmpty()) {
@@ -1173,49 +1157,6 @@ object ServerProcessJanitor {
         }
 
         return pidsToKill.size
-    }
-
-    private fun listOwnedProcesses(): List<ProcInfo> {
-        val currentPid = android.os.Process.myPid()
-        val currentUid = android.os.Process.myUid().toString()
-        return File("/proc").listFiles().orEmpty().mapNotNull { procDir ->
-            val pid = procDir.name.toIntOrNull() ?: return@mapNotNull null
-            if (pid == currentPid) {
-                return@mapNotNull null
-            }
-
-            val statusLines = runCatching {
-                File(procDir, "status").readLines()
-            }.getOrNull() ?: return@mapNotNull null
-
-            val uidLine = statusLines.firstOrNull { line -> line.startsWith("Uid:") } ?: return@mapNotNull null
-            val uid = uidLine.substringAfter(':').trim().substringBefore('\t').substringBefore(' ')
-            if (uid != currentUid) {
-                return@mapNotNull null
-            }
-
-            val name = statusLines.firstOrNull { line -> line.startsWith("Name:") }
-                ?.substringAfter(':')
-                ?.trim()
-                .orEmpty()
-            val ppid = statusLines.firstOrNull { line -> line.startsWith("PPid:") }
-                ?.substringAfter(':')
-                ?.trim()
-                ?.toIntOrNull()
-                ?: 0
-            val cmdline = readCmdline(File(procDir, "cmdline"))
-
-            ProcInfo(pid = pid, ppid = ppid, name = name, cmdline = cmdline)
-        }
-    }
-
-    private fun readCmdline(cmdlineFile: File): String {
-        return runCatching {
-            cmdlineFile.readBytes()
-                .toString(Charsets.UTF_8)
-                .replace('\u0000', ' ')
-                .trim()
-        }.getOrDefault("")
     }
 
     private fun sendSignal(pids: Iterable<Int>, signal: String) {

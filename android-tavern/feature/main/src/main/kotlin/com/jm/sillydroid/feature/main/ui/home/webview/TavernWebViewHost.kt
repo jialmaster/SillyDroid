@@ -130,17 +130,8 @@ class TavernWebViewHost(
             installJavascriptInterfaces = installJavascriptInterfaces,
             shouldOpenExternally = ::shouldOpenExternally,
             openExternalBrowser = ::openExternalBrowser,
-            onPageStarted = { sourceWebView, url ->
-                if (isCurrentWebViewInstance(sourceWebView)) {
-                    logActiveWebReloadTrace(phase = "page_started", url = url)
-                }
-            },
-            onPageCommitVisible = { sourceWebView, url ->
-                if (isCurrentWebViewInstance(sourceWebView)) {
-                    logActiveWebReloadTrace(phase = "page_commit_visible", url = url)
-                    cancelRestoredStateWatchdog()
-                }
-            },
+            onPageStarted = ::handleWebViewPageStarted,
+            onPageCommitVisible = ::handleWebViewPageCommitVisible,
             onPageFinished = ::handleWebViewPageFinished,
             isLocalTavernUrl = ::isLocalTavernUrl,
             onMainFrameLocalLoadError = ::scheduleLocalWebViewRetry,
@@ -409,6 +400,11 @@ class TavernWebViewHost(
         updateRefreshLayoutEnabled()
     }
 
+    fun onResume() {
+        // about:blank 白屏现场已经证明：不能只靠启动阶段判断，Activity 回前台时也要基于真实 WebView URL 复核一次。
+        ensureVisibleWebViewUrlHealth(trigger = "activity_resume")
+    }
+
     fun onTrimMemory(level: Int) {
         recordHostDiagnostic(
             category = "memory",
@@ -513,6 +509,23 @@ class TavernWebViewHost(
         }
     }
 
+    private fun handleWebViewPageStarted(sourceWebView: WebView, url: String?) {
+        if (!isCurrentWebViewInstance(sourceWebView)) {
+            return
+        }
+        logActiveWebReloadTrace(phase = "page_started", url = url)
+        ensureVisibleWebViewUrlHealth(trigger = "page_started", observedUrl = url)
+    }
+
+    private fun handleWebViewPageCommitVisible(sourceWebView: WebView, url: String?) {
+        if (!isCurrentWebViewInstance(sourceWebView)) {
+            return
+        }
+        logActiveWebReloadTrace(phase = "page_commit_visible", url = url)
+        cancelRestoredStateWatchdog()
+        ensureVisibleWebViewUrlHealth(trigger = "page_commit_visible", observedUrl = url)
+    }
+
     private fun handleWebViewPageFinished(sourceWebView: WebView, url: String?) {
         if (!isCurrentWebViewInstance(sourceWebView)) {
             Log.w(
@@ -535,6 +548,7 @@ class TavernWebViewHost(
             homeViewModel.loadedUrl = url
             homeViewModel.pendingLocalRetryAttempts = 0
         }
+        ensureVisibleWebViewUrlHealth(trigger = "page_finished", observedUrl = url)
         clearActiveWebReloadTrace()
     }
 
@@ -744,6 +758,56 @@ class TavernWebViewHost(
         }
     }
 
+    private fun ensureVisibleWebViewUrlHealth(trigger: String, observedUrl: String? = null) {
+        if (!processManager.currentSnapshot().isReady) {
+            return
+        }
+        if (!webView.isVisible || !webViewRefreshLayout.isVisible || bootstrapOverlay.isVisible) {
+            return
+        }
+        if (activity.isFinishing || activity.isDestroyed) {
+            return
+        }
+        // restoreState 刚接管的那几秒由恢复态 watchdog 负责判断 commit-visible，
+        // 这里不抢跑，避免还原 back/forward stack 期间被新的 loadUrl 覆盖掉。
+        if (restoredWebViewWatchdog.isScheduled) {
+            return
+        }
+
+        val expectedBaseUrl = runtimeConfigRepository.localServiceUrl()
+        val currentUrl = webView.url.orEmpty().trim()
+        if (hasLoadedCurrentWebViewPageForBaseUrl(currentUrl, expectedBaseUrl)) {
+            return
+        }
+
+        // 正常 local 页面刚开始 load 时，WebView 可能短暂还没把 url 暴露出来；
+        // 这时先让当前 navigation 继续，避免回前台或 pageStarted 初期重复发 loadUrl。
+        if (currentUrl.isBlank() && webView.progress in 1..99) {
+            return
+        }
+
+        val recoveryUrl = resolveInitialTavernUrl(
+            baseUrl = expectedBaseUrl,
+            rememberedUrl = homeViewModel.loadedUrl
+        )
+        recordHostDiagnostic(
+            category = "webview",
+            body = buildString {
+                append("event=unexpected_visible_webview_url")
+                append(" trigger=$trigger")
+                append(" action=load_url")
+                append(" observedUrl=${normalizeDiagnosticValue(observedUrl)}")
+                append(" targetUrl=${normalizeDiagnosticValue(recoveryUrl)}")
+                append(" expectedBaseUrl=${normalizeDiagnosticValue(buildInitialTavernUrl(expectedBaseUrl))}")
+                append(" currentScheme=${normalizeDiagnosticValue(Uri.parse(currentUrl.ifBlank { "about:blank" }).scheme)}")
+                append(' ')
+                append(currentWebViewDiagnosticState())
+            }
+        )
+        homeViewModel.loadedUrl = recoveryUrl
+        webView.loadUrl(recoveryUrl)
+    }
+
     private fun scheduleLocalWebViewRetry(failingUrl: String) {
         if (homeViewModel.pendingLocalRetryAttempts >= 5) {
             // 估计是服务侧長期起不来；交给 startup overlay 接手，不再闪烁。
@@ -825,13 +889,13 @@ class TavernWebViewHost(
     }
 
     private fun isCurrentWebViewPageFor(baseUrl: String): Boolean {
-        val currentUrl = webView.url.orEmpty().ifBlank { homeViewModel.loadedUrl }
-        if (currentUrl.isBlank()) {
-            return false
-        }
-
-        // 回到前台时只要 WebView 还停留在同一个本地 Tavern 站点，就复用现有页面，避免再次 loadUrl 触发前端初始化。
-        return isTavernUrlForBaseUrl(currentUrl, baseUrl)
+        // 这里必须只看“当前这一个真实 WebView 实例”已经加载出的 URL。
+        // 如果新建出来的 WebView 还停在 about:blank，却拿 rememberedUrl 当 currentUrl，
+        // 会误判成“页面已在当前站点”并跳过 loadUrl，最终把整页永久留在空白文档。
+        return hasLoadedCurrentWebViewPageForBaseUrl(
+            currentWebViewUrl = webView.url.orEmpty(),
+            baseUrl = baseUrl
+        )
     }
 
     private fun currentKnownWebViewUrl(): String {
@@ -996,6 +1060,7 @@ class TavernWebViewHost(
             append(" webViewWidth=${webView.width}")
             append(" webViewHeight=${webView.height}")
             append(" webViewContentHeight=${webView.contentHeight}")
+            append(" webViewProgress=${webView.progress}")
             append(" webViewScale=${resolveWebViewScale()}")
             append(" webViewLayerType=${resolveViewLayerTypeName(webView.layerType)}")
         }
@@ -1039,6 +1104,17 @@ internal fun resolveInitialTavernUrl(baseUrl: String, rememberedUrl: String): St
     } else {
         buildInitialTavernUrl(baseUrl)
     }
+}
+
+internal fun hasLoadedCurrentWebViewPageForBaseUrl(currentWebViewUrl: String, baseUrl: String): Boolean {
+    val trimmedCurrentWebViewUrl = currentWebViewUrl.trim()
+    if (trimmedCurrentWebViewUrl.isBlank()) {
+        return false
+    }
+
+    // “当前页已加载”判断只允许基于真实 WebView URL 成立；
+    // rememberedUrl 仍然只用于“下一次该 load 什么 URL”，不能反过来冒充当前已渲染页面。
+    return isTavernUrlForBaseUrl(trimmedCurrentWebViewUrl, baseUrl)
 }
 
 internal fun isTavernUrlForBaseUrl(url: String, baseUrl: String): Boolean {

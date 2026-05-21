@@ -23,23 +23,10 @@ class AssetRuntimeMetadataRepository(context: Context) : RuntimeMetadataReposito
             return directVersion
         }
 
-        val baseFlavor = manifest.optMeaningfulString("baseFlavor").ifBlank {
-            if (manifest.has("ubuntuBaseVersion") || manifest.has("ubuntuBaseUrl")) {
-                "ubuntu"
-            } else {
-                ""
-            }
-        }
-        val baseVersion = manifest.optMeaningfulString("baseVersion").ifBlank {
-            manifest.optMeaningfulString("ubuntuBaseVersion")
-        }.ifBlank {
-            extractFirstGroup(
-                source = manifest.optMeaningfulString("baseSourceUrl").ifBlank {
-                    manifest.optMeaningfulString("ubuntuBaseUrl")
-                },
-                pattern = """ubuntu-base-([0-9][0-9.]+)-base-arm64\.tar\.gz"""
-            )
-        }
+        // 当前宿主只认 termux rootfs manifest 结构：baseFlavor/baseVersion/baseSourceUrl/prootVersion。
+        // 历史 ubuntuBase* 兼容已移除，避免运行时版本解析继续暗示旧基线仍被支持。
+        val baseFlavor = manifest.optMeaningfulString("baseFlavor")
+        val baseVersion = manifest.optMeaningfulString("baseVersion")
         val prootVersion = manifest.optMeaningfulString("prootVersion").ifBlank {
             extractFirstGroup(
                 source = manifest.optMeaningfulString("prootPackageUrl"),
@@ -49,7 +36,7 @@ class AssetRuntimeMetadataRepository(context: Context) : RuntimeMetadataReposito
 
         val baseLabel = when {
             baseVersion.isBlank() -> ""
-            baseFlavor.isBlank() || baseFlavor.equals("ubuntu", ignoreCase = true) -> baseVersion
+            baseFlavor.isBlank() -> baseVersion
             else -> "$baseFlavor.$baseVersion"
         }
 

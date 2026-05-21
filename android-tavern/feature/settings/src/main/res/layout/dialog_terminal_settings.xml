@@ -18,55 +18,132 @@
             android:layout_height="wrap_content"
             android:text="@string/bootstrap_settings_terminal_settings_summary"
             android:textColor="?attr/colorOnSurfaceVariant"
-            android:textSize="13sp" />
+            android:textSize="10sp" />
 
-        <LinearLayout
+        <!-- 终端设置项沿用启动设置页的嵌套卡片规格，避免弹窗里混入原生控件默认高度后看起来一块大一块小。 -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.SillyDroid.SettingsNestedCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/sillydroid_space_md"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:layout_marginTop="@dimen/sillydroid_space_md">
 
-            <TextView
-                android:layout_width="0dp"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/bootstrap_settings_terminal_settings_font_size_label"
-                android:textColor="?attr/colorOnSurface"
-                android:textSize="14sp"
-                android:textStyle="bold" />
+                android:orientation="vertical"
+                android:padding="@dimen/sillydroid_panel_padding">
 
-            <TextView
-                android:id="@+id/terminalSettingsFontSizeValue"
-                android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/TextAppearance.SillyDroid.SettingsCardTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/bootstrap_settings_terminal_settings_font_size_label"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/terminalSettingsFontSizeValue"
+                        style="@style/TextAppearance.SillyDroid.SettingsCardTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="?attr/colorPrimary"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/terminalSettingsFontSizeSlider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/sillydroid_space_xs_half"
+                    app:haloRadius="18dp"
+                    app:labelBehavior="gone"
+                    app:thumbRadius="10dp"
+                    app:trackHeight="4dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.SillyDroid.SettingsNestedCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/sillydroid_space_md">
+
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/sillydroid_panel_padding"
+                android:paddingTop="@dimen/sillydroid_panel_padding"
+                android:paddingEnd="@dimen/sillydroid_panel_padding"
+                android:paddingBottom="@dimen/sillydroid_panel_padding">
 
-        <com.google.android.material.slider.Slider
-            android:id="@+id/terminalSettingsFontSizeSlider"
+                <TextView
+                    style="@style/TextAppearance.SillyDroid.SettingsCardTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/bootstrap_settings_terminal_settings_cursor_blink_label"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/terminalSettingsCursorBlinkSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/sillydroid_space_md"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:scaleX="0.68"
+                    android:scaleY="0.68"
+                    android:showText="false" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.SillyDroid.SettingsNestedCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/sillydroid_space_xs_half"
-            app:haloRadius="18dp"
-            app:labelBehavior="gone"
-            app:thumbRadius="10dp"
-            app:trackHeight="4dp" />
+            android:layout_marginTop="@dimen/sillydroid_space_md">
 
-        <com.google.android.material.materialswitch.MaterialSwitch
-            android:id="@+id/terminalSettingsCursorBlinkSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/sillydroid_space_sm"
-            android:text="@string/bootstrap_settings_terminal_settings_cursor_blink_label" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/sillydroid_panel_padding"
+                android:paddingTop="@dimen/sillydroid_panel_padding"
+                android:paddingEnd="@dimen/sillydroid_panel_padding"
+                android:paddingBottom="@dimen/sillydroid_panel_padding">
 
-        <com.google.android.material.materialswitch.MaterialSwitch
-            android:id="@+id/terminalSettingsExtraKeysSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/bootstrap_settings_terminal_settings_extra_keys_label" />
+                <TextView
+                    style="@style/TextAppearance.SillyDroid.SettingsCardTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/bootstrap_settings_terminal_settings_extra_keys_label"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/terminalSettingsExtraKeysSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/sillydroid_space_md"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:scaleX="0.68"
+                    android:scaleY="0.68"
+                    android:showText="false" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <TextView
             android:layout_width="match_parent"
@@ -74,24 +151,29 @@
             android:layout_marginTop="@dimen/sillydroid_space_sm"
             android:text="@string/bootstrap_settings_terminal_settings_preview_label"
             android:textColor="?attr/colorOnSurfaceVariant"
-            android:textSize="12sp"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/terminalSettingsPreview"
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.SillyDroid.SettingsNestedCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/sillydroid_space_xs_half"
-            android:background="@drawable/bg_bootstrap_settings_nested_surface_rounded"
-            android:padding="@dimen/sillydroid_panel_padding"
-            android:text="@string/bootstrap_settings_terminal_settings_preview_text"
-            android:textColor="?attr/colorOnSurface"
-            android:textSize="16sp" />
+            android:layout_marginTop="@dimen/sillydroid_space_xs_half">
+
+            <TextView
+                android:id="@+id/terminalSettingsPreview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="@dimen/sillydroid_panel_padding"
+                android:text="@string/bootstrap_settings_terminal_settings_preview_text"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="16sp" />
+        </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/terminalSettingsResetButton"
             style="@style/Widget.SillyDroid.SettingsButton.Outlined"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/sillydroid_space_md"
             android:text="@string/bootstrap_settings_terminal_settings_reset_default" />

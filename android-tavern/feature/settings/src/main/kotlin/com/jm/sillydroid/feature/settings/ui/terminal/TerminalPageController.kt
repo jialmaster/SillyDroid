@@ -16,10 +16,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.R as MaterialR
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.button.MaterialButton
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 import com.jm.sillydroid.feature.settings.R
 import com.jm.sillydroid.feature.settings.model.SettingsTab
+import com.termux.terminal.TextStyle
 import com.termux.view.TerminalView
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -101,6 +104,7 @@ class TerminalPageController(
         // 因此这里必须先绑定 TerminalViewClient，再做任何可能访问 mClient 的初始化调用，
         // 否则设置页一打开就会因为空 client 直接崩溃。
         terminalViewClient.initialize()
+        applyTerminalThemeColors()
         applyTerminalFontSize(hostPreferencesRepository.terminalFontSizePx)
         applyTerminalCursorBlinkSettings(hostPreferencesRepository.terminalCursorBlinkEnabled)
 
@@ -186,6 +190,7 @@ class TerminalPageController(
                 }
 
                 session.attach(terminalView, terminalSessionClient)
+                applyTerminalThemeColors()
                 terminalView.onScreenUpdated()
                 terminalViewClient.attachToVisibleTerminal(showKeyboard = false)
                 applyTerminalCursorBlinkSettings(hostPreferencesRepository.terminalCursorBlinkEnabled)
@@ -201,6 +206,24 @@ class TerminalPageController(
     private fun applyTerminalFontSize(fontSizePx: Int) {
         terminalView.setTextSize(fontSizePx)
         terminalView.onScreenUpdated()
+    }
+
+    /**
+     * 设置页终端在浅色主题下不能继续吃 Termux 默认的深色终端色表，
+     * 否则会出现浅色面板上仍是白色默认前景、用户几乎看不见输出。
+     * 这里只同步“默认前景/背景/光标”三个基础色，保留 ANSI 颜色语义本身不被宿主改写。
+     */
+    private fun applyTerminalThemeColors() {
+        val backgroundColor = resolveThemeColor(MaterialR.attr.colorSurfaceContainerLow)
+        val foregroundColor = resolveThemeColor(MaterialR.attr.colorOnSurface)
+        val cursorColor = resolveThemeColor(MaterialR.attr.colorPrimary)
+        terminalView.setBackgroundColor(backgroundColor)
+        terminalView.currentSession?.emulator?.mColors?.mCurrentColors?.let { colors ->
+            colors[TextStyle.COLOR_INDEX_BACKGROUND] = backgroundColor
+            colors[TextStyle.COLOR_INDEX_FOREGROUND] = foregroundColor
+            colors[TextStyle.COLOR_INDEX_CURSOR] = cursorColor
+        }
+        terminalView.invalidate()
     }
 
     // 光标闪烁配置需要同时控制 blinker rate 和当前可见态；
@@ -443,5 +466,9 @@ class TerminalPageController(
 
     private fun clearArmedModifiers() {
         updateExtraKeysState(extraKeysState.clear())
+    }
+
+    private fun resolveThemeColor(attrRes: Int, fallback: Int = 0): Int {
+        return MaterialColors.getColor(activity, attrRes, fallback)
     }
 }
