@@ -59,6 +59,7 @@ class BootstrapSessionManager(
     }
 
     private val appContext = context.applicationContext
+    private val serverPortOccupancyInspector = ServerPortOccupancyInspector()
     private val startupLogWriter by lazy(LazyThreadSafetyMode.NONE) {
         runtimeLogs.openStartupAsyncWriter()
     }
@@ -409,6 +410,25 @@ class BootstrapSessionManager(
                 result = BootstrapStepResult.SUCCESS,
                 details = "bootstrap 目录结构与 Android DNS 配置校验通过。"
             )
+
+            // 用户要求保留“先解压/准备 Tavern，再决定是否继续拉起进程”的语义；
+            // 因此端口占用检查必须放在资产准备与布局校验之后、正式启动 server 之前。
+            when (val portOccupancy = serverPortOccupancyInspector.inspect(servicePort)) {
+                is ServerPortOccupancy.Free -> Unit
+                is ServerPortOccupancy.OccupiedByThisApp -> {
+                    appendStartupLog(
+                        "Configured Tavern port ${portOccupancy.port} is already owned by this app: " +
+                            "pid=${portOccupancy.process.pid} name=${portOccupancy.process.name} " +
+                            "bootstrap=${portOccupancy.recognizedAsBootstrapServer}"
+                    )
+                }
+                is ServerPortOccupancy.OccupiedByOtherProcess -> {
+                    pauseStartupForConfigIntervention(
+                        details = portOccupancy.details
+                    )
+                    return
+                }
+            }
 
             val launcher = LinuxRuntimeLauncher(paths)
             startStep(
@@ -775,6 +795,33 @@ class BootstrapSessionManager(
                 appSessionId = snapshot.appSessionId,
                 attemptId = snapshot.attemptId,
                 happenedAtMillis = nowMillis,
+                lifecycle = snapshot.lifecycle
+            )
+        }
+    }
+
+    /**
+     * 这里不是“启动失败”，而是命中需要用户干预的配置冲突：
+     * 保留已完成的解压/校验结果，停在 CONFIGURING，让用户改完配置后可直接 resume。
+     */
+    private fun pauseStartupForConfigIntervention(details: String) {
+        stopReadyWatchdog(reason = "pausing bootstrap for configuration intervention")
+        healthMonitor.stopServerMonitor()
+        resetAutoRestartBudget()
+        publishSnapshot(
+            currentSnapshot.copy(
+                lifecycle = BootstrapLifecycle.CONFIGURING,
+                currentStepId = null,
+                statusMessage = "已暂停启动，请调整 Tavern 配置。",
+                statusDetails = details
+            ),
+            logLine = "lifecycle=${BootstrapLifecycle.CONFIGURING} details=$details"
+        )
+        emitEvent { snapshot ->
+            BootstrapEvent.SessionFinished(
+                appSessionId = snapshot.appSessionId,
+                attemptId = snapshot.attemptId,
+                happenedAtMillis = System.currentTimeMillis(),
                 lifecycle = snapshot.lifecycle
             )
         }

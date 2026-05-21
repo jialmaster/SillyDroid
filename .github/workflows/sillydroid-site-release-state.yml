@@ -10,59 +10,69 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: sillydroid-site-release-state
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  publish-release-state:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - name: Checkout default branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.repository.default_branch }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: site/.node-version
-          cache: npm
-          cache-dependency-path: site/package-lock.json
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Install site dependencies
-        working-directory: site
-        run: npm ci
-
-      - name: Sync latest release state
+      - name: Build latest release state
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_EVENT_ACTION: ${{ github.event_name == 'release' && github.event.action || 'manual-rebuild' }}
         run: |
           set -euo pipefail
 
-          node ./site/scripts/sync-latest-release-state.mjs \
+          bash ./scripts/publish-sillydroid-site-release-state.sh \
             --repository '${{ github.repository }}' \
-            --event-action '${{ github.event.action }}' \
-            --output './site/src/content/releaseState/latest-release.json'
+            --event-action "$RELEASE_EVENT_ACTION" \
+            --output "$RUNNER_TEMP/latest-release.json"
 
-      - name: Build site
-        working-directory: site
-        run: npm run build
+      - name: Upload latest release state to site server
+        env:
+          SILLYDROID_SITE_SSH_HOST: ${{ secrets.SILLYDROID_SITE_SSH_HOST }}
+          SILLYDROID_SITE_SSH_PORT: ${{ secrets.SILLYDROID_SITE_SSH_PORT }}
+          SILLYDROID_SITE_SSH_USER: ${{ secrets.SILLYDROID_SITE_SSH_USER }}
+          SILLYDROID_SITE_SSH_KEY: ${{ secrets.SILLYDROID_SITE_SSH_KEY }}
+          SILLYDROID_SITE_RELEASE_STATE_PATH: ${{ secrets.SILLYDROID_SITE_RELEASE_STATE_PATH }}
+        run: |
+          set -euo pipefail
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site/dist
+          for variable_name in SILLYDROID_SITE_SSH_HOST SILLYDROID_SITE_SSH_USER SILLYDROID_SITE_SSH_KEY SILLYDROID_SITE_RELEASE_STATE_PATH; do
+            if [ -z "${!variable_name:-}" ]; then
+              echo "Missing required GitHub Actions secret: $variable_name" >&2
+              exit 1
+            fi
+          done
 
-      - name: Deploy Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
+          ssh_port="${SILLYDROID_SITE_SSH_PORT:-22}"
+          ssh_root="$RUNNER_TEMP/sillydroid-site-ssh"
+          mkdir -p "$ssh_root"
+          chmod 700 "$ssh_root"
+          printf '%s\n' "$SILLYDROID_SITE_SSH_KEY" > "$ssh_root/id_key"
+          chmod 600 "$ssh_root/id_key"
+
+          remote_dir="$(dirname "$SILLYDROID_SITE_RELEASE_STATE_PATH")"
+          ssh_common_options=(
+            -i "$ssh_root/id_key"
+            -p "$ssh_port"
+            -o StrictHostKeyChecking=accept-new
+            -o IdentitiesOnly=yes
+          )
+          scp_common_options=(
+            -i "$ssh_root/id_key"
+            -P "$ssh_port"
+            -o StrictHostKeyChecking=accept-new
+            -o IdentitiesOnly=yes
+          )
+
+          ssh "${ssh_common_options[@]}" "$SILLYDROID_SITE_SSH_USER@$SILLYDROID_SITE_SSH_HOST" "mkdir -p '$remote_dir'"
+          scp "${scp_common_options[@]}" "$RUNNER_TEMP/latest-release.json" "$SILLYDROID_SITE_SSH_USER@$SILLYDROID_SITE_SSH_HOST:$SILLYDROID_SITE_RELEASE_STATE_PATH"

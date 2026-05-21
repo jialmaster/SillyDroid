@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ubuntu_base_url='https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz'
-ubuntu_ports_base_url='https://ports.ubuntu.com/ubuntu-ports'
 proot_package_url='https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107-70_aarch64.deb'
 proot_source_url='https://github.com/termux/proot/archive/4dba3afbf3a63af89b4d9c1a59bf2bda10f4d10f.zip'
 termux_packages_index_url='https://packages.termux.dev/apt/termux-main/dists/stable/main/binary-aarch64/Packages'
@@ -98,48 +96,9 @@ print("\n".join(items))
 PY
 }
 
-offline_runtime_packages=(
-    ca-certificates
-    libfontconfig1
-    libgomp1
-    libgssapi-krb5-2
-)
-
-apt_repo_names=(
-    ubuntu-security-main
-    ubuntu-updates-main
-    ubuntu-main
-    ubuntu-security-universe
-    ubuntu-updates-universe
-    ubuntu-universe
-)
-
-apt_repo_urls=(
-    "$ubuntu_ports_base_url/dists/noble-security/main/binary-arm64/Packages.gz"
-    "$ubuntu_ports_base_url/dists/noble-updates/main/binary-arm64/Packages.gz"
-    "$ubuntu_ports_base_url/dists/noble/main/binary-arm64/Packages.gz"
-    "$ubuntu_ports_base_url/dists/noble-security/universe/binary-arm64/Packages.gz"
-    "$ubuntu_ports_base_url/dists/noble-updates/universe/binary-arm64/Packages.gz"
-    "$ubuntu_ports_base_url/dists/noble/universe/binary-arm64/Packages.gz"
-)
-
-apt_repo_bases=(
-    "$ubuntu_ports_base_url"
-    "$ubuntu_ports_base_url"
-    "$ubuntu_ports_base_url"
-    "$ubuntu_ports_base_url"
-    "$ubuntu_ports_base_url"
-    "$ubuntu_ports_base_url"
-)
-
 declare -A termux_filename_by_package=()
 declare -A termux_depends_by_package=()
 declare -A termux_repo_by_package=()
-
-declare -A apt_filename_by_package=()
-declare -A apt_depends_by_package=()
-declare -A apt_predepends_by_package=()
-declare -A apt_repo_by_package=()
 
 usage() {
     cat <<'EOF'
@@ -686,28 +645,6 @@ load_termux_package_table() {
     done < <(parse_packages_index_records "$packages_index_path" "$repository_base_url")
 }
 
-add_apt_package_entries_from_index() {
-    local packages_index_path="$1"
-    local repository_base_url="$2"
-    local pkg
-    local filename
-    local depends
-    local predepends
-    local repo
-
-    while IFS=$'\x1f' read -r pkg filename depends predepends repo; do
-        [[ -z "$pkg" ]] && continue
-        if [[ -n "${apt_filename_by_package[$pkg]:-}" ]]; then
-            continue
-        fi
-
-        apt_filename_by_package["$pkg"]="$filename"
-        apt_depends_by_package["$pkg"]="$depends"
-        apt_predepends_by_package["$pkg"]="$predepends"
-        apt_repo_by_package["$pkg"]="$repo"
-    done < <(parse_packages_index_records "$packages_index_path" "$repository_base_url")
-}
-
 normalize_dependency_names() {
     local depends_value
     local dependency_group
@@ -752,34 +689,6 @@ resolve_termux_package_dependencies() {
         while IFS= read -r dependency_name; do
             [[ -n "$dependency_name" && -z "${seen[$dependency_name]:-}" ]] && queue+=("$dependency_name")
         done < <(normalize_dependency_names "${termux_depends_by_package[$package_name]:-}")
-    done
-
-    printf '%s\n' "${resolved[@]}"
-}
-
-resolve_apt_package_dependencies() {
-    local queue=("$@")
-    local -A seen=()
-    local resolved=()
-    local package_name
-    local dependency_name
-
-    while (( ${#queue[@]} > 0 )); do
-        package_name="${queue[0]}"
-        queue=("${queue[@]:1}")
-
-        [[ -z "$package_name" || -n "${seen[$package_name]:-}" ]] && continue
-        if [[ -z "${apt_filename_by_package[$package_name]:-}" ]]; then
-            echo "Unable to locate apt package entry for $package_name" >&2
-            exit 1
-        fi
-
-        seen["$package_name"]=1
-        resolved+=("$package_name")
-
-        while IFS= read -r dependency_name; do
-            [[ -n "$dependency_name" && -z "${seen[$dependency_name]:-}" ]] && queue+=("$dependency_name")
-        done < <(normalize_dependency_names "${apt_predepends_by_package[$package_name]:-}" "${apt_depends_by_package[$package_name]:-}")
     done
 
     printf '%s\n' "${resolved[@]}"
@@ -899,7 +808,6 @@ host_prefix_archive_path="$resolved_target_root/rootfs-usr.zip"
 proot_package_path="$downloads_root/$(basename "$proot_package_url")"
 proot_source_archive_path="$downloads_root/$(basename "$proot_source_url")"
 termux_packages_index_path="$downloads_root/$(basename "$termux_packages_index_url")"
-ubuntu_archive_path="$downloads_root/$(basename "$ubuntu_base_url")"
 
 existing_manifest_path="$resolved_target_root/rootfs-manifest.json"
 if [[ -f "$existing_manifest_path" ]] \
@@ -1050,10 +958,7 @@ manifest_path="$resolved_target_root/rootfs-manifest.json"
     printf '  "baseFlavor": "termux",\n'
     printf '  "baseVersion": "%s",\n' "$(json_escape "$termux_base_version")"
     printf '  "baseSourceUrl": "%s",\n' "$(json_escape "$termux_packages_index_url")"
-    printf '  "ubuntuBaseVersion": "",\n'
     printf '  "prootVersion": "%s",\n' "$(json_escape "$proot_package_version")"
-    printf '  "ubuntuBaseUrl": "",\n'
-    printf '  "ubuntuPortsBaseUrl": "",\n'
     printf '  "prootPackageUrl": "%s",\n' "$(json_escape "$proot_package_url")"
     printf '  "prootSourceUrl": "%s",\n' "$(json_escape "$proot_source_url")"
     printf '  "prootPatchSignature": "%s",\n' "$(json_escape "$proot_patch_signature")"

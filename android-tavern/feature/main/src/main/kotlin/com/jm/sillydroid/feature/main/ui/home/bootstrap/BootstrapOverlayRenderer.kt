@@ -58,7 +58,11 @@ class BootstrapOverlayRenderer(
             snapshot.statusMessage
         }
         val baseDetails = if (snapshot.lifecycle == BootstrapLifecycle.CONFIGURING) {
-            text.pausedDetails()
+            // CONFIGURING 不止可能来自“主动进设置”，也可能来自启动期暂停；
+            // 因此除了固定引导文案，还要把 runtime 给出的暂停原因继续展示出来。
+            listOf(text.pausedDetails(), snapshot.statusDetails)
+                .filter { detail -> detail.isNotBlank() }
+                .joinToString(separator = "\n")
         } else {
             snapshot.statusDetails
         }

@@ -2,6 +2,7 @@ package com.jm.sillydroid.data.logs
 
 import com.jm.sillydroid.data.settings.HostConfigSnapshot
 import com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition
+import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -28,7 +29,7 @@ class HostLogBundleInfoFormatterTest {
             webViewPackageName = "com.google.android.webview",
             webViewVersionName = "136.0.7103.125",
             webViewVersionCode = "710312500",
-            rootfsManifestRawJson = """{"runtimeVersion":"24.04+proot.5.4.0","baseFlavor":"ubuntu"}""",
+            rootfsManifestRawJson = """{"runtimeVersion":"1.0.0","baseFlavor":"termux","baseVersion":"stable-dash.0.5.12-2"}""",
             serverManifestRawJson = """{"tag":"1.18.0","nodeVersion":"22.14.0"}""",
             hostConfigSnapshot = sampleHostConfigSnapshot(),
             rootfsVersion = "24.04+proot.5.4.0",
@@ -122,7 +123,7 @@ class HostLogBundleInfoFormatterTest {
             webViewPackageName = "com.google.android.webview",
             webViewVersionName = "136.0.7103.125",
             webViewVersionCode = "710312500",
-            rootfsManifestRawJson = """{"runtimeVersion":"24.04+proot.5.4.0","baseFlavor":"ubuntu"}""",
+            rootfsManifestRawJson = """{"runtimeVersion":"1.0.0","baseFlavor":"termux","baseVersion":"stable-dash.0.5.12-2"}""",
             serverManifestRawJson = """{"tag":"1.18.0","nodeVersion":"22.14.0"}""",
             hostConfigSnapshot = sampleHostConfigSnapshot(),
             rootfsVersion = "24.04+proot.5.4.0",
@@ -141,7 +142,7 @@ class HostLogBundleInfoFormatterTest {
         assertTrue(bundleInfoJson.contains("\"webView\": {"))
         assertTrue(bundleInfoJson.contains("\"versionName\": \"136.0.7103.125\""))
         assertTrue(bundleInfoJson.contains("\"rootfsVersion\": \"24.04+proot.5.4.0\""))
-        assertTrue(bundleInfoJson.contains("\"rootfsManifest\": {\"runtimeVersion\":\"24.04+proot.5.4.0\",\"baseFlavor\":\"ubuntu\"}"))
+        assertTrue(bundleInfoJson.contains("\"rootfsManifest\": {\"runtimeVersion\":\"1.0.0\",\"baseFlavor\":\"termux\",\"baseVersion\":\"stable-dash.0.5.12-2\"}"))
         assertTrue(bundleInfoJson.contains("\"serverManifest\": {\"tag\":\"1.18.0\",\"nodeVersion\":\"22.14.0\"}"))
         assertTrue(bundleInfoJson.contains("\"hostConfig\": {"))
         assertTrue(bundleInfoJson.contains("\"snapshotPolicy\": \"explicit-host-preferences-only\""))
@@ -162,8 +163,10 @@ class HostLogBundleInfoFormatterTest {
             storageName = "bootstrap-host-config",
             snapshotPolicy = "explicit-host-preferences-only",
             servicePort = 8000,
+            hostDisplayMode = HostDisplayMode.NORMAL,
             webViewPullRefreshEnabled = true,
             debugDiagnosticsEnabled = false,
+            unrestrictedFileImportSelectionEnabled = false,
             terminalFontSizePx = 16,
             terminalCursorBlinkEnabled = true,
             terminalExtraKeysEnabled = true,
