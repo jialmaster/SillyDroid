@@ -1,5 +1,6 @@
 package com.jm.sillydroid.data.runtime
 
+import android.content.pm.ApplicationInfo
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import org.junit.Assert.assertEquals
@@ -123,10 +124,134 @@ class ConsoleRuntimeRepositoryTest {
             rootDirectory.deleteRecursively()
         }
     }
+
+    @Test
+    fun `selectHostRuntimeDirectory keeps native directory when package manager extracted host runtime`() {
+        val rootDirectory = createTempTestDirectory(prefix = "host-runtime-native")
+        try {
+            val nativeHostLibDir = File(rootDirectory, "native").apply {
+                mkdirs()
+                writeHostRuntimeFiles()
+            }
+            val packageHostLibDir = File(rootDirectory, "package/lib/arm64")
+
+            assertEquals(
+                nativeHostLibDir,
+                selectHostRuntimeDirectory(
+                    nativeHostLibDir = nativeHostLibDir,
+                    packageHostLibDirs = listOf(packageHostLibDir),
+                    forcePackageHostRuntime = false
+                )
+            )
+        } finally {
+            rootDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `selectHostRuntimeDirectory uses package lib directory when native directory is incomplete`() {
+        val rootDirectory = createTempTestDirectory(prefix = "host-runtime-package")
+        try {
+            val nativeHostLibDir = File(rootDirectory, "native").apply {
+                mkdirs()
+                File(this, "libproot.so").writeText("missing loader and talloc")
+            }
+            val packageHostLibDir = File(rootDirectory, "package/lib/arm64").apply {
+                mkdirs()
+                writeHostRuntimeFiles()
+            }
+
+            assertEquals(
+                packageHostLibDir,
+                selectHostRuntimeDirectory(
+                    nativeHostLibDir = nativeHostLibDir,
+                    packageHostLibDirs = listOf(packageHostLibDir),
+                    forcePackageHostRuntime = false
+                )
+            )
+        } finally {
+            rootDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `selectHostRuntimeDirectory force mode ignores native directory for device fallback repro`() {
+        val rootDirectory = createTempTestDirectory(prefix = "host-runtime-force-select")
+        try {
+            val nativeHostLibDir = File(rootDirectory, "native").apply {
+                mkdirs()
+                writeHostRuntimeFiles()
+            }
+            val packageHostLibDir = File(rootDirectory, "package/lib/arm64").apply {
+                mkdirs()
+                writeHostRuntimeFiles()
+            }
+
+            assertEquals(
+                packageHostLibDir,
+                selectHostRuntimeDirectory(
+                    nativeHostLibDir = nativeHostLibDir,
+                    packageHostLibDirs = listOf(packageHostLibDir),
+                    forcePackageHostRuntime = true
+                )
+            )
+        } finally {
+            rootDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `shouldForcePackageHostRuntime only accepts debug marker`() {
+        val rootDirectory = createTempTestDirectory(prefix = "host-runtime-force")
+        try {
+            val bootstrapRoot = File(rootDirectory, "bootstrap").apply { mkdirs() }
+
+            assertFalse(shouldForcePackageHostRuntime(ApplicationInfo.FLAG_DEBUGGABLE, bootstrapRoot))
+
+            File(bootstrapRoot, ".force-package-host-runtime").writeText("1")
+
+            assertFalse(shouldForcePackageHostRuntime(0, bootstrapRoot))
+            assertTrue(shouldForcePackageHostRuntime(ApplicationInfo.FLAG_DEBUGGABLE, bootstrapRoot))
+        } finally {
+            rootDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `resolvePackageHostRuntimeDirectories maps apk source directory to installed arm64 lib directories`() {
+        val rootDirectory = createTempTestDirectory(prefix = "host-runtime-package-dirs")
+        try {
+            val installRoot = File(rootDirectory, "package").apply { mkdirs() }
+            val apkFile = File(installRoot, "base.apk")
+            val nativeHostLibDir = File(installRoot, "lib/arm64").apply { mkdirs() }
+
+            val resolved = resolvePackageHostRuntimeDirectories(
+                sourceDirs = listOf(apkFile),
+                nativeHostLibDir = nativeHostLibDir
+            )
+
+            assertTrue(resolved.contains(File(installRoot, "lib/arm64")))
+            assertTrue(resolved.contains(File(installRoot, "lib/arm64-v8a")))
+        } finally {
+            rootDirectory.deleteRecursively()
+        }
+    }
 }
 
 private fun createTempTestDirectory(prefix: String): File {
     return createTempDirectory(prefix = prefix).toFile()
+}
+
+private fun File.writeHostRuntimeFiles() {
+    File(this, "libtalloc_2.so").writeText("talloc")
+    File(this, "libproot.so").apply {
+        writeText("proot")
+        setExecutable(true)
+    }
+    File(this, "libproot-loader.so").apply {
+        writeText("loader")
+        setExecutable(true)
+    }
 }
 
 private fun createHostPaths(rootDirectory: File, includeLoader32: Boolean = false): HostPaths {

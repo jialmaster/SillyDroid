@@ -1,7 +1,9 @@
 package com.jm.sillydroid.data.runtime
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.net.ConnectivityManager
+import android.os.Build
 import android.system.ErrnoException
 import android.system.Os
 import com.jm.sillydroid.core.model.bootstrap.BootstrapStepDetection
@@ -11,7 +13,6 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
-import kotlin.io.copyRecursively
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
 import kotlinx.coroutines.delay
@@ -26,6 +27,87 @@ object BootConfig {
     const val notificationChannelId = "android-tavern-bootstrap"
     const val systemNotificationChannelId = "android-tavern-system-notification"
     const val notificationId = 1101
+}
+
+private val requiredHostRuntimeFileNames = listOf(
+    "libtalloc_2.so",
+    "libproot.so",
+    "libproot-loader.so"
+)
+private val optionalHostRuntimeFileNames = listOf("libproot-loader32.so")
+private val executableHostRuntimeFileNames = listOf(
+    "libproot.so",
+    "libproot-loader.so",
+    "libproot-loader32.so"
+)
+private const val forcePackageHostRuntimeMarkerFileName = ".force-package-host-runtime"
+
+internal fun isHostRuntimeDirectoryReady(hostLibDir: File): Boolean {
+    val requiredFilesReady = hostLibDir.containsNamedFiles(requiredHostRuntimeFileNames)
+    val requiredExecutablesReady = hostLibDir.containsExecutableNamedFiles(
+        executableHostRuntimeFileNames - optionalHostRuntimeFileNames
+    )
+    val optionalExecutablesReady = optionalHostRuntimeFileNames.all { fileName ->
+        val file = File(hostLibDir, fileName)
+        !file.exists() || file.canExecute()
+    }
+    return requiredFilesReady && requiredExecutablesReady && optionalExecutablesReady
+}
+
+internal fun selectHostRuntimeDirectory(
+    nativeHostLibDir: File,
+    packageHostLibDirs: List<File>,
+    forcePackageHostRuntime: Boolean
+): File {
+    val candidates = if (forcePackageHostRuntime) {
+        packageHostLibDirs
+    } else {
+        listOf(nativeHostLibDir) + packageHostLibDirs
+    }.distinctBy { it.absolutePath }
+
+    // host runtime 不能从 app 私有 files/ 目录兜底执行：Android 正常 App 进程会拒绝执行可写数据目录中的 ELF。
+    // 因此这里只在包管理器解压出的安装目录中查找可执行 so，避免 debug/run-as 能跑但真实用户进程失败。
+    return candidates.firstOrNull(::isHostRuntimeDirectoryReady) ?: nativeHostLibDir
+}
+
+internal fun shouldForcePackageHostRuntime(appFlags: Int, bootstrapRoot: File): Boolean {
+    val isDebuggable = (appFlags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    // 这个 marker 只服务真机复现：debug 包可以强制绕过 nativeLibraryDir，
+    // 直接验证安装目录 lib/arm64 下的 host runtime 是否可作为 nativeLibraryDir 缺失时的兜底；release 包不会响应该开关。
+    return isDebuggable && File(bootstrapRoot, forcePackageHostRuntimeMarkerFileName).isFile
+}
+
+private fun File.containsNamedFiles(fileNames: List<String>): Boolean {
+    return fileNames.all { fileName -> File(this, fileName).isFile }
+}
+
+private fun File.containsExecutableNamedFiles(fileNames: List<String>): Boolean {
+    return fileNames.all { fileName -> File(this, fileName).canExecute() }
+}
+
+internal fun resolvePackageHostRuntimeDirectories(sourceDirs: List<File>, nativeHostLibDir: File): List<File> {
+    val nativeLibRoot = nativeHostLibDir.parentFile?.parentFile
+    val installRoots = (sourceDirs.mapNotNull { it.parentFile } + listOfNotNull(nativeLibRoot))
+        .distinctBy { it.absolutePath }
+    val abiDirectories = resolveRuntimeAbiDirectoryNames()
+
+    return installRoots
+        .flatMap { installRoot ->
+            abiDirectories.map { abiDirectory -> File(File(installRoot, "lib"), abiDirectory) }
+        }
+        .distinctBy { it.absolutePath }
+}
+
+internal fun resolveRuntimeAbiDirectoryNames(): List<String> {
+    val supportedAbis = Build.SUPPORTED_ABIS?.toList().orEmpty()
+    val abiNames = supportedAbis.flatMap { abi ->
+        when (abi) {
+            "arm64-v8a" -> listOf("arm64", "arm64-v8a")
+            "armeabi-v7a" -> listOf("arm", "armeabi-v7a")
+            else -> listOf(abi)
+        }
+    }
+    return (abiNames + listOf("arm64", "arm64-v8a")).distinct()
 }
 
 data class HostPaths(
@@ -50,17 +132,31 @@ data class HostPaths(
             val rootfsDir = File(bootstrapRoot, "rootfs")
             val hostPrefixDir = File(context.filesDir, "usr")
             val hostNativeLibDir = File(context.applicationInfo.nativeLibraryDir)
+            val forcePackageHostRuntime = shouldForcePackageHostRuntime(context.applicationInfo.flags, bootstrapRoot)
+            val packageHostLibDirs = resolvePackageHostRuntimeDirectories(
+                sourceDirs = listOfNotNull(
+                    context.applicationInfo.sourceDir,
+                    context.applicationInfo.publicSourceDir,
+                    *context.applicationInfo.splitSourceDirs.orEmpty()
+                ).map(::File),
+                nativeHostLibDir = hostNativeLibDir
+            )
+            val selectedHostLibDir = selectHostRuntimeDirectory(
+                nativeHostLibDir = hostNativeLibDir,
+                packageHostLibDirs = packageHostLibDirs,
+                forcePackageHostRuntime = forcePackageHostRuntime
+            )
             return HostPaths(
                 bootstrapRoot = bootstrapRoot,
                 scriptsDir = File(bootstrapRoot, "scripts"),
                 rootfsDir = rootfsDir,
                 serverDir = File(bootstrapRoot, "server"),
                 hostPrefixDir = hostPrefixDir,
-                hostLibDir = hostNativeLibDir,
+                hostLibDir = selectedHostLibDir,
                 hostTmpDir = File(hostPrefixDir, "tmp"),
-                hostProotBinary = File(hostNativeLibDir, "libproot.so"),
-                hostProotLoader = File(hostNativeLibDir, "libproot-loader.so"),
-                hostProotLoader32 = File(hostNativeLibDir, "libproot-loader32.so"),
+                hostProotBinary = File(selectedHostLibDir, "libproot.so"),
+                hostProotLoader = File(selectedHostLibDir, "libproot-loader.so"),
+                hostProotLoader32 = File(selectedHostLibDir, "libproot-loader32.so"),
                 dataRoot = dataRoot,
                 serverDataDir = File(dataRoot, "server"),
                 logsDir = resolveHostLogsDir(context)
@@ -1043,9 +1139,9 @@ class BootstrapLayoutVerifier(private val paths: HostPaths) {
             "scripts/start-server.sh" to File(paths.scriptsDir, "start-server.sh"),
             "rootfs/fs/bin/sh" to File(paths.rootfsDir, "fs/bin/sh"),
             "rootfs/rootfs-manifest.json" to File(paths.rootfsDir, "rootfs-manifest.json"),
-            "nativeLibraryDir/libtalloc_2.so" to File(paths.hostLibDir, "libtalloc_2.so"),
-            "nativeLibraryDir/libproot.so" to paths.hostProotBinary,
-            "nativeLibraryDir/libproot-loader.so" to paths.hostProotLoader,
+            "hostRuntimeDir/libtalloc_2.so" to File(paths.hostLibDir, "libtalloc_2.so"),
+            "hostRuntimeDir/libproot.so" to paths.hostProotBinary,
+            "hostRuntimeDir/libproot-loader.so" to paths.hostProotLoader,
             "server/bootstrap-manifest.json" to File(paths.serverDir, "bootstrap-manifest.json"),
             "server/tavern-entrypoint.sh" to File(paths.serverDir, "tavern-entrypoint.sh")
         )

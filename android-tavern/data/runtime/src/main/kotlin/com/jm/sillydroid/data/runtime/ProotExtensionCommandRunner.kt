@@ -20,7 +20,8 @@ class ProotExtensionCommandRunner(
     ): ExtensionCommandResult {
         val paths = HostPaths.from(appContext)
         val launcher = LinuxRuntimeLauncher(paths)
-        paths.ensureWorkingDirectories()
+        // 扩展命令同样会直接进入 proot；这里复用统一准备入口，确保 nativeLibraryDir 缺失时也能先安装 host runtime。
+        AssetExtractor(appContext).prepareWorkDirectories(paths)
 
         val maintenanceRoot = File(paths.serverDataDir, ".sillydroid-maintenance")
         val serverMaintenanceRoot = File(paths.bootstrapRoot, "server/.sillydroid-maintenance")

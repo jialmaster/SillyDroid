@@ -192,12 +192,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         }
     }
 
-    private val exportLogLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { targetUri ->
-        if (targetUri != null) {
-            logsCoordinator.exportLogBundle(targetUri)
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         DynamicColors.applyToActivityIfAvailable(this)
         super.onCreate(savedInstanceState)
@@ -505,8 +499,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             preferTavernServerLog = { processManager.currentSnapshot().shouldPreferTavernServerLog() },
             setBusy = screenController::setBusy,
             showError = settingsCoordinator::showValidationMessage,
-            showMessage = screenController::showMessage,
-            requestExport = ::requestLogExport
+            showMessage = screenController::showMessage
         )
         terminalPageController = TerminalPageController(
             activity = this,
@@ -547,10 +540,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
                 .putExtra(resultShouldStartKey, state.shouldStartBootstrap)
                 .putExtra(resultShouldReloadTavernUiKey, state.shouldReloadTavernUi)
         )
-    }
-
-    private fun requestLogExport() {
-        exportLogLauncher.launch(hostLogRepository.buildBundleFileName())
     }
 
     private fun applySettingsSurfaceSystemBars(mode: HostDisplayMode = hostConfigStore.hostDisplayMode) {
