@@ -49,6 +49,7 @@ class BootstrapSettingsScreenController(
     private val searchLayout: TextInputLayout,
     private val floatingLogsSwitch: MaterialSwitch,
     private val pullRefreshSwitch: MaterialSwitch,
+    private val hostDisplayModeRow: View,
     private val unrestrictedFileImportSelectionSwitch: MaterialSwitch,
     private val restoreDefaultsButton: ImageButton,
     private val importButton: MaterialButton,
@@ -85,6 +86,7 @@ class BootstrapSettingsScreenController(
         searchLayout.isEnabled = !busy
         floatingLogsSwitch.isEnabled = !busy
         pullRefreshSwitch.isEnabled = !busy
+        hostDisplayModeRow.isEnabled = !busy
         unrestrictedFileImportSelectionSwitch.isEnabled = !busy
         restoreDefaultsButton.isEnabled = !busy
         importButton.isEnabled = !busy

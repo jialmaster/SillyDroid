@@ -55,6 +55,7 @@ class TavernWebViewHost(
     private val processManager: BootstrapController,
     private val installJavascriptInterfaces: (WebView) -> Unit,
     private val installBlobBridgeScriptOnPageFinished: (WebView) -> Unit,
+    private val restoreHostSystemBarAppearance: () -> Unit = {},
     private val onDownloadRequested: (BrowserDownloadRequest) -> Unit,
     private val onShowFileChooser: (android.webkit.WebChromeClient.FileChooserParams, android.webkit.ValueCallback<Array<Uri>>) -> Unit,
     private val jsErrorSink: WebViewJsErrorSink = WebViewJsErrorSink { /* no-op */ },
@@ -183,6 +184,7 @@ class TavernWebViewHost(
         val webViewBackgroundColor = ContextCompat.getColor(activity, R.color.tavern_webview_background)
         homeWebViewRefreshController.configure(webViewBackgroundColor)
         homeWebViewController.configure()
+        restoreHostSystemBarAppearance()
         installDebugRendererCrashReceiverIfDebuggable()
         recordHostDiagnostic(
             category = "webview",
@@ -376,6 +378,8 @@ class TavernWebViewHost(
         homeWebViewRefreshController.reset()
         webViewRefreshLayout.isVisible = false
         webView.isVisible = false
+        // 返回 bootstrap overlay 时，把系统栏背景也切回宿主自己的遮罩色，避免残留上一页的 WebView 主题色。
+        restoreHostSystemBarAppearance()
     }
 
     fun reloadTavernUiIfPossible(snapshot: BootstrapSessionSnapshot) {
@@ -526,11 +530,131 @@ class TavernWebViewHost(
         updateRefreshLayoutEnabled()
         CookieManager.getInstance().flush()
         installBlobBridgeScriptOnPageFinished(sourceWebView)
+        installSystemBarThemeSyncScript(sourceWebView)
         if (!url.isNullOrBlank()) {
             homeViewModel.loadedUrl = url
             homeViewModel.pendingLocalRetryAttempts = 0
         }
         clearActiveWebReloadTrace()
+    }
+
+    private fun installSystemBarThemeSyncScript(sourceWebView: WebView) {
+        // 酒馆内部主题切换多半是前端改 html/body 的 class/style，不一定整页 reload；
+        // 这里给当前文档挂一个 observer，首次进入和后续主题切换都把根背景色同步给 Android 系统栏。
+        sourceWebView.evaluateJavascript(
+            """
+                (function() {
+                    const bridge = window.SillyDroidAndroidHostBridge;
+                    if (!bridge || typeof bridge.setSystemBarsBackgroundColor !== 'function') {
+                        return 'bridge_missing';
+                    }
+
+                    function normalizeHexColor(input) {
+                        const value = String(input || '').trim().toLowerCase();
+                        if (!value || value === 'transparent') {
+                            return '';
+                        }
+
+                        const rgbaMatch = value.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*([0-9.]+))?\s*\)$/);
+                        if (rgbaMatch) {
+                            const alpha = rgbaMatch[4] == null ? 1 : Number(rgbaMatch[4]);
+                            if (!Number.isFinite(alpha) || alpha <= 0.01) {
+                                return '';
+                            }
+                            const rgb = rgbaMatch.slice(1, 4).map(function(channel) {
+                                const clamped = Math.max(0, Math.min(255, Number(channel)));
+                                return clamped.toString(16).padStart(2, '0');
+                            });
+                            return '#' + rgb.join('');
+                        }
+
+                        const hexMatch = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
+                        if (!hexMatch) {
+                            return '';
+                        }
+
+                        const hex = hexMatch[1];
+                        if (hex.length === 3) {
+                            return '#' + hex.split('').map(function(char) { return char + char; }).join('');
+                        }
+                        if (hex.length === 8) {
+                            const alpha = parseInt(hex.slice(6, 8), 16);
+                            if (alpha <= 3) {
+                                return '';
+                            }
+                            return '#' + hex.slice(0, 6);
+                        }
+                        return '#' + hex.slice(0, 6);
+                    }
+
+                    function firstSolidBackgroundHex() {
+                        const themeMeta = document.querySelector('meta[name="theme-color"]');
+                        const metaColor = normalizeHexColor(themeMeta && themeMeta.content);
+                        if (metaColor) {
+                            return metaColor;
+                        }
+
+                        const candidates = [document.body, document.documentElement];
+                        for (const node of candidates) {
+                            if (!node) {
+                                continue;
+                            }
+                            const color = normalizeHexColor(window.getComputedStyle(node).backgroundColor);
+                            if (color) {
+                                return color;
+                            }
+                        }
+                        return '';
+                    }
+
+                    function notifyBridge() {
+                        const nextColor = firstSolidBackgroundHex();
+                        if (!nextColor || nextColor === window.__sillyDroidLastSystemBarColor) {
+                            return;
+                        }
+                        window.__sillyDroidLastSystemBarColor = nextColor;
+                        bridge.setSystemBarsBackgroundColor(nextColor);
+                    }
+
+                    if (window.__sillyDroidSystemBarThemeSyncInstalled) {
+                        notifyBridge();
+                        return 'already_installed';
+                    }
+
+                    let frameScheduled = false;
+                    function scheduleNotify() {
+                        if (frameScheduled) {
+                            return;
+                        }
+                        frameScheduled = true;
+                        window.requestAnimationFrame(function() {
+                            frameScheduled = false;
+                            notifyBridge();
+                        });
+                    }
+
+                    const observer = new MutationObserver(scheduleNotify);
+                    if (document.documentElement) {
+                        observer.observe(document.documentElement, {
+                            attributes: true,
+                            childList: true,
+                            subtree: true,
+                            attributeFilter: ['class', 'style', 'data-theme', 'theme', 'content']
+                        });
+                    }
+
+                    window.addEventListener('load', scheduleNotify);
+                    window.addEventListener('hashchange', scheduleNotify);
+                    window.addEventListener('popstate', scheduleNotify);
+                    document.addEventListener('readystatechange', scheduleNotify);
+
+                    window.__sillyDroidSystemBarThemeSyncInstalled = true;
+                    scheduleNotify();
+                    return 'installed';
+                })();
+            """.trimIndent(),
+            null
+        )
     }
 
     private fun handleWebViewRendererGone(didCrash: Boolean) {

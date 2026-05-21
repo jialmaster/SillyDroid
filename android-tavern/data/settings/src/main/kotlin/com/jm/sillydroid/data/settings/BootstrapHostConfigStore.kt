@@ -4,6 +4,7 @@ import android.content.Context
 import com.jm.sillydroid.core.model.bootstrap.defaultBootstrapServicePort
 import com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition
 import com.jm.sillydroid.core.model.settings.FloatingLogRefreshIntervals
+import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.core.model.settings.TerminalFontSizeOptions
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 
@@ -11,6 +12,7 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
     companion object {
         internal const val preferencesName = "bootstrap-host-config"
         private const val servicePortKey = "service-port"
+        private const val hostDisplayModeKey = "host-display-mode"
         private const val webViewPullRefreshEnabledKey = "webview-pull-refresh-enabled"
         private const val debugDiagnosticsEnabledKey = "debug-diagnostics-enabled"
         private const val unrestrictedFileImportSelectionEnabledKey = "unrestricted-file-import-selection-enabled"
@@ -43,6 +45,14 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         set(value) {
             preferences.edit()
                 .putInt(servicePortKey, sanitizeServicePort(value))
+                .apply()
+        }
+
+    override var hostDisplayMode: HostDisplayMode
+        get() = HostDisplayMode.fromStorageValue(preferences.getString(hostDisplayModeKey, HostDisplayMode.NORMAL.name))
+        set(value) {
+            preferences.edit()
+                .putString(hostDisplayModeKey, value.name)
                 .apply()
         }
 

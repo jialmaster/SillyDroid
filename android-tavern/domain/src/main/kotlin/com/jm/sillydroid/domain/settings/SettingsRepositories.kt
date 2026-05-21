@@ -2,6 +2,7 @@ package com.jm.sillydroid.domain.settings
 
 import android.net.Uri
 import com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition
+import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.core.model.settings.LoadedTavernConfig
 import com.jm.sillydroid.core.model.settings.TavernConfigFieldSpec
 import com.jm.sillydroid.core.model.settings.TavernConfigSectionSpec
@@ -28,6 +29,7 @@ interface SettingsConfigRepository {
 
 interface HostPreferencesRepository {
     var servicePort: Int
+    var hostDisplayMode: HostDisplayMode
     var webViewPullRefreshEnabled: Boolean
     var debugDiagnosticsEnabled: Boolean
     var unrestrictedFileImportSelectionEnabled: Boolean

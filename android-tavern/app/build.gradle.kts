@@ -255,6 +255,9 @@ android {
         debug {
             // 所有 debug 入口统一用项目内共享 debug key，保证本地 gradlew、WSL、stage-4 脚本产物签名一致。
             signingConfig = signingConfigs.getByName("debugShared")
+            // debug 包需要和 release 同时安装到真机时，必须拆出独立 applicationId；
+            // 仅改应用显示名不够，包管理器仍会把它们视为同一个应用。
+            applicationIdSuffix = ".debug"
         }
 
         release {

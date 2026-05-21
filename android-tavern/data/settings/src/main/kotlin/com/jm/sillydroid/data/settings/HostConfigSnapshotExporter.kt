@@ -2,6 +2,7 @@ package com.jm.sillydroid.data.settings
 
 import android.content.Context
 import com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition
+import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 
 data class HostConfigSnapshot(
@@ -9,6 +10,7 @@ data class HostConfigSnapshot(
     val storageName: String,
     val snapshotPolicy: String,
     val servicePort: Int,
+    val hostDisplayMode: HostDisplayMode,
     val webViewPullRefreshEnabled: Boolean,
     val debugDiagnosticsEnabled: Boolean,
     val unrestrictedFileImportSelectionEnabled: Boolean,
@@ -37,6 +39,7 @@ object HostConfigSnapshotExporter {
             storageName = BootstrapHostConfigStore.preferencesName,
             snapshotPolicy = explicitSnapshotPolicy,
             servicePort = hostPreferences.servicePort,
+            hostDisplayMode = hostPreferences.hostDisplayMode,
             webViewPullRefreshEnabled = hostPreferences.webViewPullRefreshEnabled,
             debugDiagnosticsEnabled = hostPreferences.debugDiagnosticsEnabled,
             unrestrictedFileImportSelectionEnabled = hostPreferences.unrestrictedFileImportSelectionEnabled,

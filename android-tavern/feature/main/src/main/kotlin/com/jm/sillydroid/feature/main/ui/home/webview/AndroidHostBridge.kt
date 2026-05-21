@@ -10,6 +10,7 @@ class AndroidHostBridge(
     // 这里必须和 @JavascriptInterface 方法名区分开，避免 Kotlin 在 lambda 里解析成当前桥接方法并递归调用。
     private val applyFloatingLogsBubbleEnabled: (Boolean) -> Unit,
     private val applyWebViewPullRefreshEnabled: (Boolean) -> Unit,
+    private val applySystemBarsBackgroundColor: (String) -> Unit,
     private val reloadTavern: () -> Unit,
     private val hostVersionInfoJson: () -> String
 ) {
@@ -53,6 +54,18 @@ class AndroidHostBridge(
 
         runOnUiThread {
             applyWebViewPullRefreshEnabled(enabled)
+        }
+        return true
+    }
+
+    @JavascriptInterface
+    fun setSystemBarsBackgroundColor(hexColor: String): Boolean {
+        if (!isHostActive() || hexColor.isBlank()) {
+            return false
+        }
+
+        runOnUiThread {
+            applySystemBarsBackgroundColor(hexColor)
         }
         return true
     }

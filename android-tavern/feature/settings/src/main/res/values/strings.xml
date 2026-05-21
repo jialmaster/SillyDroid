@@ -11,6 +11,12 @@
     <string name="bootstrap_settings_data_summary">导入、导出和恢复默认放在这里。导入会自动识别官方用户备份 ZIP，以及 Docker 四目录 ZIP、Linux/Termux public 结构 ZIP。</string>
     <string name="bootstrap_settings_host_pull_refresh_title">下拉刷新</string>
     <string name="bootstrap_settings_host_pull_refresh_summary">在酒馆页面顶部下拉时刷新 WebView。关闭后仍可使用宿主插件或悬浮面板里的刷新按钮。</string>
+    <string name="bootstrap_settings_host_display_mode_title">显示模式</string>
+    <string name="bootstrap_settings_host_display_mode_summary">可在普通模式、仅隐藏顶部通知栏、以及顶部和底部都沉浸式全屏之间切换。沉浸式模式下，用户边缘滑动时系统栏仍会临时唤出。</string>
+    <string name="bootstrap_settings_host_display_mode_dialog_title">选择显示模式</string>
+    <string name="bootstrap_settings_host_display_mode_normal">普通模式</string>
+    <string name="bootstrap_settings_host_display_mode_status_bar_hidden">只隐藏顶部通知栏</string>
+    <string name="bootstrap_settings_host_display_mode_immersive">顶部和底部都沉浸式全屏</string>
     <string name="bootstrap_settings_host_floating_logs_title">调试日志球</string>
     <string name="bootstrap_settings_host_floating_logs_summary">在主界面右下角显示悬浮球，点击后可实时查看最新酒馆日志。该开关立即生效，不需要重新保存配置。</string>
     <string name="bootstrap_settings_host_debug_diagnostics_title">调试模式</string>

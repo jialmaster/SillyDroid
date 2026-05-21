@@ -3,6 +3,7 @@ package com.jm.sillydroid.feature.main.ui.home.system
 import android.view.View
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.feature.main.ui.home.HomeViewModel
 
 /**
@@ -15,6 +16,7 @@ import com.jm.sillydroid.feature.main.ui.home.HomeViewModel
 class SystemBarInsetsController(
     private val contentRoot: View,
     private val homeViewModel: HomeViewModel,
+    private val displayModeProvider: () -> HostDisplayMode,
     private val onImeChanged: (Boolean) -> Unit,
     private val onContentBoundsChanged: () -> Unit,
 ) {
@@ -28,6 +30,7 @@ class SystemBarInsetsController(
             val systemBarsInsets = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
+            val displayMode = displayModeProvider()
             val imeVisibleNow = insets.isVisible(WindowInsetsCompat.Type.ime())
             if (imeVisibleNow != homeViewModel.isImeVisible) {
                 homeViewModel.isImeVisible = imeVisibleNow
@@ -38,15 +41,31 @@ class SystemBarInsetsController(
             } else {
                 null
             }
+            val topInset = when (displayMode) {
+                // 普通模式保留顶部安全区；另外两档都要求让 WebView 顶到最上面，不再留状态栏空带。
+                HostDisplayMode.NORMAL -> systemBarsInsets.top
+                HostDisplayMode.STATUS_BAR_HIDDEN,
+                HostDisplayMode.IMMERSIVE -> 0
+            }
+            val bottomSystemInset = when (displayMode) {
+                // 沉浸式全屏下底部也不再为系统栏预留空白，手势唤出的 transient bars 直接压在内容上。
+                HostDisplayMode.IMMERSIVE -> 0
+                HostDisplayMode.NORMAL,
+                HostDisplayMode.STATUS_BAR_HIDDEN -> systemBarsInsets.bottom
+            }
             view.setPadding(
                 initialLeftPadding + systemBarsInsets.left,
-                initialTopPadding + systemBarsInsets.top,
+                initialTopPadding + topInset,
                 initialRightPadding + systemBarsInsets.right,
-                initialBottomPadding + systemBarsInsets.bottom + (imeInsets?.bottom ?: 0)
+                initialBottomPadding + bottomSystemInset + (imeInsets?.bottom ?: 0)
             )
             onContentBoundsChanged()
             insets
         }
+        ViewCompat.requestApplyInsets(contentRoot)
+    }
+
+    fun refresh() {
         ViewCompat.requestApplyInsets(contentRoot)
     }
 }
