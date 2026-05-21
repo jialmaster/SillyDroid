@@ -67,8 +67,9 @@ fun showHostLogExportSelectionDialog(
         }
         .setNegativeButton(android.R.string.cancel, null)
         .setPositiveButton(text.confirmLabel, null)
-        .show()
+        .create()
 
+    // 确认按钮必须在 Dialog 第一次 show 前挂接，否则默认按钮逻辑只会关闭弹窗，两个日志导出入口都收不到确认范围。
     dialog.setOnShowListener {
         positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
         positiveButton.isEnabled = hasSelectedFiles()
@@ -82,4 +83,5 @@ fun showHostLogExportSelectionDialog(
             onConfirmed(selectedPaths)
         }
     }
+    dialog.show()
 }

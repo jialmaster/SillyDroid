@@ -1,6 +1,5 @@
 package com.jm.sillydroid.feature.settings.ui.logs
 
-import android.net.Uri
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -39,15 +38,12 @@ class BootstrapSettingsLogsCoordinator(
     private val preferTavernServerLog: () -> Boolean,
     private val setBusy: (Boolean) -> Unit,
     private val showError: (String) -> Unit,
-    private val showMessage: (String) -> Unit,
-    private val requestExport: () -> Unit
+    private val showMessage: (String) -> Unit
 ) : DefaultLifecycleObserver {
     private var busy = false
     private var currentSnapshot: HostLogSnapshot? = null
     private var currentEntries: List<HostLogEntry> = emptyList()
     private var selectedLogFileName: String? = null
-    // SAF 导出需要先弹系统文件创建器；这里暂存用户刚刚确认的导出范围，等 targetUri 返回后再真正写包。
-    private var pendingExportRelativePaths: Set<String>? = null
 
     fun initialize() {
         selectButton.setOnClickListener {
@@ -77,22 +73,25 @@ class BootstrapSettingsLogsCoordinator(
         scrollThumbController.close()
     }
 
-    fun exportLogBundle(targetUri: Uri) {
+    private fun exportLogBundleToDownloads(selectedRelativePaths: Set<String>) {
         activity.lifecycleScope.launch {
+            // 设置页和悬浮日志球导出的是同一类日志包，统一保存到系统 Download，避免同一功能出现两套保存入口。
             setBusyState(true)
             val result = withContext(dispatchers.io) {
                 runCatching {
-                    hostLogRepository.exportToUri(
-                        targetUri = targetUri,
-                        includedRelativePaths = pendingExportRelativePaths
-                    )
+                    hostLogRepository.exportToPublicDownloads(includedRelativePaths = selectedRelativePaths)
                 }
             }
-            pendingExportRelativePaths = null
             setBusyState(false)
 
             result.onSuccess { export ->
-                showMessage(activity.getString(R.string.bootstrap_settings_logs_export_success, export.bundleFileName))
+                showMessage(
+                    activity.getString(
+                        R.string.bootstrap_settings_logs_export_success,
+                        export.bundleFileName,
+                        export.zipPath.orEmpty()
+                    )
+                )
             }.onFailure {
                 showError(activity.getString(R.string.bootstrap_settings_logs_export_failed))
             }
@@ -127,8 +126,7 @@ class BootstrapSettingsLogsCoordinator(
                         confirmLabel = activity.getString(R.string.bootstrap_settings_logs_export)
                     )
                 ) { selectedRelativePaths ->
-                    pendingExportRelativePaths = selectedRelativePaths
-                    requestExport()
+                    exportLogBundleToDownloads(selectedRelativePaths)
                 }
             }.onFailure { exception ->
                 showError(exception.message ?: activity.getString(R.string.bootstrap_settings_logs_export_failed))
