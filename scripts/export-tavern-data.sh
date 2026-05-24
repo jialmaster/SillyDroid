@@ -91,6 +91,17 @@ color_text() {
     printf '%s%s%s' "$color" "$*" "$COLOR_RESET"
 }
 
+color_256_text() {
+    local color_code="$1"
+    shift
+    if [[ -z "$COLOR_RESET" ]]; then
+        printf '%s' "$*"
+        return 0
+    fi
+
+    printf '\033[38;5;%sm%s%s' "$color_code" "$*" "$COLOR_RESET"
+}
+
 # 简洁日志函数（不带时间戳）
 log() {
     printf '%s\n' "$*"
@@ -212,13 +223,17 @@ stop_scan_animation() {
 }
 
 print_banner() {
-    cat <<'EOF'
-
-  /\_/\
- (｡•ᴗ•｡)  SillyTavern 数据导出小助手
-  /づ♡    会先帮你找出所有酒馆，再让你挑要搬家的那一个喵
-
-EOF
+    # 欢迎图走统一颜色开关：TTY 下使用 256 色渐变，NO_COLOR/非 TTY 自动退回纯文本。
+    printf '\n'
+    printf '%s\n' "$(color_256_text 213 '  /\_/\')"
+    printf '%s%s%s\n' \
+        "$(color_256_text 207 ' (｡•ᴗ•｡)  ')" \
+        "$(color_256_text 171 'SillyTavern 数据导出小助手')" \
+        "$(color_256_text 219 '')"
+    printf '%s%s\n' \
+        "$(color_256_text 123 '  /づ♡    ')" \
+        "$(color_256_text 81 '会先帮你找出所有酒馆，再让你挑要搬家的那一个喵')"
+    printf '\n'
 }
 
 STEP=0
