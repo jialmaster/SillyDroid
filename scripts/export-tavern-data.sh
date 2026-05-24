@@ -105,14 +105,15 @@ color_rgb_text() {
 }
 
 print_gradient_tokens_inline() {
-    local token_count="$#"
-    local index=0
+    local total_width="$1"
+    shift
+    local cursor=0
     local segment=0
     local segment_count=3
     local progress=0
     local segment_progress=0
     local red green blue
-    local token
+    local spec token token_width token_midpoint
     local start_red start_green start_blue end_red end_green end_blue
     local stops=(
         '255 115 213'
@@ -121,9 +122,15 @@ print_gradient_tokens_inline() {
         '74 233 225'
     )
 
-    for token in "$@"; do
-        if (( token_count > 1 )); then
-            progress=$((index * segment_count * 1000 / (token_count - 1)))
+    for spec in "$@"; do
+        token="${spec%|*}"
+        token_width="${spec##*|}"
+        [[ "$token_width" =~ ^[0-9]+$ && "$token_width" -gt 0 ]] || token_width=1
+
+        if (( total_width > 1 )); then
+            # 色相按横向显示宽度推进；宽 token 用中心点取色，避免猫脸内部字符数量影响整体渐变。
+            token_midpoint=$((cursor * 2 + token_width - 1))
+            progress=$((token_midpoint * segment_count * 1000 / ((total_width - 1) * 2)))
             segment=$((progress / 1000))
             segment_progress=$((progress - segment * 1000))
             if (( segment >= segment_count )); then
@@ -139,7 +146,7 @@ print_gradient_tokens_inline() {
         blue=$((start_blue + (end_blue - start_blue) * segment_progress / 1000))
 
         color_rgb_text "$red" "$green" "$blue" "$token"
-        index=$((index + 1))
+        cursor=$((cursor + token_width))
     done
 }
 
@@ -269,17 +276,21 @@ stop_scan_animation() {
 }
 
 print_banner() {
-    # 猫猫头作为整体 token 参与横向渐变，避免脸部字符过多挤占标题色相区间。
+    # 渐变按横向显示宽度推进；猫猫作为宽 token 取中心色，既参与色相又不被内部字符拆散。
+    local gradient_width=61
+
     printf '\n'
-    print_gradient_tokens '  /\_/\'
+    print_gradient_tokens "$gradient_width" '  /\_/\|7'
     print_gradient_tokens \
-        ' (｡•ᴗ•｡)  ' \
-        'S' 'i' 'l' 'l' 'y' 'T' 'a' 'v' 'e' 'r' 'n' ' ' \
-        '数' '据' '导' '出' '小' '助' '手'
+        "$gradient_width" \
+        ' (｡•ᴗ•｡)  |12' \
+        'S|1' 'i|1' 'l|1' 'l|1' 'y|1' 'T|1' 'a|1' 'v|1' 'e|1' 'r|1' 'n|1' ' |1' \
+        '数|2' '据|2' '导|2' '出|2' '小|2' '助|2' '手|2'
     print_gradient_tokens \
-        '  /づ♡    ' \
-        '会' '先' '帮' '你' '找' '出' '所' '有' '酒' '馆' '，' \
-        '再' '让' '你' '挑' '要' '搬' '家' '的' '那' '一' '个' '喵'
+        "$gradient_width" \
+        '  /づ♡    |10' \
+        '会|2' '先|2' '帮|2' '你|2' '找|2' '出|2' '所|2' '有|2' '酒|2' '馆|2' '，|2' \
+        '再|2' '让|2' '你|2' '挑|2' '要|2' '搬|2' '家|2' '的|2' '那|2' '一|2' '个|2' '喵|2'
     printf '\n'
 }
 
