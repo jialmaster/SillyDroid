@@ -104,7 +104,7 @@ color_rgb_text() {
     printf '\033[38;2;%s;%s;%sm%s%s' "$red" "$green" "$blue" "$*" "$COLOR_RESET"
 }
 
-print_gradient_tokens() {
+print_gradient_tokens_inline() {
     local token_count="$#"
     local index=0
     local segment=0
@@ -141,6 +141,10 @@ print_gradient_tokens() {
         color_rgb_text "$red" "$green" "$blue" "$token"
         index=$((index + 1))
     done
+}
+
+print_gradient_tokens() {
+    print_gradient_tokens_inline "$@"
     printf '\n'
 }
 
@@ -265,15 +269,15 @@ stop_scan_animation() {
 }
 
 print_banner() {
-    # 欢迎图逐 token 横向渐变；中文不做子串切片，避免 C locale 下 UTF-8 被截断。
+    # 猫猫头固定成独立图标，右侧文案单独横向渐变，避免脸部字符挤占标题色相区间。
     printf '\n'
-    print_gradient_tokens '  ' '/' '\' '_' '/' '\'
+    printf '%s\n' "$(color_rgb_text 255 170 224 '  /\_/\')"
+    printf '%s' "$(color_rgb_text 255 170 224 ' (｡•ᴗ•｡)  ')"
     print_gradient_tokens \
-        ' ' '(' '｡' '•' 'ᴗ' '•' '｡' ')' '  ' \
         'S' 'i' 'l' 'l' 'y' 'T' 'a' 'v' 'e' 'r' 'n' ' ' \
         '数' '据' '导' '出' '小' '助' '手'
+    printf '%s' "$(color_rgb_text 255 170 224 '  /づ♡    ')"
     print_gradient_tokens \
-        '  ' '/' 'づ' '♡' '    ' \
         '会' '先' '帮' '你' '找' '出' '所' '有' '酒' '馆' '，' \
         '再' '让' '你' '挑' '要' '搬' '家' '的' '那' '一' '个' '喵'
     printf '\n'
