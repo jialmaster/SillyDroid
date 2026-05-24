@@ -6,8 +6,9 @@ usage() {
 Usage: export-tavern-data.sh [--output-dir <dir>] [--install-root <dir>]
 
 One-click export for official SillyTavern installs running inside Termux.
-The script detects the install root, normalizes data into config/data/plugins/public,
-    creates a zip backup, and publishes it through shared storage, Android DownloadManager, or the system share sheet.
+The script scans all detected install roots, lets the user choose the target instance when needed,
+    normalizes data into config/data/plugins/public, creates a zip backup,
+    and publishes it through shared storage, Android DownloadManager, or the system share sheet.
 EOF
 }
 
@@ -59,8 +60,16 @@ log() {
     printf '%s\n' "$*"
 }
 
+print_banner() {
+    cat <<'EOF'
+ /\_/\
+( o.o )  SillyTavern 数据导出小助手 🐾
+ > ^ <   会先帮你找出所有酒馆，再让你挑要搬家的那一个喵 (ฅ'ω'ฅ)
+EOF
+}
+
 STEP=0
-TOTAL_STEPS=7
+TOTAL_STEPS=8
 step() {
     # 在 set -e 下避免 ((STEP++)) 初始值为 0 时返回 1 导致脚本提前退出
     STEP=$((STEP + 1))
@@ -68,6 +77,40 @@ step() {
     percent=$((STEP * 100 / TOTAL_STEPS))
     # 单行刷新进度，不持续追加新行
     printf '\r[%3d%%] %s' "$percent" "$*"
+}
+
+tty_prompt_available() {
+    [[ -c /dev/tty ]] || return 1
+    (: < /dev/tty) >/dev/null 2>&1 || return 1
+    (: > /dev/tty) >/dev/null 2>&1 || return 1
+    return 0
+}
+
+prompt_available() {
+    tty_prompt_available || [[ -t 0 ]]
+}
+
+read_prompt_line() {
+    local prompt="$1"
+    local answer=''
+
+    # README 里的推荐用法是 curl | bash；这会把 stdin 占掉。
+    # 交互统一优先走 /dev/tty，保证多实例选择和导出确认仍能正常读到用户输入。
+    if tty_prompt_available; then
+        printf '%s' "$prompt" > /dev/tty
+        IFS= read -r answer < /dev/tty || return 1
+        printf '%s\n' "$answer"
+        return 0
+    fi
+
+    if [[ -t 0 ]]; then
+        printf '%s' "$prompt" >&2
+        IFS= read -r answer || return 1
+        printf '%s\n' "$answer"
+        return 0
+    fi
+
+    return 1
 }
 
 is_termux_environment() {
@@ -88,6 +131,11 @@ canonical_path() {
     )
 }
 
+termux_prefix_path() {
+    local prefix_path="${PREFIX:-/data/data/com.termux/files/usr}"
+    printf '%s\n' "${prefix_path%/}"
+}
+
 is_sillytavern_root() {
     local candidate="$1"
     [[ -d "$candidate" ]] || return 1
@@ -96,47 +144,342 @@ is_sillytavern_root() {
     [[ -f "$candidate/config.yaml" || -d "$candidate/config" || -d "$candidate/data" || -d "$candidate/plugins" || -d "$candidate/extensions" || -d "$candidate/public/scripts/extensions/third-party" ]]
 }
 
-directory_has_entries() {
-    local directory="$1"
-    [[ -d "$directory" ]] || return 1
-    find "$directory" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .
+declare -a INSTALL_ROOT_CANDIDATES=()
+declare -A KNOWN_INSTALL_ROOTS=()
+declare -A ACTIVE_INSTALL_ROOT_IDENTITIES=()
+
+install_root_identity_key() {
+    local install_root="$1"
+    local identity
+
+    if identity="$(stat -c '%d:%i' "$install_root" 2>/dev/null)"; then
+        printf 'inode:%s\n' "$identity"
+        return 0
+    fi
+
+    printf 'path:%s\n' "$install_root"
 }
 
-score_install_root() {
+register_install_root_candidate() {
     local candidate="$1"
-    local score=0
-
-    if directory_has_entries "$candidate/data"; then
-        score=$((score + 8))
-    elif [[ -d "$candidate/data" ]]; then
-        score=$((score + 3))
+    if ! is_sillytavern_root "$candidate"; then
+        return 0
     fi
 
-    if [[ -f "$candidate/config.yaml" ]]; then
-        score=$((score + 4))
-    elif directory_has_entries "$candidate/config"; then
-        score=$((score + 4))
-    elif [[ -d "$candidate/config" ]]; then
-        score=$((score + 1))
+    local canonical_candidate
+    canonical_candidate="$(canonical_path "$candidate")" || return 0
+
+    local identity_key
+    identity_key="$(install_root_identity_key "$canonical_candidate")"
+
+    if [[ -n "${KNOWN_INSTALL_ROOTS[$identity_key]:-}" ]]; then
+        return 0
     fi
 
-    if directory_has_entries "$candidate/plugins"; then
-        score=$((score + 3))
-    elif [[ -d "$candidate/plugins" ]]; then
-        score=$((score + 1))
+    KNOWN_INSTALL_ROOTS["$identity_key"]=1
+    INSTALL_ROOT_CANDIDATES+=("$canonical_candidate")
+}
+
+mark_active_install_root_candidate() {
+    local candidate="$1"
+    if ! is_sillytavern_root "$candidate"; then
+        return 0
     fi
 
-    if directory_has_entries "$candidate/extensions" || directory_has_entries "$candidate/public/scripts/extensions/third-party"; then
-        score=$((score + 3))
-    elif [[ -d "$candidate/extensions" || -d "$candidate/public/scripts/extensions/third-party" ]]; then
-        score=$((score + 1))
+    local canonical_candidate identity_key
+    canonical_candidate="$(canonical_path "$candidate")" || return 0
+    identity_key="$(install_root_identity_key "$canonical_candidate")"
+
+    # 运行中实例也注册进候选，覆盖“安装目录不在 HOME 里，但当前正在跑”的迁移场景。
+    ACTIVE_INSTALL_ROOT_IDENTITIES["$identity_key"]=1
+    register_install_root_candidate "$canonical_candidate"
+}
+
+is_active_install_root() {
+    local install_root="$1"
+    local identity_key
+    identity_key="$(install_root_identity_key "$install_root")"
+    [[ -n "${ACTIVE_INSTALL_ROOT_IDENTITIES[$identity_key]:-}" ]]
+}
+
+resolve_install_root_from_path() {
+    local candidate_path="$1"
+    [[ -n "$candidate_path" ]] || return 1
+
+    if [[ -f "$candidate_path" ]]; then
+        candidate_path="$(dirname "$candidate_path")"
     fi
 
-    if [[ -f "$candidate/start.sh" ]]; then
-        score=$((score + 1))
+    while [[ -n "$candidate_path" && "$candidate_path" != "/" && "$candidate_path" != "." ]]; do
+        if is_sillytavern_root "$candidate_path"; then
+            canonical_path "$candidate_path"
+            return 0
+        fi
+        candidate_path="$(dirname "$candidate_path")"
+    done
+
+    return 1
+}
+
+resolve_install_root_from_process_arg() {
+    local process_arg="$1"
+    local cwd_path="$2"
+    local candidate_path="$process_arg"
+
+    [[ -n "$candidate_path" ]] || return 1
+    [[ "$candidate_path" == -* ]] && return 1
+
+    if [[ "$candidate_path" != /* && -n "$cwd_path" ]]; then
+        candidate_path="$cwd_path/$candidate_path"
     fi
 
-    printf '%s\n' "$score"
+    resolve_install_root_from_path "$candidate_path"
+}
+
+looks_like_tavern_process_cmdline() {
+    local cmdline="$1"
+
+    case "$cmdline" in
+        *server.js*|*start.sh*|*SillyTavern*|*sillytavern*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+scan_running_install_roots() {
+    local proc_dir cmdline cwd_path resolved_root process_arg
+    [[ -d /proc ]] || return 0
+
+    for proc_dir in /proc/[0-9]*; do
+        [[ -d "$proc_dir" ]] || continue
+
+        if ! cmdline="$(tr '\0' ' ' < "$proc_dir/cmdline" 2>/dev/null)"; then
+            continue
+        fi
+        cwd_path="$(readlink "$proc_dir/cwd" 2>/dev/null || true)"
+        if resolved_root="$(resolve_install_root_from_path "$cwd_path")"; then
+            mark_active_install_root_candidate "$resolved_root"
+        fi
+
+        looks_like_tavern_process_cmdline "$cmdline" || continue
+
+        # 有些启动方式会把 server.js/start.sh 写在参数里；同时看 cwd 和参数，
+        # 才能覆盖官方 Termux、proot-distro、以及用户自定义目录启动的实例。
+        while IFS= read -r -d '' process_arg; do
+            case "$process_arg" in
+                *server.js*|*start.sh*|*SillyTavern*|*sillytavern*)
+                    if resolved_root="$(resolve_install_root_from_process_arg "$process_arg" "$cwd_path")"; then
+                        mark_active_install_root_candidate "$resolved_root"
+                    fi
+                    ;;
+            esac
+        done < "$proc_dir/cmdline" 2>/dev/null || true
+    done
+}
+
+scan_sillytavern_roots_with_find() {
+    local search_root="$1"
+    [[ -d "$search_root" ]] || return 0
+
+    while IFS= read -r -d '' package_json_path; do
+        register_install_root_candidate "$(dirname "$package_json_path")"
+    done < <(
+        find "$search_root" \
+            \( -path "$search_root/node_modules" -o -path "$search_root/.git" -o -path "$search_root/.cache" \) -prune \
+            -o -maxdepth 5 -type f -name package.json -print0 2>/dev/null
+    )
+}
+
+scan_proot_distro_install_roots() {
+    local termux_prefix proot_root
+    termux_prefix="$(termux_prefix_path)"
+    proot_root="$termux_prefix/var/lib/proot-distro"
+    [[ -d "$proot_root" ]] || return 0
+
+    while IFS= read -r -d '' rootfs_root; do
+        register_install_root_candidate "$rootfs_root/root/SillyTavern"
+        register_install_root_candidate "$rootfs_root/root/sillytavern"
+
+        while IFS= read -r -d '' home_dir; do
+            register_install_root_candidate "$home_dir/SillyTavern"
+            register_install_root_candidate "$home_dir/sillytavern"
+        done < <(find "$rootfs_root/home" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+
+        scan_sillytavern_roots_with_find "$rootfs_root"
+    done < <(find "$proot_root" -mindepth 1 -maxdepth 4 -type d -name rootfs -print0 2>/dev/null)
+}
+
+scan_install_roots() {
+    INSTALL_ROOT_CANDIDATES=()
+    KNOWN_INSTALL_ROOTS=()
+    ACTIVE_INSTALL_ROOT_IDENTITIES=()
+
+    local termux_prefix termux_files_root scan_root extra_scan_root
+    termux_prefix="$(termux_prefix_path)"
+    termux_files_root="$(dirname "$termux_prefix")"
+
+    scan_running_install_roots
+    register_install_root_candidate "$PWD"
+    register_install_root_candidate "$PWD/SillyTavern"
+    register_install_root_candidate "$PWD/sillytavern"
+    register_install_root_candidate "$HOME/SillyTavern"
+    register_install_root_candidate "$HOME/sillytavern"
+    register_install_root_candidate "$HOME/root/SillyTavern"
+    register_install_root_candidate "$HOME/root/sillytavern"
+
+    for scan_root in "$PWD" "$HOME" "$termux_files_root" /home /opt; do
+        scan_sillytavern_roots_with_find "$scan_root"
+    done
+
+    if [[ -n "${SILLYTAVERN_EXPORT_SCAN_ROOTS:-}" ]]; then
+        while IFS= read -r extra_scan_root; do
+            [[ -n "$extra_scan_root" ]] || continue
+            scan_sillytavern_roots_with_find "$extra_scan_root"
+        done < <(printf '%s\n' "${SILLYTAVERN_EXPORT_SCAN_ROOTS//:/$'\n'}")
+    fi
+
+    scan_proot_distro_install_roots
+}
+
+describe_install_root_origin() {
+    local install_root="$1"
+    local termux_prefix home_root relative_path container_name
+    termux_prefix="$(termux_prefix_path)"
+    home_root="${HOME%/}"
+
+    if [[ "$install_root" == "$home_root/"* ]]; then
+        printf 'Termux HOME'
+        return 0
+    fi
+
+    case "$install_root" in
+        "$termux_prefix"/var/lib/proot-distro/containers/*/rootfs/*)
+            relative_path="${install_root#"$termux_prefix"/var/lib/proot-distro/containers/}"
+            container_name="${relative_path%%/*}"
+            printf 'proot-distro:%s' "$container_name"
+            return 0
+            ;;
+        "$termux_prefix"/var/lib/proot-distro/*/rootfs/*)
+            relative_path="${install_root#"$termux_prefix"/var/lib/proot-distro/}"
+            container_name="${relative_path%%/*}"
+            printf 'proot-distro:%s' "$container_name"
+            return 0
+            ;;
+    esac
+
+    printf '扫描结果'
+}
+
+looks_like_user_content_root() {
+    local directory="$1"
+    local marker
+    local user_content_marker_directories=(
+        "OpenAI Settings"
+        "KoboldAI Settings"
+        "NovelAI Settings"
+        "TextGen Settings"
+        "context"
+        "instruct"
+        "QuickReplies"
+        "sysprompt"
+        "reasoning"
+        "characters"
+        "chats"
+        "group chats"
+        "worlds"
+    )
+
+    for marker in "${user_content_marker_directories[@]}"; do
+        if [[ -e "$directory/$marker" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+looks_like_nested_user_content_root() {
+    local directory="$1"
+    local directory_name
+    directory_name="$(basename "$directory")"
+
+    # data/ 下除了真正用户目录，还会出现 _cache、_storage 之类宿主/上游内部目录。
+    # 这里和 Android 导入预览保持同一条规则：嵌套用户根必须带 settings.json，
+    # 且目录名不能是内部缓存约定，避免把旁路目录误算成一个酒馆用户。
+    if [[ "$directory_name" == _* || "$directory_name" == .* ]]; then
+        return 1
+    fi
+
+    [[ -f "$directory/settings.json" ]] || return 1
+    looks_like_user_content_root "$directory"
+}
+
+resolve_user_content_roots() {
+    local data_root="$1"
+    local child_dir
+    local nested_user_roots=()
+
+    [[ -d "$data_root" ]] || return 0
+
+    while IFS= read -r -d '' child_dir; do
+        if looks_like_nested_user_content_root "$child_dir"; then
+            nested_user_roots+=("$child_dir")
+        fi
+    done < <(find "$data_root" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+
+    if ((${#nested_user_roots[@]} > 0)); then
+        printf '%s\0' "${nested_user_roots[@]}"
+        return 0
+    fi
+
+    if looks_like_user_content_root "$data_root"; then
+        printf '%s\0' "$data_root"
+    fi
+}
+
+count_files_by_extension() {
+    local directory="$1"
+    local extension="$2"
+    local recursive="$3"
+    local depth_args=()
+
+    [[ -d "$directory" ]] || {
+        printf '0\n'
+        return 0
+    }
+
+    if [[ "$recursive" != '1' ]]; then
+        depth_args=(-maxdepth 1)
+    fi
+
+    find "$directory" "${depth_args[@]}" -type f -iname "*.$extension" 2>/dev/null | wc -l | tr -d '[:space:]'
+}
+
+count_tavern_content_stats() {
+    local install_root="$1"
+    local user_root
+    local role_card_count='0'
+    local dialogue_count='0'
+    local increment='0'
+
+    # 统计口径必须和 Android 导入预览保持一致，避免“导出前看到的数量”和“导入时预览的数量”对不上：
+    # - 角色卡只算 characters 根层 .png，不能把 sprites/backgrounds 等附属资源算进去。
+    # - 聊天历史递归统计 chats 和 group chats 下的 .jsonl，因为角色聊天会落在子目录里。
+    while IFS= read -r -d '' user_root; do
+        increment="$(count_files_by_extension "$user_root/characters" png 0)"
+        role_card_count=$((role_card_count + increment))
+
+        increment="$(count_files_by_extension "$user_root/chats" jsonl 1)"
+        dialogue_count=$((dialogue_count + increment))
+
+        increment="$(count_files_by_extension "$user_root/group chats" jsonl 1)"
+        dialogue_count=$((dialogue_count + increment))
+    done < <(resolve_user_content_roots "$install_root/data")
+
+    printf '%s %s\n' "$role_card_count" "$dialogue_count"
 }
 
 detect_install_root() {
@@ -150,37 +493,102 @@ detect_install_root() {
         return 1
     fi
 
-    local candidate best_candidate='' best_score=-1
-    for candidate in "$HOME/SillyTavern" "$HOME/sillytavern"; do
-        if is_sillytavern_root "$candidate"; then
-            local score
-            score="$(score_install_root "$candidate")"
-            if (( score > best_score )); then
-                best_candidate="$candidate"
-                best_score="$score"
-            fi
-        fi
-    done
+    local candidate_count selected_index
+    local active_count active_index candidate_root origin stats_line role_card_count dialogue_count active_label
+    local -a candidate_origins=()
+    local -a candidate_role_counts=()
+    local -a candidate_dialogue_counts=()
+    local -a candidate_active_labels=()
 
-    while IFS= read -r candidate; do
-        candidate="$(dirname "$candidate")"
-        if is_sillytavern_root "$candidate"; then
-            local score
-            score="$(score_install_root "$candidate")"
-            if (( score > best_score )); then
-                best_candidate="$candidate"
-                best_score="$score"
-            fi
-        fi
-    done < <(find "$HOME" -maxdepth 4 -type f -name package.json 2>/dev/null)
+    scan_install_roots
+    candidate_count="${#INSTALL_ROOT_CANDIDATES[@]}"
 
-    if [[ -n "$best_candidate" ]]; then
-        canonical_path "$best_candidate"
+    if (( candidate_count == 0 )); then
+        echo "未找到 SillyTavern 安装目录。可用 --install-root 手工指定。" >&2
+        return 1
+    fi
+
+    if (( candidate_count == 1 )); then
+        printf '只找到 1 个 SillyTavern，直接选中：%s\n' "${INSTALL_ROOT_CANDIDATES[0]}" >&2
+        printf '%s\n' "${INSTALL_ROOT_CANDIDATES[0]}"
         return 0
     fi
 
-    echo "未找到 SillyTavern 安装目录。可用 --install-root 手工指定。" >&2
-    return 1
+    active_count=0
+    active_index=-1
+    for candidate_root in "${INSTALL_ROOT_CANDIDATES[@]}"; do
+        origin="$(describe_install_root_origin "$candidate_root")"
+        stats_line="$(count_tavern_content_stats "$candidate_root")"
+        role_card_count="${stats_line%% *}"
+        dialogue_count="${stats_line##* }"
+        active_label='未检测到运行'
+        if is_active_install_root "$candidate_root"; then
+            active_label='运行中'
+            active_index="${#candidate_active_labels[@]}"
+            active_count=$((active_count + 1))
+        fi
+        candidate_origins+=("$origin")
+        candidate_role_counts+=("$role_card_count")
+        candidate_dialogue_counts+=("$dialogue_count")
+        candidate_active_labels+=("$active_label")
+    done
+
+    printf '\n' >&2
+    printf '喵呜，找到 %s 个 SillyTavern 实例，请选一个要导出的目标：\n' "$candidate_count" >&2
+    printf '────────────────────────────────────────\n' >&2
+    for ((selected_index = 0; selected_index < candidate_count; selected_index++)); do
+        printf '  [%d] %s  %s\n' \
+            $((selected_index + 1)) \
+            "${candidate_active_labels[$selected_index]}" \
+            "${candidate_origins[$selected_index]}" >&2
+        printf '      🐱 角色卡：%s 张 | 📖 聊天历史：%s 条\n' \
+            "${candidate_role_counts[$selected_index]}" \
+            "${candidate_dialogue_counts[$selected_index]}" >&2
+        printf '      📍 路径：%s\n' "${INSTALL_ROOT_CANDIDATES[$selected_index]}" >&2
+    done
+    printf '────────────────────────────────────────\n' >&2
+
+    if ! prompt_available; then
+        if (( active_count == 1 )); then
+            printf '当前不是可交互终端，已使用唯一运行中的实例。\n' >&2
+            printf '%s\n' "${INSTALL_ROOT_CANDIDATES[$active_index]}"
+            return 0
+        fi
+        echo "当前不是可交互终端，且检测到多个安装目录。请使用 --install-root 指定路径。" >&2
+        return 1
+    fi
+
+    local answer
+    local prompt_text="请输入编号 [1-$candidate_count]（直接回车取消）："
+    if (( active_count == 1 )); then
+        prompt_text="请输入编号 [1-$candidate_count]（直接回车使用运行中实例 $((active_index + 1))）："
+    fi
+
+    while true; do
+        if ! answer="$(read_prompt_line "$prompt_text")"; then
+            echo "当前无法读取用户选择。请改用 --install-root 指定路径。" >&2
+            return 1
+        fi
+
+        if [[ -z "$answer" ]]; then
+            if (( active_count == 1 )); then
+                printf '%s\n' "${INSTALL_ROOT_CANDIDATES[$active_index]}"
+                return 0
+            fi
+            echo "已取消导出。" >&2
+            return 1
+        fi
+
+        if [[ "$answer" =~ ^[0-9]+$ ]]; then
+            selected_index=$((answer - 1))
+            if (( selected_index >= 0 && selected_index < candidate_count )); then
+                printf '%s\n' "${INSTALL_ROOT_CANDIDATES[$selected_index]}"
+                return 0
+            fi
+        fi
+
+        printf '无效编号，请重新输入。\n' >&2
+    done
 }
 
 detect_output_dir() {
@@ -231,14 +639,13 @@ confirm_export_method() {
     local prompt="$1"
     local answer
 
-    if [[ ! -t 0 ]]; then
+    if ! prompt_available; then
         echo "当前不是交互式终端，无法确认导出方式：$prompt" >&2
         return 1
     fi
 
     while true; do
-        printf '%s [Y/n]: ' "$prompt" >&2
-        IFS= read -r answer || return 1
+        answer="$(read_prompt_line "$prompt [Y/n]: ")" || return 1
         case "$answer" in
             '')
                 return 0
@@ -502,6 +909,7 @@ main() {
         esac
     done
 
+    print_banner
     log "开始导出 SillyTavern 数据"
     if ! is_termux_environment; then
         log "当前环境不是 Termux，脚本终止。"
@@ -514,7 +922,6 @@ main() {
 
     local install_root
     if ! install_root="$(detect_install_root "$install_root_arg")"; then
-        log "未找到 SillyTavern 安装目录。请使用 --install-root 指定安装路径，或在 Termux 中确保 SillyTavern 已安装。脚本中止。"
         exit 1
     fi
 
@@ -531,6 +938,11 @@ main() {
 
     # 在导出进度开始前先打印关键路径信息
     log "安装目录：$install_root"
+    local selected_stats role_card_count dialogue_count
+    selected_stats="$(count_tavern_content_stats "$install_root")"
+    role_card_count="${selected_stats%% *}"
+    dialogue_count="${selected_stats##* }"
+    log "内容统计：角色卡 $role_card_count，聊天历史 $dialogue_count"
     log "发布方式：$EXPORT_LABEL"
 
     local data_root plugins_root
