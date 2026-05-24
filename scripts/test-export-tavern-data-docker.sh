@@ -158,6 +158,7 @@ echo "运行交互导出：输入编号 2，选择 /workspace/SillyTavern"
 "$python_command" - "$container_name" "${DOCKER[@]}" <<'PY'
 import os
 import pty
+import re
 import select
 import subprocess
 import sys
@@ -176,15 +177,7 @@ command = docker_command + [
     rm -rf /tmp/export-output-interactive
     mkdir -p /tmp/export-output-interactive
     cd /workspace
-    if ! /opt/export-tavern-data.sh --output-dir /tmp/export-output-interactive >/tmp/export-interactive.log 2>&1; then
-        cat /tmp/export-interactive.log
-        exit 1
-    fi
-    cat /tmp/export-interactive.log
-
-    grep -q "找到 4 个 SillyTavern 实例" /tmp/export-interactive.log
-    grep -q "内容统计：角色卡 2，聊天历史 2" /tmp/export-interactive.log
-    test "$(find /tmp/export-output-interactive -maxdepth 1 -type f -name "sillytavern-termux-backup-*.zip" | wc -l)" -eq 1
+    /opt/export-tavern-data.sh --output-dir /tmp/export-output-interactive
 ''',
 ]
 
@@ -213,8 +206,8 @@ try:
                 sys.stdout.buffer.write(data)
                 sys.stdout.buffer.flush()
 
-        if not sent_choice and "请输入编号".encode("utf-8") in captured:
-            os.write(master_fd, b"2\n")
+        if not sent_choice and "使用方向键选择要导出的酒馆".encode("utf-8") in captured:
+            os.write(master_fd, b"\x1b[B\n")
             sent_choice = True
 
         if process.poll() is not None:
@@ -229,6 +222,24 @@ try:
                 if not data:
                     break
                 sys.stdout.buffer.write(data)
+            text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", captured.decode("utf-8", errors="ignore"))
+            if "使用方向键选择要导出的酒馆" not in text:
+                raise AssertionError("missing TUI menu text")
+            if "已选择：/workspace/SillyTavern" not in text:
+                raise AssertionError("missing selected path")
+            if "内容统计：角色卡 2，聊天历史 2" not in text:
+                raise AssertionError("missing selected content stats")
+            check = subprocess.run(
+                docker_command + [
+                    "exec",
+                    container_name,
+                    "bash",
+                    "-lc",
+                    'test "$(find /tmp/export-output-interactive -maxdepth 1 -type f -name "sillytavern-termux-backup-*.zip" | wc -l)" -eq 1',
+                ]
+            )
+            if check.returncode != 0:
+                raise AssertionError("interactive archive was not created")
             sys.exit(process.returncode)
 finally:
     os.close(master_fd)

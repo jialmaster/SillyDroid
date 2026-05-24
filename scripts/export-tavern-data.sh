@@ -63,6 +63,7 @@ COLOR_YELLOW=''
 COLOR_BLUE=''
 COLOR_MAGENTA=''
 COLOR_CYAN=''
+COLOR_REVERSE=''
 
 init_colors() {
     if [[ "${NO_COLOR:-}" == '1' ]]; then
@@ -78,6 +79,7 @@ init_colors() {
         COLOR_BLUE=$'\033[34m'
         COLOR_MAGENTA=$'\033[35m'
         COLOR_CYAN=$'\033[36m'
+        COLOR_REVERSE=$'\033[7m'
     fi
 }
 
@@ -104,11 +106,21 @@ success() {
     printf '%s\n' "$(color_text "$COLOR_GREEN" "$*")"
 }
 
+format_active_label() {
+    local active_label="$1"
+    if [[ "$active_label" == '运行中' ]]; then
+        color_text "$COLOR_GREEN" "$active_label"
+        return 0
+    fi
+
+    color_text "$COLOR_DIM" "$active_label"
+}
+
 SCAN_ANIMATION_PID=''
 
 start_scan_animation() {
     local message="$1"
-    if [[ ! -t 2 ]]; then
+    if ! interactive_tui_available; then
         printf '%s\n' "$(color_text "$COLOR_CYAN" "$message")" >&2
         return 0
     fi
@@ -133,7 +145,7 @@ stop_scan_animation() {
         kill "$SCAN_ANIMATION_PID" >/dev/null 2>&1 || true
         wait "$SCAN_ANIMATION_PID" >/dev/null 2>&1 || true
         SCAN_ANIMATION_PID=''
-        if [[ -t 2 ]]; then
+        if interactive_tui_available; then
             printf '\r\033[K' >&2
         fi
     fi
@@ -172,6 +184,10 @@ prompt_available() {
     tty_prompt_available || [[ -t 0 ]]
 }
 
+interactive_tui_available() {
+    tty_prompt_available && [[ -t 2 ]] && [[ "${TERM:-}" != 'dumb' ]]
+}
+
 read_prompt_line() {
     local prompt="$1"
     local answer=''
@@ -193,6 +209,16 @@ read_prompt_line() {
     fi
 
     return 1
+}
+
+read_tty_key() {
+    local key rest
+    IFS= read -rsn1 key < /dev/tty || return 1
+    if [[ "$key" == $'\033' ]]; then
+        IFS= read -rsn2 -t 0.05 rest < /dev/tty || true
+        key+="$rest"
+    fi
+    printf '%s' "$key"
 }
 
 is_termux_environment() {
@@ -582,6 +608,106 @@ count_tavern_content_stats() {
     printf '%s %s\n' "$role_card_count" "$dialogue_count"
 }
 
+print_static_install_root_list() {
+    local candidate_count="$1"
+    local selected_index
+
+    printf '\n' >&2
+    printf '%s\n' "$(color_text "$COLOR_BOLD$COLOR_CYAN" "喵呜，找到 $candidate_count 个 SillyTavern 实例，请选一个要导出的目标：")" >&2
+    printf '────────────────────────────────────────\n' >&2
+    for ((selected_index = 0; selected_index < candidate_count; selected_index++)); do
+        printf '  [%d] %s  %s\n' \
+            $((selected_index + 1)) \
+            "$(format_active_label "${candidate_active_labels[$selected_index]}")" \
+            "$(color_text "$COLOR_MAGENTA" "${candidate_origins[$selected_index]}")" >&2
+        printf '      🐱 角色卡：%s 张 | 📖 聊天历史：%s 条\n' \
+            "$(color_text "$COLOR_GREEN" "${candidate_role_counts[$selected_index]}")" \
+            "$(color_text "$COLOR_GREEN" "${candidate_dialogue_counts[$selected_index]}")" >&2
+        printf '      📍 路径：%s\n' "$(color_text "$COLOR_BLUE" "${INSTALL_ROOT_CANDIDATES[$selected_index]}")" >&2
+    done
+    printf '────────────────────────────────────────\n' >&2
+}
+
+render_install_root_menu() {
+    local candidate_count="$1"
+    local selected_index="$2"
+    local row marker row_color
+    local reset_color
+
+    printf '\033[2J\033[H' > /dev/tty
+    print_banner > /dev/tty
+    printf '%s\n' "$(color_text "$COLOR_CYAN" "使用方向键选择要导出的酒馆，回车确认，q 取消。")" > /dev/tty
+    printf '%s\n' "$(color_text "$COLOR_DIM" "也可以用 j/k 或 w/s 移动。")" > /dev/tty
+    printf '────────────────────────────────────────\n' > /dev/tty
+
+    for ((row = 0; row < candidate_count; row++)); do
+        marker='  '
+        row_color=''
+        reset_color=''
+        if (( row == selected_index )); then
+            marker='▶ '
+            row_color="$COLOR_REVERSE"
+            reset_color="$COLOR_RESET"
+        fi
+
+        printf '%s%s[%d] %s  %s%s\n' \
+            "$row_color" \
+            "$marker" \
+            $((row + 1)) \
+            "${candidate_active_labels[$row]}" \
+            "${candidate_origins[$row]}" \
+            "$reset_color" > /dev/tty
+        printf '%s   🐱 角色卡：%s 张 | 📖 聊天历史：%s 条%s\n' \
+            "$row_color" \
+            "${candidate_role_counts[$row]}" \
+            "${candidate_dialogue_counts[$row]}" \
+            "$reset_color" > /dev/tty
+        printf '%s   📍 %s%s\n' \
+            "$row_color" \
+            "${INSTALL_ROOT_CANDIDATES[$row]}" \
+            "$reset_color" > /dev/tty
+    done
+
+    printf '────────────────────────────────────────\n' > /dev/tty
+}
+
+select_install_root_with_tui() {
+    local candidate_count="$1"
+    local selected_index="$2"
+    local key
+
+    printf '\033[?25l' > /dev/tty
+
+    while true; do
+        render_install_root_menu "$candidate_count" "$selected_index"
+        if ! key="$(read_tty_key)"; then
+            printf '\033[?25h' > /dev/tty
+            return 1
+        fi
+        case "$key" in
+            $'\033[A'|k|K|w|W)
+                selected_index=$(( (selected_index + candidate_count - 1) % candidate_count ))
+                ;;
+            $'\033[B'|j|J|s|S)
+                selected_index=$(( (selected_index + 1) % candidate_count ))
+                ;;
+            '')
+                printf '\033[?25h' > /dev/tty
+                printf '\033[2J\033[H' > /dev/tty
+                printf '%s\n' "$(color_text "$COLOR_GREEN" "已选择：${INSTALL_ROOT_CANDIDATES[$selected_index]}")" > /dev/tty
+                printf '%s\n' "${INSTALL_ROOT_CANDIDATES[$selected_index]}"
+                return 0
+                ;;
+            q|Q|$'\003')
+                printf '\033[?25h' > /dev/tty
+                printf '\033[2J\033[H' > /dev/tty
+                warn "已取消导出。"
+                return 1
+                ;;
+        esac
+    done
+}
+
 detect_install_root() {
     local explicit_root="${1:-}"
     if [[ -n "$explicit_root" ]]; then
@@ -621,9 +747,9 @@ detect_install_root() {
         stats_line="$(count_tavern_content_stats "$candidate_root")"
         role_card_count="${stats_line%% *}"
         dialogue_count="${stats_line##* }"
-        active_label="$(color_text "$COLOR_DIM" '未检测到运行')"
+        active_label='未检测到运行'
         if is_active_install_root "$candidate_root"; then
-            active_label="$(color_text "$COLOR_GREEN" '运行中')"
+            active_label='运行中'
             active_index="${#candidate_active_labels[@]}"
             active_count=$((active_count + 1))
         fi
@@ -633,22 +759,8 @@ detect_install_root() {
         candidate_active_labels+=("$active_label")
     done
 
-    printf '\n' >&2
-    printf '%s\n' "$(color_text "$COLOR_BOLD$COLOR_CYAN" "喵呜，找到 $candidate_count 个 SillyTavern 实例，请选一个要导出的目标：")" >&2
-    printf '────────────────────────────────────────\n' >&2
-    for ((selected_index = 0; selected_index < candidate_count; selected_index++)); do
-        printf '  [%d] %s  %s\n' \
-            $((selected_index + 1)) \
-            "${candidate_active_labels[$selected_index]}" \
-            "$(color_text "$COLOR_MAGENTA" "${candidate_origins[$selected_index]}")" >&2
-        printf '      🐱 角色卡：%s 张 | 📖 聊天历史：%s 条\n' \
-            "$(color_text "$COLOR_GREEN" "${candidate_role_counts[$selected_index]}")" \
-            "$(color_text "$COLOR_GREEN" "${candidate_dialogue_counts[$selected_index]}")" >&2
-        printf '      📍 路径：%s\n' "$(color_text "$COLOR_BLUE" "${INSTALL_ROOT_CANDIDATES[$selected_index]}")" >&2
-    done
-    printf '────────────────────────────────────────\n' >&2
-
     if ! prompt_available; then
+        print_static_install_root_list "$candidate_count"
         if (( active_count == 1 )); then
             warn "当前不是可交互终端，已使用唯一运行中的实例。"
             printf '%s\n' "${INSTALL_ROOT_CANDIDATES[$active_index]}"
@@ -657,6 +769,17 @@ detect_install_root() {
         error "当前不是可交互终端，且检测到多个安装目录。请使用 --install-root 指定路径。"
         return 1
     fi
+
+    if interactive_tui_available; then
+        selected_index=0
+        if (( active_count == 1 )); then
+            selected_index="$active_index"
+        fi
+        select_install_root_with_tui "$candidate_count" "$selected_index"
+        return $?
+    fi
+
+    print_static_install_root_list "$candidate_count"
 
     local answer
     local prompt_text="请输入编号 [1-$candidate_count]（直接回车取消）："
