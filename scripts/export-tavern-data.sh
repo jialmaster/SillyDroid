@@ -182,6 +182,10 @@ format_active_label() {
     color_text "$COLOR_DIM" "$active_label"
 }
 
+format_key_hint() {
+    color_text "$COLOR_BOLD$COLOR_YELLOW" "$1"
+}
+
 SCAN_ANIMATION_PID=''
 
 terminal_columns() {
@@ -790,8 +794,13 @@ render_install_root_menu() {
         printf '\033[%dA\033[J' "$TUI_MENU_LINES" > /dev/tty
     fi
 
-    printf '%s\n' "$(color_text "$COLOR_CYAN" "使用方向键选择要导出的酒馆，回车确认，q 取消。")" > /dev/tty
-    printf '%s\n' "$(color_text "$COLOR_DIM" "也可以用 j/k 或 w/s 移动。")" > /dev/tty
+    printf '按 %s/%s 或 %s/%s 移动，%s 确认，%s 退出\n' \
+        "$(format_key_hint '↑')" \
+        "$(format_key_hint '↓')" \
+        "$(format_key_hint 'W')" \
+        "$(format_key_hint 'S')" \
+        "$(format_key_hint 'Enter')" \
+        "$(format_key_hint 'Q')" > /dev/tty
     printf '────────────────────────────────────────\n' > /dev/tty
 
     for ((row = 0; row < candidate_count; row++)); do
@@ -824,7 +833,7 @@ render_install_root_menu() {
     done
 
     printf '────────────────────────────────────────\n' > /dev/tty
-    TUI_MENU_LINES=$((candidate_count * 3 + 4))
+    TUI_MENU_LINES=$((candidate_count * 3 + 3))
     TUI_MENU_RENDERED=1
 }
 
