@@ -5,10 +5,10 @@ usage() {
     cat <<'EOF'
 Usage: export-tavern-data.sh [--output-dir <dir>] [--install-root <dir>]
 
-One-click export for official SillyTavern installs running inside Termux.
+One-click export for official SillyTavern installs running inside Termux, Linux, or Docker.
 The script scans all detected install roots, lets the user choose the target instance when needed,
     normalizes data into config/data/plugins/public, creates a zip backup,
-    and publishes it through shared storage, Android DownloadManager, or the system share sheet.
+    and saves or publishes it through the best available output method.
 EOF
 }
 
@@ -30,7 +30,7 @@ ensure_termux_package_installed() {
 
 ensure_zip_available() {
     if ! ensure_termux_package_installed zip zip; then
-        echo "缺少 zip 命令，且自动安装失败。请手工执行：pkg install zip" >&2
+        error "缺少 zip 命令，且自动安装失败。Termux 可执行：pkg install zip；Linux 可执行对应发行版的 zip 安装命令。"
         exit 1
     fi
 }
@@ -55,9 +55,54 @@ ensure_python_available() {
     find_python_command >/dev/null 2>&1
 }
 
+COLOR_RESET=''
+COLOR_BOLD=''
+COLOR_DIM=''
+COLOR_RED=''
+COLOR_GREEN=''
+COLOR_YELLOW=''
+COLOR_BLUE=''
+COLOR_MAGENTA=''
+COLOR_CYAN=''
+
+init_colors() {
+    if [[ "${NO_COLOR:-}" == '1' ]]; then
+        return 0
+    fi
+    if [[ -t 1 || -t 2 || -n "${FORCE_COLOR:-}" ]]; then
+        COLOR_RESET=$'\033[0m'
+        COLOR_BOLD=$'\033[1m'
+        COLOR_DIM=$'\033[2m'
+        COLOR_RED=$'\033[31m'
+        COLOR_GREEN=$'\033[32m'
+        COLOR_YELLOW=$'\033[33m'
+        COLOR_BLUE=$'\033[34m'
+        COLOR_MAGENTA=$'\033[35m'
+        COLOR_CYAN=$'\033[36m'
+    fi
+}
+
+color_text() {
+    local color="$1"
+    shift
+    printf '%s%s%s' "$color" "$*" "$COLOR_RESET"
+}
+
 # 简洁日志函数（不带时间戳）
 log() {
     printf '%s\n' "$*"
+}
+
+warn() {
+    printf '%s\n' "$(color_text "$COLOR_YELLOW" "$*")" >&2
+}
+
+error() {
+    printf '%s\n' "$(color_text "$COLOR_RED" "$*")" >&2
+}
+
+success() {
+    printf '%s\n' "$(color_text "$COLOR_GREEN" "$*")"
 }
 
 print_banner() {
@@ -120,7 +165,19 @@ is_termux_environment() {
     if [[ "${PREFIX:-}" == */data/data/com.termux/files/usr ]]; then
         return 0
     fi
+    if command -v termux-setup-storage >/dev/null 2>&1 || command -v termux-share >/dev/null 2>&1 || command -v termux-download >/dev/null 2>&1; then
+        return 0
+    fi
     return 1
+}
+
+describe_runtime_environment() {
+    if is_termux_environment; then
+        printf 'Termux'
+        return 0
+    fi
+
+    printf 'Linux/Docker'
 }
 
 canonical_path() {
@@ -489,7 +546,7 @@ detect_install_root() {
             canonical_path "$explicit_root"
             return 0
         fi
-        echo "指定的安装目录不是有效的 SillyTavern 根目录：$explicit_root" >&2
+        error "指定的安装目录不是有效的 SillyTavern 根目录：$explicit_root"
         return 1
     fi
 
@@ -504,12 +561,12 @@ detect_install_root() {
     candidate_count="${#INSTALL_ROOT_CANDIDATES[@]}"
 
     if (( candidate_count == 0 )); then
-        echo "未找到 SillyTavern 安装目录。可用 --install-root 手工指定。" >&2
+        error "未找到 SillyTavern 安装目录。可用 --install-root 手工指定。"
         return 1
     fi
 
     if (( candidate_count == 1 )); then
-        printf '只找到 1 个 SillyTavern，直接选中：%s\n' "${INSTALL_ROOT_CANDIDATES[0]}" >&2
+        printf '%s\n' "$(color_text "$COLOR_GREEN" "只找到 1 个 SillyTavern，直接选中：${INSTALL_ROOT_CANDIDATES[0]}")" >&2
         printf '%s\n' "${INSTALL_ROOT_CANDIDATES[0]}"
         return 0
     fi
@@ -521,9 +578,9 @@ detect_install_root() {
         stats_line="$(count_tavern_content_stats "$candidate_root")"
         role_card_count="${stats_line%% *}"
         dialogue_count="${stats_line##* }"
-        active_label='未检测到运行'
+        active_label="$(color_text "$COLOR_DIM" '未检测到运行')"
         if is_active_install_root "$candidate_root"; then
-            active_label='运行中'
+            active_label="$(color_text "$COLOR_GREEN" '运行中')"
             active_index="${#candidate_active_labels[@]}"
             active_count=$((active_count + 1))
         fi
@@ -534,27 +591,27 @@ detect_install_root() {
     done
 
     printf '\n' >&2
-    printf '喵呜，找到 %s 个 SillyTavern 实例，请选一个要导出的目标：\n' "$candidate_count" >&2
+    printf '%s\n' "$(color_text "$COLOR_BOLD$COLOR_CYAN" "喵呜，找到 $candidate_count 个 SillyTavern 实例，请选一个要导出的目标：")" >&2
     printf '────────────────────────────────────────\n' >&2
     for ((selected_index = 0; selected_index < candidate_count; selected_index++)); do
         printf '  [%d] %s  %s\n' \
             $((selected_index + 1)) \
             "${candidate_active_labels[$selected_index]}" \
-            "${candidate_origins[$selected_index]}" >&2
+            "$(color_text "$COLOR_MAGENTA" "${candidate_origins[$selected_index]}")" >&2
         printf '      🐱 角色卡：%s 张 | 📖 聊天历史：%s 条\n' \
-            "${candidate_role_counts[$selected_index]}" \
-            "${candidate_dialogue_counts[$selected_index]}" >&2
-        printf '      📍 路径：%s\n' "${INSTALL_ROOT_CANDIDATES[$selected_index]}" >&2
+            "$(color_text "$COLOR_GREEN" "${candidate_role_counts[$selected_index]}")" \
+            "$(color_text "$COLOR_GREEN" "${candidate_dialogue_counts[$selected_index]}")" >&2
+        printf '      📍 路径：%s\n' "$(color_text "$COLOR_BLUE" "${INSTALL_ROOT_CANDIDATES[$selected_index]}")" >&2
     done
     printf '────────────────────────────────────────\n' >&2
 
     if ! prompt_available; then
         if (( active_count == 1 )); then
-            printf '当前不是可交互终端，已使用唯一运行中的实例。\n' >&2
+            warn "当前不是可交互终端，已使用唯一运行中的实例。"
             printf '%s\n' "${INSTALL_ROOT_CANDIDATES[$active_index]}"
             return 0
         fi
-        echo "当前不是可交互终端，且检测到多个安装目录。请使用 --install-root 指定路径。" >&2
+        error "当前不是可交互终端，且检测到多个安装目录。请使用 --install-root 指定路径。"
         return 1
     fi
 
@@ -566,7 +623,7 @@ detect_install_root() {
 
     while true; do
         if ! answer="$(read_prompt_line "$prompt_text")"; then
-            echo "当前无法读取用户选择。请改用 --install-root 指定路径。" >&2
+            error "当前无法读取用户选择。请改用 --install-root 指定路径。"
             return 1
         fi
 
@@ -575,7 +632,7 @@ detect_install_root() {
                 printf '%s\n' "${INSTALL_ROOT_CANDIDATES[$active_index]}"
                 return 0
             fi
-            echo "已取消导出。" >&2
+            warn "已取消导出。"
             return 1
         fi
 
@@ -587,7 +644,7 @@ detect_install_root() {
             fi
         fi
 
-        printf '无效编号，请重新输入。\n' >&2
+        warn "无效编号，请重新输入。"
     done
 }
 
@@ -598,7 +655,7 @@ detect_output_dir() {
             canonical_path "$explicit_dir"
             return 0
         fi
-        echo "指定输出目录不可写：$explicit_dir" >&2
+        error "指定输出目录不可写：$explicit_dir"
         return 1
     fi
 
@@ -610,7 +667,14 @@ detect_output_dir() {
         fi
     done
 
-    echo "未找到可写的共享存储目录。请先在 Termux 中执行 termux-setup-storage 并授权，或使用 --output-dir 显式指定可写目录。" >&2
+    # Linux/Docker 和未授权共享存储的 Termux 都允许直接把 ZIP 落到当前目录，
+    # 避免把“能打包”强行绑定到 Android 共享存储或 Termux:API。
+    if [[ -d "$PWD" && -w "$PWD" ]]; then
+        canonical_path "$PWD"
+        return 0
+    fi
+
+    error "未找到可写输出目录。请使用 --output-dir 显式指定可写目录。"
     return 1
 }
 
@@ -630,8 +694,8 @@ ensure_storage_access() {
         termux-setup-storage || true
     fi
 
-    if [[ ! -d "$HOME/storage/shared" ]]; then
-        log "Termux 共享存储未就绪，将尝试使用 Termux:API 发布导出文件。"
+    if [[ ! -d "$HOME/storage/shared" && -n "${TERMUX_VERSION:-}" ]]; then
+        warn "Termux 共享存储未就绪，将优先把 ZIP 保存到当前目录。"
     fi
 }
 
@@ -712,8 +776,8 @@ resolve_archive_target() {
         EXPORT_LABEL="$resolved_output_dir"
         return 0
     fi
-    direct_failure_reason="共享存储目录不可写或不存在，无法直接保存到 Downloads。"
-    log "直接保存不可用：$direct_failure_reason"
+    direct_failure_reason="没有可写输出目录，无法直接保存 ZIP。"
+    warn "直接保存不可用：$direct_failure_reason"
 
     local export_cache_dir="$HOME/.sillytavern/export-cache"
     mkdir -p "$export_cache_dir"
@@ -721,38 +785,38 @@ resolve_archive_target() {
     ensure_termux_api_tools_available || true
 
     if command -v termux-share >/dev/null 2>&1; then
-        log "回退方案：使用 Android 系统分享面板。原因：$direct_failure_reason"
+        warn "回退方案：使用 Android 系统分享面板。原因：$direct_failure_reason"
         if confirm_export_method "是否使用系统分享面板导出？选择 N 将继续尝试最后的系统下载服务方案。"; then
             EXPORT_METHOD='share'
             ARCHIVE_PATH="$export_cache_dir/$archive_name"
             EXPORT_LABEL='Android 系统分享面板'
             return 0
         fi
-        log "用户选择不使用系统分享面板，继续尝试最后的系统下载服务方案。"
+        warn "用户选择不使用系统分享面板，继续尝试最后的系统下载服务方案。"
     else
-        log "系统分享面板不可用：未检测到 termux-share。"
+        warn "系统分享面板不可用：未检测到 termux-share。"
     fi
 
     ensure_python_available || true
 
     if command -v termux-download >/dev/null 2>&1 && find_python_command >/dev/null 2>&1; then
-        log "最后回退方案：使用 Android 系统下载服务。原因：共享存储不可写，且未使用系统分享面板。"
+        warn "最后回退方案：使用 Android 系统下载服务。原因：无法直接保存，且未使用系统分享面板。"
         if confirm_export_method "是否使用系统下载服务导出？选择 N 将中止导出。"; then
             EXPORT_METHOD='download'
             ARCHIVE_PATH="$export_cache_dir/$archive_name"
             EXPORT_LABEL='Android 系统下载服务'
             return 0
         fi
-        log "用户选择不使用系统下载服务。"
+        warn "用户选择不使用系统下载服务。"
     else
         local missing_download_reasons=()
         command -v termux-download >/dev/null 2>&1 || missing_download_reasons+=("未检测到 termux-download")
         find_python_command >/dev/null 2>&1 || missing_download_reasons+=("未检测到 python/python3")
-        log "系统下载服务不可用：$(IFS='；'; printf '%s' "${missing_download_reasons[*]}")。如果刚才自动安装 termux-api 成功但仍不可用，请确认已安装 Android 端 Termux:API 应用。"
+        warn "系统下载服务不可用：$(IFS='；'; printf '%s' "${missing_download_reasons[*]}")。如果刚才自动安装 termux-api 成功但仍不可用，请确认已安装 Android 端 Termux:API 应用。"
     fi
 
-    echo "无法发布导出文件：共享存储不可写，且未检测到可用的 termux-download 或 termux-share。" >&2
-    echo "可执行：pkg install termux-api，并安装 Termux:API 应用；或修复 termux-setup-storage 后重试。" >&2
+    error "无法发布导出文件：没有可写输出目录，且未检测到可用的 termux-download 或 termux-share。"
+    error "可执行：使用 --output-dir 指定目录；或在 Termux 中安装 termux-api / Termux:API 应用后重试。"
     return 1
 }
 
@@ -887,6 +951,8 @@ main() {
     local output_dir=''
     local install_root_arg=''
 
+    init_colors
+
     while (($# > 0)); do
         case "$1" in
             --output-dir)
@@ -902,7 +968,7 @@ main() {
                 exit 0
                 ;;
             *)
-                echo "未知参数：$1" >&2
+                error "未知参数：$1"
                 usage >&2
                 exit 1
                 ;;
@@ -910,11 +976,8 @@ main() {
     done
 
     print_banner
-    log "开始导出 SillyTavern 数据"
-    if ! is_termux_environment; then
-        log "当前环境不是 Termux，脚本终止。"
-        exit 1
-    fi
+    log "$(color_text "$COLOR_CYAN" "开始导出 SillyTavern 数据")"
+    log "运行环境：$(color_text "$COLOR_MAGENTA" "$(describe_runtime_environment)")"
 
     ensure_zip_available
 
@@ -931,19 +994,19 @@ main() {
 
     local EXPORT_METHOD ARCHIVE_PATH EXPORT_LABEL
     if ! resolve_archive_target "$output_dir" "$archive_name"; then
-        log "无法确定导出发布方式，脚本中止。"
+        error "无法确定导出发布方式，脚本中止。"
         exit 1
     fi
     archive_path="$ARCHIVE_PATH"
 
     # 在导出进度开始前先打印关键路径信息
-    log "安装目录：$install_root"
+    log "安装目录：$(color_text "$COLOR_BLUE" "$install_root")"
     local selected_stats role_card_count dialogue_count
     selected_stats="$(count_tavern_content_stats "$install_root")"
     role_card_count="${selected_stats%% *}"
     dialogue_count="${selected_stats##* }"
-    log "内容统计：角色卡 $role_card_count，聊天历史 $dialogue_count"
-    log "发布方式：$EXPORT_LABEL"
+    log "内容统计：角色卡 $(color_text "$COLOR_GREEN" "$role_card_count")，聊天历史 $(color_text "$COLOR_GREEN" "$dialogue_count")"
+    log "发布方式：$(color_text "$COLOR_CYAN" "$EXPORT_LABEL")"
 
     local data_root plugins_root
     data_root="$install_root/data"
@@ -978,24 +1041,24 @@ main() {
     step "发布导出文件"
     if ! publish_archive "$archive_path" "$archive_name"; then
         printf '\n'
-        log "导出文件发布失败，私有源文件保留在：$archive_path"
+        error "导出文件发布失败，私有源文件保留在：$archive_path"
         exit 1
     fi
 
     step "导出完成"
     printf '\n'
-    printf '导出结果：成功\n'
+    success "导出结果：成功"
     case "$EXPORT_METHOD" in
         direct)
-            printf 'ZIP 路径：%s\n' "$archive_path"
+            printf 'ZIP 路径：%s\n' "$(color_text "$COLOR_GREEN" "$archive_path")"
             ;;
         download)
-            printf 'ZIP 已交给系统下载服务：%s\n' "$archive_name"
-            printf '临时源文件：%s\n' "$archive_path"
+            printf 'ZIP 已交给系统下载服务：%s\n' "$(color_text "$COLOR_GREEN" "$archive_name")"
+            printf '临时源文件：%s\n' "$(color_text "$COLOR_BLUE" "$archive_path")"
             ;;
         share)
-            printf 'ZIP 已打开系统分享面板：%s\n' "$archive_name"
-            printf '临时源文件：%s\n' "$archive_path"
+            printf 'ZIP 已打开系统分享面板：%s\n' "$(color_text "$COLOR_GREEN" "$archive_name")"
+            printf '临时源文件：%s\n' "$(color_text "$COLOR_BLUE" "$archive_path")"
             ;;
     esac
 }

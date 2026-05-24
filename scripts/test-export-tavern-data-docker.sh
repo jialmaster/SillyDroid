@@ -136,6 +136,24 @@ echo "运行非交互导出：应自动选择唯一运行中的 proot-distro 实
     test "$(find /tmp/export-output -maxdepth 1 -type f -name "sillytavern-termux-backup-*.zip" | wc -l)" -eq 1
 '
 
+echo "运行普通 Linux 导出：没有 Termux 环境变量时默认保存到当前目录"
+"${DOCKER[@]}" exec "$container_name" bash -lc '
+    set -euo pipefail
+    rm -f /workspace/sillytavern-termux-backup-*.zip
+    cd /workspace
+    if ! env -u TERMUX_VERSION -u PREFIX /opt/export-tavern-data.sh >/tmp/export-linux.log 2>&1; then
+        cat /tmp/export-linux.log
+        exit 1
+    fi
+    cat /tmp/export-linux.log
+
+    ! grep -q "当前环境不是 Termux" /tmp/export-linux.log
+    grep -q "运行环境：Linux/Docker" /tmp/export-linux.log
+    grep -q "发布方式：/workspace" /tmp/export-linux.log
+    grep -q "内容统计：角色卡 4，聊天历史 6" /tmp/export-linux.log
+    test "$(find /workspace -maxdepth 1 -type f -name "sillytavern-termux-backup-*.zip" | wc -l)" -eq 1
+'
+
 echo "运行交互导出：输入编号 2，选择 /workspace/SillyTavern"
 "$python_command" - "$container_name" "${DOCKER[@]}" <<'PY'
 import os
