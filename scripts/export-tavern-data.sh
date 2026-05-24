@@ -191,9 +191,11 @@ stop_scan_animation() {
 
 print_banner() {
     cat <<'EOF'
+
   /\_/\
  (｡•ᴗ•｡)  SillyTavern 数据导出小助手
   /づ♡    会先帮你找出所有酒馆，再让你挑要搬家的那一个喵
+
 EOF
 }
 
