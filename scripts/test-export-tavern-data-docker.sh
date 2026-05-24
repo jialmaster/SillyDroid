@@ -233,7 +233,7 @@ try:
                 sys.stdout.buffer.write(data)
                 sys.stdout.buffer.flush()
 
-        if not sent_choice and "使用方向键选择要导出的酒馆".encode("utf-8") in captured:
+        if not sent_choice and "移动，".encode("utf-8") in captured:
             os.write(master_fd, b"\x1b[B\n")
             sent_choice = True
 
@@ -250,7 +250,7 @@ try:
                     break
                 sys.stdout.buffer.write(data)
             text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", captured.decode("utf-8", errors="ignore"))
-            if "使用方向键选择要导出的酒馆" not in text:
+            if "按 ↑/↓ 或 W/S 移动，Enter 确认，Q 退出" not in text:
                 raise AssertionError("missing TUI menu text")
             if re.search(r"^[|/\\-] 正在", text, re.MULTILINE):
                 raise AssertionError("scan animation frame should render after the text")
