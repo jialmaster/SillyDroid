@@ -3,12 +3,11 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: export-tavern-data.sh [--output-dir <dir>] [--install-root <dir>]
+用法：export-tavern-data.sh [--output-dir <目录>] [--install-root <目录>]
 
-One-click export for official SillyTavern installs running inside Termux, Linux, or Docker.
-The script scans all detected install roots, lets the user choose the target instance when needed,
-    normalizes data into config/data/plugins/public, creates a zip backup,
-    and saves or publishes it through the best available output method.
+一键导出 Termux、普通系统、容器里的 SillyTavern 数据。
+脚本会先扫描所有可能的酒馆目录，需要时让你选择目标，
+再整理配置、数据、插件和扩展，最后生成迁移压缩包。
 EOF
 }
 
@@ -30,7 +29,7 @@ ensure_termux_package_installed() {
 
 ensure_zip_available() {
     if ! ensure_termux_package_installed zip zip; then
-        error "缺少 zip 命令，且自动安装失败。Termux 可执行：pkg install zip；Linux 可执行对应发行版的 zip 安装命令。"
+        error "缺少 zip 命令，且自动安装失败。Termux 可执行：pkg install zip；普通系统请用对应发行版的安装命令。"
         exit 1
     fi
 }
@@ -105,6 +104,44 @@ success() {
     printf '%s\n' "$(color_text "$COLOR_GREEN" "$*")"
 }
 
+SCAN_ANIMATION_PID=''
+
+start_scan_animation() {
+    local message="$1"
+    if [[ ! -t 2 ]]; then
+        printf '%s\n' "$(color_text "$COLOR_CYAN" "$message")" >&2
+        return 0
+    fi
+
+    (
+        local frames='|/-\'
+        local index=0
+        local frame
+        while true; do
+            frame="${frames:index % ${#frames}:1}"
+            printf '\r%s %s' "$(color_text "$COLOR_CYAN" "$frame")" "$message" >&2
+            index=$((index + 1))
+            sleep 0.12
+        done
+    ) &
+    SCAN_ANIMATION_PID="$!"
+}
+
+stop_scan_animation() {
+    local final_message="${1:-}"
+    if [[ -n "${SCAN_ANIMATION_PID:-}" ]]; then
+        kill "$SCAN_ANIMATION_PID" >/dev/null 2>&1 || true
+        wait "$SCAN_ANIMATION_PID" >/dev/null 2>&1 || true
+        SCAN_ANIMATION_PID=''
+        if [[ -t 2 ]]; then
+            printf '\r\033[K' >&2
+        fi
+    fi
+    if [[ -n "$final_message" ]]; then
+        printf '%s\n' "$final_message" >&2
+    fi
+}
+
 print_banner() {
     cat <<'EOF'
  /\_/\
@@ -173,11 +210,11 @@ is_termux_environment() {
 
 describe_runtime_environment() {
     if is_termux_environment; then
-        printf 'Termux'
+        printf 'Termux 主环境'
         return 0
     fi
 
-    printf 'Linux/Docker'
+    printf '普通系统 / 容器'
 }
 
 canonical_path() {
@@ -341,6 +378,7 @@ scan_sillytavern_roots_with_find() {
     local search_root="$1"
     [[ -d "$search_root" ]] || return 0
 
+    start_scan_animation "正在扫描：$search_root"
     while IFS= read -r -d '' package_json_path; do
         register_install_root_candidate "$(dirname "$package_json_path")"
     done < <(
@@ -348,6 +386,7 @@ scan_sillytavern_roots_with_find() {
             \( -path "$search_root/node_modules" -o -path "$search_root/.git" -o -path "$search_root/.cache" \) -prune \
             -o -maxdepth 5 -type f -name package.json -print0 2>/dev/null
     )
+    stop_scan_animation
 }
 
 scan_proot_distro_install_roots() {
@@ -378,7 +417,11 @@ scan_install_roots() {
     termux_prefix="$(termux_prefix_path)"
     termux_files_root="$(dirname "$termux_prefix")"
 
+    # 扫描可能需要遍历 HOME、proot-distro rootfs 等目录；给用户持续反馈，避免误以为脚本卡住。
+    start_scan_animation "正在检查运行中的酒馆进程"
     scan_running_install_roots
+    stop_scan_animation
+
     register_install_root_candidate "$PWD"
     register_install_root_candidate "$PWD/SillyTavern"
     register_install_root_candidate "$PWD/sillytavern"
@@ -408,7 +451,7 @@ describe_install_root_origin() {
     home_root="${HOME%/}"
 
     if [[ "$install_root" == "$home_root/"* ]]; then
-        printf 'Termux HOME'
+        printf 'Termux 主目录'
         return 0
     fi
 
@@ -416,13 +459,13 @@ describe_install_root_origin() {
         "$termux_prefix"/var/lib/proot-distro/containers/*/rootfs/*)
             relative_path="${install_root#"$termux_prefix"/var/lib/proot-distro/containers/}"
             container_name="${relative_path%%/*}"
-            printf 'proot-distro:%s' "$container_name"
+            printf 'proot 容器：%s' "$container_name"
             return 0
             ;;
         "$termux_prefix"/var/lib/proot-distro/*/rootfs/*)
             relative_path="${install_root#"$termux_prefix"/var/lib/proot-distro/}"
             container_name="${relative_path%%/*}"
-            printf 'proot-distro:%s' "$container_name"
+            printf 'proot 容器：%s' "$container_name"
             return 0
             ;;
     esac
@@ -667,7 +710,7 @@ detect_output_dir() {
         fi
     done
 
-    # Linux/Docker 和未授权共享存储的 Termux 都允许直接把 ZIP 落到当前目录，
+    # 普通系统、容器和未授权共享存储的 Termux 都允许直接把压缩包落到当前目录，
     # 避免把“能打包”强行绑定到 Android 共享存储或 Termux:API。
     if [[ -d "$PWD" && -w "$PWD" ]]; then
         canonical_path "$PWD"
@@ -695,7 +738,7 @@ ensure_storage_access() {
     fi
 
     if [[ ! -d "$HOME/storage/shared" && -n "${TERMUX_VERSION:-}" ]]; then
-        warn "Termux 共享存储未就绪，将优先把 ZIP 保存到当前目录。"
+        warn "Termux 共享存储未就绪，将优先把压缩包保存到当前目录。"
     fi
 }
 
@@ -776,7 +819,7 @@ resolve_archive_target() {
         EXPORT_LABEL="$resolved_output_dir"
         return 0
     fi
-    direct_failure_reason="没有可写输出目录，无法直接保存 ZIP。"
+    direct_failure_reason="没有可写输出目录，无法直接保存压缩包。"
     warn "直接保存不可用：$direct_failure_reason"
 
     local export_cache_dir="$HOME/.sillytavern/export-cache"
@@ -870,7 +913,7 @@ publish_with_share_sheet() {
         echo "调用 termux-share 失败。" >&2
         return 1
     fi
-    log "已打开 Android 系统分享面板，请选择文件管理器、网盘或聊天应用保存 ZIP。"
+    log "已打开 Android 系统分享面板，请选择文件管理器、网盘或聊天应用保存压缩包。"
     log "临时源文件保留在：$archive_path"
 }
 
@@ -1032,15 +1075,15 @@ main() {
     step "拷贝扩展"
     copy_extensions_payload "$install_root" "$stage_root/public"
 
-    step "正在打包为 zip"
+    step "正在打包压缩包"
     (
         cd "$stage_root"
         zip -qr "$archive_path" config data plugins public
     )
 
     step "发布导出文件"
+    printf '\n'
     if ! publish_archive "$archive_path" "$archive_name"; then
-        printf '\n'
         error "导出文件发布失败，私有源文件保留在：$archive_path"
         exit 1
     fi
@@ -1050,14 +1093,14 @@ main() {
     success "导出结果：成功"
     case "$EXPORT_METHOD" in
         direct)
-            printf 'ZIP 路径：%s\n' "$(color_text "$COLOR_GREEN" "$archive_path")"
+            printf '压缩包路径：%s\n' "$(color_text "$COLOR_GREEN" "$archive_path")"
             ;;
         download)
-            printf 'ZIP 已交给系统下载服务：%s\n' "$(color_text "$COLOR_GREEN" "$archive_name")"
+            printf '压缩包已交给系统下载服务：%s\n' "$(color_text "$COLOR_GREEN" "$archive_name")"
             printf '临时源文件：%s\n' "$(color_text "$COLOR_BLUE" "$archive_path")"
             ;;
         share)
-            printf 'ZIP 已打开系统分享面板：%s\n' "$(color_text "$COLOR_GREEN" "$archive_name")"
+            printf '压缩包已打开系统分享面板：%s\n' "$(color_text "$COLOR_GREEN" "$archive_name")"
             printf '临时源文件：%s\n' "$(color_text "$COLOR_BLUE" "$archive_path")"
             ;;
     esac
