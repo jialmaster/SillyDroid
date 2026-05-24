@@ -91,15 +91,57 @@ color_text() {
     printf '%s%s%s' "$color" "$*" "$COLOR_RESET"
 }
 
-color_256_text() {
-    local color_code="$1"
-    shift
+color_rgb_text() {
+    local red="$1"
+    local green="$2"
+    local blue="$3"
+    shift 3
     if [[ -z "$COLOR_RESET" ]]; then
         printf '%s' "$*"
         return 0
     fi
 
-    printf '\033[38;5;%sm%s%s' "$color_code" "$*" "$COLOR_RESET"
+    printf '\033[38;2;%s;%s;%sm%s%s' "$red" "$green" "$blue" "$*" "$COLOR_RESET"
+}
+
+print_gradient_tokens() {
+    local token_count="$#"
+    local index=0
+    local segment=0
+    local segment_count=3
+    local progress=0
+    local segment_progress=0
+    local red green blue
+    local token
+    local start_red start_green start_blue end_red end_green end_blue
+    local stops=(
+        '255 115 213'
+        '175 104 255'
+        '83 173 255'
+        '74 233 225'
+    )
+
+    for token in "$@"; do
+        if (( token_count > 1 )); then
+            progress=$((index * segment_count * 1000 / (token_count - 1)))
+            segment=$((progress / 1000))
+            segment_progress=$((progress - segment * 1000))
+            if (( segment >= segment_count )); then
+                segment=$((segment_count - 1))
+                segment_progress=1000
+            fi
+        fi
+
+        read -r start_red start_green start_blue <<< "${stops[$segment]}"
+        read -r end_red end_green end_blue <<< "${stops[$((segment + 1))]}"
+        red=$((start_red + (end_red - start_red) * segment_progress / 1000))
+        green=$((start_green + (end_green - start_green) * segment_progress / 1000))
+        blue=$((start_blue + (end_blue - start_blue) * segment_progress / 1000))
+
+        color_rgb_text "$red" "$green" "$blue" "$token"
+        index=$((index + 1))
+    done
+    printf '\n'
 }
 
 # 简洁日志函数（不带时间戳）
@@ -223,16 +265,17 @@ stop_scan_animation() {
 }
 
 print_banner() {
-    # 欢迎图走统一颜色开关：TTY 下使用 256 色渐变，NO_COLOR/非 TTY 自动退回纯文本。
+    # 欢迎图逐 token 横向渐变；中文不做子串切片，避免 C locale 下 UTF-8 被截断。
     printf '\n'
-    printf '%s\n' "$(color_256_text 213 '  /\_/\')"
-    printf '%s%s%s\n' \
-        "$(color_256_text 207 ' (｡•ᴗ•｡)  ')" \
-        "$(color_256_text 171 'SillyTavern 数据导出小助手')" \
-        "$(color_256_text 219 '')"
-    printf '%s%s\n' \
-        "$(color_256_text 123 '  /づ♡    ')" \
-        "$(color_256_text 81 '会先帮你找出所有酒馆，再让你挑要搬家的那一个喵')"
+    print_gradient_tokens '  ' '/' '\' '_' '/' '\'
+    print_gradient_tokens \
+        ' ' '(' '｡' '•' 'ᴗ' '•' '｡' ')' '  ' \
+        'S' 'i' 'l' 'l' 'y' 'T' 'a' 'v' 'e' 'r' 'n' ' ' \
+        '数' '据' '导' '出' '小' '助' '手'
+    print_gradient_tokens \
+        '  ' '/' 'づ' '♡' '    ' \
+        '会' '先' '帮' '你' '找' '出' '所' '有' '酒' '馆' '，' \
+        '再' '让' '你' '挑' '要' '搬' '家' '的' '那' '一' '个' '喵'
     printf '\n'
 }
 
