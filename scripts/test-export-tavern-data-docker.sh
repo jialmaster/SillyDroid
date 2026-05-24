@@ -113,6 +113,7 @@ echo "创建多路径 SillyTavern 测试实例"
     create_tavern /workspace/SillyTavern 1.18.0 2 1 1
     create_tavern /opt/custom/SillyTavern 1.19.0 3 3 1
     create_tavern /data/data/com.termux/files/usr/var/lib/proot-distro/containers/debian/rootfs/root/SillyTavern 1.20.0 4 4 2
+    mkdir -p /data/data/com.termux/files/home/storage/shared/Download
 
     cd /data/data/com.termux/files/usr/var/lib/proot-distro/containers/debian/rootfs/root/SillyTavern
     bash -c "sleep 1000000" server.js >/tmp/running-tavern.log 2>&1 &
@@ -134,6 +135,24 @@ echo "运行非交互导出：应自动选择唯一运行中的 proot 实例"
     grep -q "proot 容器" /tmp/export-result.log
     grep -q "内容统计：角色卡 4，聊天历史 6" /tmp/export-result.log
     test "$(find /tmp/export-output -maxdepth 1 -type f -name "sillytavern-termux-backup-*.zip" | wc -l)" -eq 1
+'
+
+echo "运行 Termux proot 导出：HOME=/root 时仍应保存到宿主 Termux 下载目录"
+"${DOCKER[@]}" exec "$container_name" bash -lc '
+    set -euo pipefail
+    rm -f /root/sillytavern-termux-backup-*.zip
+    rm -f /data/data/com.termux/files/home/storage/shared/Download/sillytavern-termux-backup-*.zip
+    cd /root
+    if ! /opt/export-tavern-data.sh >/tmp/export-proot-default.log 2>&1; then
+        cat /tmp/export-proot-default.log
+        exit 1
+    fi
+    cat /tmp/export-proot-default.log
+
+    grep -q "发布方式：/data/data/com.termux/files/home/storage/shared/Download" /tmp/export-proot-default.log
+    ! grep -q "发布方式：/root" /tmp/export-proot-default.log
+    test "$(find /data/data/com.termux/files/home/storage/shared/Download -maxdepth 1 -type f -name "sillytavern-termux-backup-*.zip" | wc -l)" -eq 1
+    test "$(find /root -maxdepth 1 -type f -name "sillytavern-termux-backup-*.zip" | wc -l)" -eq 0
 '
 
 echo "运行普通系统导出：没有 Termux 环境变量时默认保存到当前目录"

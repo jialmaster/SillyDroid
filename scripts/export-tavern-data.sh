@@ -388,6 +388,25 @@ termux_prefix_path() {
     printf '%s\n' "${prefix_path%/}"
 }
 
+termux_home_path() {
+    local prefix_path files_root
+    prefix_path="$(termux_prefix_path)"
+    files_root="${prefix_path%/usr}"
+    if [[ "$files_root" == "$prefix_path" ]]; then
+        files_root="$(dirname "$prefix_path")"
+    fi
+    printf '%s/home\n' "$files_root"
+}
+
+termux_storage_ready() {
+    local termux_home
+    termux_home="$(termux_home_path)"
+
+    [[ -d "${HOME:-}/storage/shared" ]] && return 0
+    [[ -d "$termux_home/storage/shared" ]] && return 0
+    return 1
+}
+
 is_sillytavern_root() {
     local candidate="$1"
     [[ -d "$candidate" ]] || return 1
@@ -978,16 +997,29 @@ detect_output_dir() {
         return 1
     fi
 
-    local candidate
-    for candidate in "$HOME/storage/shared/Download" "$HOME/storage/downloads" "$HOME/storage/shared"; do
+    local candidate termux_home
+    for candidate in "${HOME:-}/storage/shared/Download" "${HOME:-}/storage/downloads" "${HOME:-}/storage/shared"; do
         if [[ -d "$candidate" && -w "$candidate" ]]; then
             canonical_path "$candidate"
             return 0
         fi
     done
 
-    # 普通系统、容器和未授权共享存储的 Termux 都允许直接把压缩包落到当前目录，
-    # 避免把“能打包”强行绑定到 Android 共享存储或 Termux:API。
+    if is_termux_environment; then
+        termux_home="$(termux_home_path)"
+        # proot-distro 里 HOME 常是 /root，但宿主 Termux 下载目录仍挂在 /data/data/com.termux/files/home 下。
+        for candidate in "$termux_home/storage/shared/Download" "$termux_home/storage/downloads" "$termux_home/storage/shared"; do
+            if [[ -d "$candidate" && -w "$candidate" ]]; then
+                canonical_path "$candidate"
+                return 0
+            fi
+        done
+
+        error "未找到可写的 Termux 共享存储目录，将继续尝试 Termux:API 发布方式。"
+        return 1
+    fi
+
+    # 普通系统和容器允许直接把压缩包落到当前目录；Termux 不走这里，避免 proot/root 下误保存到 /root。
     if [[ -d "$PWD" && -w "$PWD" ]]; then
         canonical_path "$PWD"
         return 0
@@ -1003,12 +1035,12 @@ ensure_storage_access() {
         return 0
     fi
 
-    if [[ -d "$HOME/storage/shared" ]]; then
+    if termux_storage_ready; then
         return 0
     fi
 
-    if [[ ! -d "$HOME/storage/shared" && -n "${TERMUX_VERSION:-}" ]]; then
-        warn "Termux 共享存储未就绪，将优先把压缩包保存到当前目录；如需保存到下载目录，请手动执行 termux-setup-storage。"
+    if is_termux_environment; then
+        warn "Termux 共享存储未就绪，将继续尝试 Termux:API 分享/下载；如需保存到下载目录，请在 Termux 主环境手动执行 termux-setup-storage。"
     fi
 }
 
