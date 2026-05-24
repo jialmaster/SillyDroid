@@ -64,6 +64,8 @@ COLOR_BLUE=''
 COLOR_MAGENTA=''
 COLOR_CYAN=''
 COLOR_REVERSE=''
+TUI_MENU_RENDERED=0
+TUI_MENU_LINES=0
 
 init_colors() {
     if [[ "${NO_COLOR:-}" == '1' ]]; then
@@ -189,9 +191,14 @@ stop_scan_animation() {
 
 print_banner() {
     cat <<'EOF'
-  /\_/\
- (｡•ᴗ•｡)  喵娘搬运姬
-  /づ♡    主人，数据交给我喵
+   /\_/\   SillyTavern 数据导出小助手
+ ⣠⣿⣿⣦   会先帮你找出所有酒馆
+⣾⠁◕ -⠈⣷  再让你挑要搬家的那一个喵
+⣿  ᗜᴗᗜ  ⣿
+⣿ づ♡づ ⣿
+⠻⣦ 🔔 ⣴⠟
+ く|___|つ
+   し し
 EOF
 }
 
@@ -668,8 +675,10 @@ render_install_root_menu() {
     local reset_color
     local display_path
 
-    printf '\033[2J\033[H' > /dev/tty
-    print_banner > /dev/tty
+    if (( TUI_MENU_RENDERED == 1 )); then
+        printf '\033[%dA\033[J' "$TUI_MENU_LINES" > /dev/tty
+    fi
+
     printf '%s\n' "$(color_text "$COLOR_CYAN" "使用方向键选择要导出的酒馆，回车确认，q 取消。")" > /dev/tty
     printf '%s\n' "$(color_text "$COLOR_DIM" "也可以用 j/k 或 w/s 移动。")" > /dev/tty
     printf '────────────────────────────────────────\n' > /dev/tty
@@ -704,19 +713,34 @@ render_install_root_menu() {
     done
 
     printf '────────────────────────────────────────\n' > /dev/tty
+    TUI_MENU_LINES=$((candidate_count * 3 + 4))
+    TUI_MENU_RENDERED=1
+}
+
+clear_install_root_menu() {
+    if (( TUI_MENU_RENDERED == 1 )); then
+        printf '\033[%dA\033[J' "$TUI_MENU_LINES" > /dev/tty
+        TUI_MENU_RENDERED=0
+        TUI_MENU_LINES=0
+    fi
 }
 
 select_install_root_with_tui() {
     local candidate_count="$1"
     local selected_index="$2"
     local key
+    local saved_tty_state=''
 
     printf '\033[?25l' > /dev/tty
+    saved_tty_state="$(stty -g < /dev/tty 2>/dev/null || true)"
+    stty -echo < /dev/tty 2>/dev/null || true
 
     while true; do
         render_install_root_menu "$candidate_count" "$selected_index"
         if ! key="$(read_tty_key)"; then
+            [[ -n "$saved_tty_state" ]] && stty "$saved_tty_state" < /dev/tty 2>/dev/null || true
             printf '\033[?25h' > /dev/tty
+            clear_install_root_menu
             return 1
         fi
         case "$key" in
@@ -727,15 +751,17 @@ select_install_root_with_tui() {
                 selected_index=$(( (selected_index + 1) % candidate_count ))
                 ;;
             '')
+                [[ -n "$saved_tty_state" ]] && stty "$saved_tty_state" < /dev/tty 2>/dev/null || true
                 printf '\033[?25h' > /dev/tty
-                printf '\033[2J\033[H' > /dev/tty
+                clear_install_root_menu
                 printf '%s\n' "$(color_text "$COLOR_GREEN" "已选择：${INSTALL_ROOT_CANDIDATES[$selected_index]}")" > /dev/tty
                 printf '%s\n' "${INSTALL_ROOT_CANDIDATES[$selected_index]}"
                 return 0
                 ;;
             q|Q|$'\003')
+                [[ -n "$saved_tty_state" ]] && stty "$saved_tty_state" < /dev/tty 2>/dev/null || true
                 printf '\033[?25h' > /dev/tty
-                printf '\033[2J\033[H' > /dev/tty
+                clear_install_root_menu
                 warn "已取消导出。"
                 return 1
                 ;;
