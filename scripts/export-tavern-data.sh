@@ -63,6 +63,7 @@ COLOR_YELLOW=''
 COLOR_BLUE=''
 COLOR_MAGENTA=''
 COLOR_CYAN=''
+COLOR_WHITE=''
 COLOR_REVERSE=''
 TUI_MENU_RENDERED=0
 TUI_MENU_LINES=0
@@ -81,6 +82,7 @@ init_colors() {
         COLOR_BLUE=$'\033[34m'
         COLOR_MAGENTA=$'\033[35m'
         COLOR_CYAN=$'\033[36m'
+        COLOR_WHITE=$'\033[97m'
         COLOR_REVERSE=$'\033[7m'
     fi
 }
@@ -183,7 +185,11 @@ format_active_label() {
 }
 
 format_key_hint() {
-    color_text "$COLOR_BOLD$COLOR_YELLOW" "$1"
+    color_text "$COLOR_BOLD$COLOR_WHITE" "$1"
+}
+
+format_menu_hint_text() {
+    color_text "$COLOR_CYAN" "$1"
 }
 
 SCAN_ANIMATION_PID=''
@@ -794,13 +800,20 @@ render_install_root_menu() {
         printf '\033[%dA\033[J' "$TUI_MENU_LINES" > /dev/tty
     fi
 
-    printf '按 %s/%s 或 %s/%s 移动，%s 确认，%s 退出\n' \
+    printf '%s%s%s%s%s%s%s%s%s%s%s%s%s\n' \
+        "$(format_menu_hint_text '按 ')" \
         "$(format_key_hint '↑')" \
+        "$(format_menu_hint_text '/')" \
         "$(format_key_hint '↓')" \
+        "$(format_menu_hint_text ' 或 ')" \
         "$(format_key_hint 'W')" \
+        "$(format_menu_hint_text '/')" \
         "$(format_key_hint 'S')" \
+        "$(format_menu_hint_text ' 移动，')" \
         "$(format_key_hint 'Enter')" \
-        "$(format_key_hint 'Q')" > /dev/tty
+        "$(format_menu_hint_text ' 确认，')" \
+        "$(format_key_hint 'Q')" \
+        "$(format_menu_hint_text ' 退出')" > /dev/tty
     printf '────────────────────────────────────────\n' > /dev/tty
 
     for ((row = 0; row < candidate_count; row++)); do
