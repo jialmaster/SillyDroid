@@ -131,42 +131,64 @@ terminal_columns() {
     printf '80\n'
 }
 
-fit_terminal_line() {
-    local text="$1"
-    local columns max_length prefix suffix
+fit_path_for_terminal() {
+    local path="$1"
+    local reserved_columns="${2:-18}"
+    local columns max_length tail candidate
     columns="$(terminal_columns)"
-    # 手机终端里中文、emoji、ANSI 颜色和光标前缀都会占宽度；这里故意保守截断，
-    # 保证扫描动画永远只落在当前物理行，避免自动折行后上一帧残留。
-    max_length=$((columns - 18))
+    # 只在路径分隔符处压缩，避免在 LC_ALL=C 的 Termux/proot 环境里把中文 UTF-8 字节切半。
+    # 这里也为颜色、emoji、选中标记和行尾动画预留宽度，防止手机窄屏自动折行留下残影。
+    max_length=$((columns - reserved_columns))
     if (( max_length < 12 )); then
         max_length=12
     fi
 
-    if ((${#text} <= max_length)); then
-        printf '%s\n' "$text"
+    if ((${#path} <= max_length)); then
+        printf '%s\n' "$path"
         return 0
     fi
 
-    prefix="${text:0:5}"
-    suffix="${text: -$((max_length - 8))}"
-    printf '%s...%s\n' "$prefix" "$suffix"
+    tail="${path#/}"
+    while [[ "$tail" == */* ]]; do
+        candidate=".../$tail"
+        if ((${#candidate} <= max_length)); then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+        tail="${tail#*/}"
+    done
+
+    candidate=".../$tail"
+    if ((${#candidate} <= max_length)); then
+        printf '%s\n' "$candidate"
+        return 0
+    fi
+
+    printf '...\n'
 }
 
 start_scan_animation() {
-    local message="$1"
+    local label="$1"
+    local detail="${2:-}"
+    local full_message="$label$detail"
     if ! interactive_tui_available; then
-        printf '%s\n' "$(color_text "$COLOR_CYAN" "$message")" >&2
+        printf '%s\n' "$(color_text "$COLOR_CYAN" "$full_message")" >&2
         return 0
     fi
 
     (
         local frames='|/-\'
         local index=0
-        local frame line
-        line="$(fit_terminal_line "$message")"
+        local frame line detail_text
+        if [[ -n "$detail" ]]; then
+            detail_text="$(fit_path_for_terminal "$detail" 24)"
+            line="$(color_text "$COLOR_CYAN" "$label")$detail_text"
+        else
+            line="$(color_text "$COLOR_CYAN" "$label")"
+        fi
         while true; do
             frame="${frames:index % ${#frames}:1}"
-            printf '\r\033[K%s %s' "$(color_text "$COLOR_CYAN" "$frame")" "$line" >&2
+            printf '\r\033[K%s %s' "$line" "$(color_text "$COLOR_CYAN" "$frame")" >&2
             index=$((index + 1))
             sleep 0.12
         done
@@ -441,7 +463,7 @@ scan_sillytavern_roots_with_find() {
     local search_root="$1"
     [[ -d "$search_root" ]] || return 0
 
-    start_scan_animation "正在扫描：$search_root"
+    start_scan_animation "正在扫描：" "$search_root"
     while IFS= read -r -d '' package_json_path; do
         register_install_root_candidate "$(dirname "$package_json_path")"
     done < <(
@@ -702,7 +724,7 @@ render_install_root_menu() {
             "${candidate_role_counts[$row]}" \
             "${candidate_dialogue_counts[$row]}" \
             "$reset_color" > /dev/tty
-        display_path="$(fit_terminal_line "${INSTALL_ROOT_CANDIDATES[$row]}")"
+        display_path="$(fit_path_for_terminal "${INSTALL_ROOT_CANDIDATES[$row]}" 12)"
         printf '%s   📍 %s%s\n' \
             "$row_color" \
             "$display_path" \

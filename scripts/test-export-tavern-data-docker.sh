@@ -233,6 +233,10 @@ try:
             text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", captured.decode("utf-8", errors="ignore"))
             if "使用方向键选择要导出的酒馆" not in text:
                 raise AssertionError("missing TUI menu text")
+            if re.search(r"^[|/\\-] 正在", text, re.MULTILINE):
+                raise AssertionError("scan animation frame should render after the text")
+            if "\ufffd" in text:
+                raise AssertionError("scan output contains replacement characters")
             if "已选择：/workspace/SillyTavern" not in text:
                 raise AssertionError("missing selected path")
             if "内容统计：角色卡 2，聊天历史 2" not in text:
