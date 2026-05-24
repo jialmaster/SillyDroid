@@ -183,6 +183,14 @@ command = docker_command + [
 
 # 交互选择必须走真实 TTY，才能覆盖 curl | bash 场景下脚本读取 /dev/tty 的逻辑。
 master_fd, slave_fd = pty.openpty()
+try:
+    import fcntl
+    import struct
+    import termios
+
+    fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 28, 42, 0, 0))
+except Exception:
+    pass
 process = subprocess.Popen(command, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, close_fds=True)
 os.close(slave_fd)
 

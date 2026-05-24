@@ -118,6 +118,38 @@ format_active_label() {
 
 SCAN_ANIMATION_PID=''
 
+terminal_columns() {
+    local columns
+    columns="$(stty size < /dev/tty 2>/dev/null | awk '{print $2}' || true)"
+    if [[ "$columns" =~ ^[0-9]+$ && "$columns" -gt 20 ]]; then
+        printf '%s\n' "$columns"
+        return 0
+    fi
+
+    printf '80\n'
+}
+
+fit_terminal_line() {
+    local text="$1"
+    local columns max_length prefix suffix
+    columns="$(terminal_columns)"
+    # 手机终端里中文、emoji、ANSI 颜色和光标前缀都会占宽度；这里故意保守截断，
+    # 保证扫描动画永远只落在当前物理行，避免自动折行后上一帧残留。
+    max_length=$((columns - 18))
+    if (( max_length < 12 )); then
+        max_length=12
+    fi
+
+    if ((${#text} <= max_length)); then
+        printf '%s\n' "$text"
+        return 0
+    fi
+
+    prefix="${text:0:5}"
+    suffix="${text: -$((max_length - 8))}"
+    printf '%s...%s\n' "$prefix" "$suffix"
+}
+
 start_scan_animation() {
     local message="$1"
     if ! interactive_tui_available; then
@@ -128,10 +160,11 @@ start_scan_animation() {
     (
         local frames='|/-\'
         local index=0
-        local frame
+        local frame line
+        line="$(fit_terminal_line "$message")"
         while true; do
             frame="${frames:index % ${#frames}:1}"
-            printf '\r%s %s' "$(color_text "$COLOR_CYAN" "$frame")" "$message" >&2
+            printf '\r\033[K%s %s' "$(color_text "$COLOR_CYAN" "$frame")" "$line" >&2
             index=$((index + 1))
             sleep 0.12
         done
@@ -156,9 +189,9 @@ stop_scan_animation() {
 
 print_banner() {
     cat <<'EOF'
- /\_/\
-( o.o )  SillyTavern 数据导出小助手 🐾
- > ^ <   会先帮你找出所有酒馆，再让你挑要搬家的那一个喵 (ฅ'ω'ฅ)
+  /\_/\
+ (｡•̀ᴗ-)✧  萌萌猫娘搬运姬
+ /づ♡       主人，酒馆数据交给我喵
 EOF
 }
 
@@ -633,6 +666,7 @@ render_install_root_menu() {
     local selected_index="$2"
     local row marker row_color
     local reset_color
+    local display_path
 
     printf '\033[2J\033[H' > /dev/tty
     print_banner > /dev/tty
@@ -662,9 +696,10 @@ render_install_root_menu() {
             "${candidate_role_counts[$row]}" \
             "${candidate_dialogue_counts[$row]}" \
             "$reset_color" > /dev/tty
+        display_path="$(fit_terminal_line "${INSTALL_ROOT_CANDIDATES[$row]}")"
         printf '%s   📍 %s%s\n' \
             "$row_color" \
-            "${INSTALL_ROOT_CANDIDATES[$row]}" \
+            "$display_path" \
             "$reset_color" > /dev/tty
     done
 
@@ -854,14 +889,8 @@ ensure_storage_access() {
         return 0
     fi
 
-    if command -v termux-setup-storage >/dev/null 2>&1; then
-        log "请求 Termux 存储权限..."
-        # 不重定向，让 termux-setup-storage 的交互/提示可见，以免脚本静默挂起
-        termux-setup-storage || true
-    fi
-
     if [[ ! -d "$HOME/storage/shared" && -n "${TERMUX_VERSION:-}" ]]; then
-        warn "Termux 共享存储未就绪，将优先把压缩包保存到当前目录。"
+        warn "Termux 共享存储未就绪，将优先把压缩包保存到当前目录；如需保存到下载目录，请手动执行 termux-setup-storage。"
     fi
 }
 
