@@ -269,15 +269,15 @@ stop_scan_animation() {
 }
 
 print_banner() {
-    # 猫猫头固定成独立图标，右侧文案单独横向渐变，避免脸部字符挤占标题色相区间。
+    # 猫猫头作为整体 token 参与横向渐变，避免脸部字符过多挤占标题色相区间。
     printf '\n'
-    printf '%s\n' "$(color_rgb_text 255 170 224 '  /\_/\')"
-    printf '%s' "$(color_rgb_text 255 170 224 ' (｡•ᴗ•｡)  ')"
+    print_gradient_tokens '  /\_/\'
     print_gradient_tokens \
+        ' (｡•ᴗ•｡)  ' \
         'S' 'i' 'l' 'l' 'y' 'T' 'a' 'v' 'e' 'r' 'n' ' ' \
         '数' '据' '导' '出' '小' '助' '手'
-    printf '%s' "$(color_rgb_text 255 170 224 '  /づ♡    ')"
     print_gradient_tokens \
+        '  /づ♡    ' \
         '会' '先' '帮' '你' '找' '出' '所' '有' '酒' '馆' '，' \
         '再' '让' '你' '挑' '要' '搬' '家' '的' '那' '一' '个' '喵'
     printf '\n'
