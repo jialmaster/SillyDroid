@@ -134,6 +134,10 @@ bash ./scripts/build-tavern-android-local.sh --tavern-tag 1.18.0 --build-type de
 - 当前本地入口脚本为 `scripts/build-tavern-android-local.sh`。
 - 默认 APK 输出目录为 `artifacts/releases/android-apk/`。
 
+## 交流
+
+- QQ交流群：748515688
+
 ## 免责声明
 
 - 本项目仅供学习、研究、技术验证与交流使用。
