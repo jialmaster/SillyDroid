@@ -1,9 +1,10 @@
 {
   "display_name": "安卓宿主",
   "loading_order": 25,
-  "version": "1.0.1-test1",
+  "version": "1.0.2",
   "author": "SillyDroid",
-  "js": "index.js",
+  "js": "index.js?v=1.0.2",
+  "css": "style.css?v=1.0.2",
   "sillydroid_bundle_category": "host",
   "hooks": {
     "activate": "activate"

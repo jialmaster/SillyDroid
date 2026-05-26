@@ -1,32 +1,164 @@
-<div class="inline-drawer">
+<div class="inline-drawer sillydroid-host-panel" id="sillydroid_android_host_settings_panel" data-sillydroid-theme="default">
     <div class="inline-drawer-toggle inline-drawer-header">
         <b>安卓宿主</b>
         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
     </div>
-    <div class="inline-drawer-content">
-        <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;">
-            <strong>安卓宿主扩展设置</strong>
-            <span style="opacity:0.82;">这里提供悬浮球、下拉刷新、消息通知、打开设置和版本说明。</span>
-        </div>
-        <div id="sillydroid_android_host_version_summary" style="margin-bottom:12px;opacity:0.92;">
-            宿主桥不可用
-        </div>
-        <label class="checkbox_label" for="sillydroid_android_host_floating_bubble" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <input id="sillydroid_android_host_floating_bubble" type="checkbox" />
-            <span>启用悬浮球</span>
-        </label>
-        <label class="checkbox_label" for="sillydroid_android_host_pull_refresh" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <input id="sillydroid_android_host_pull_refresh" type="checkbox" />
-            <span>启用下拉刷新（会和悬浮小组件的拖动功能冲突，谨慎开启）</span>
-        </label>
-        <label class="checkbox_label" for="sillydroid_android_host_notification" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-            <input id="sillydroid_android_host_notification" type="checkbox" />
-            <span>启用消息通知</span>
-        </label>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;">
-            <button id="sillydroid_android_host_open_settings" class="menu_button" type="button">打开设置</button>
-            <button id="sillydroid_android_host_reload_tavern" class="menu_button" type="button">刷新页面</button>
-            <button id="sillydroid_android_host_version_info" class="menu_button" type="button">版本说明</button>
-        </div>
+    <div class="inline-drawer-content sillydroid-host-content">
+        <fieldset class="sillydroid-host-section">
+            <legend class="sillydroid-host-section-title">宿主设置</legend>
+            <div id="sillydroid_android_host_version_summary" class="sillydroid-host-version-line">宿主桥不可用</div>
+            <div class="sillydroid-host-grid">
+                <button id="sillydroid_android_host_open_settings" class="menu_button sillydroid-host-control sillydroid-host-action-button" type="button"><i class="fa-solid fa-sliders"></i><span>打开设置</span></button>
+                <button id="sillydroid_android_host_open_current_page_in_browser" class="menu_button sillydroid-host-control sillydroid-host-action-button" type="button"><i class="fa-solid fa-arrow-up-right-from-square"></i><span>在浏览器中打开</span></button>
+                <button id="sillydroid_android_host_reload_tavern" class="menu_button sillydroid-host-control sillydroid-host-action-button" type="button"><i class="fa-solid fa-rotate-right"></i><span>刷新</span></button>
+                <button id="sillydroid_android_host_version_info" class="menu_button sillydroid-host-control sillydroid-host-action-button" type="button"><i class="fa-solid fa-circle-info"></i><span>版本说明</span></button>
+                <label class="sillydroid-host-control sillydroid-host-switch" for="sillydroid_android_host_floating_bubble">
+                    <span class="sillydroid-host-switch-label">悬浮球</span>
+                    <input id="sillydroid_android_host_floating_bubble" type="checkbox" />
+                    <span class="sillydroid-host-switch-track" aria-hidden="true"></span>
+                </label>
+                <label class="sillydroid-host-control sillydroid-host-switch" for="sillydroid_android_host_pull_refresh">
+                    <span class="sillydroid-host-switch-label">下拉刷新</span>
+                    <input id="sillydroid_android_host_pull_refresh" type="checkbox" />
+                    <span class="sillydroid-host-switch-track" aria-hidden="true"></span>
+                </label>
+                <label class="sillydroid-host-control sillydroid-host-switch" for="sillydroid_android_host_compact_chat">
+                    <span class="sillydroid-host-switch-label">聊天紧凑模式</span>
+                    <input id="sillydroid_android_host_compact_chat" type="checkbox" />
+                    <span class="sillydroid-host-switch-track" aria-hidden="true"></span>
+                </label>
+            </div>
+        </fieldset>
+        <fieldset class="sillydroid-host-section">
+            <legend class="sillydroid-host-section-title">通知</legend>
+            <div class="sillydroid-host-grid">
+                <label class="sillydroid-host-control sillydroid-host-switch" for="sillydroid_android_host_notification">
+                    <span class="sillydroid-host-switch-label">消息通知</span>
+                    <input id="sillydroid_android_host_notification" type="checkbox" />
+                    <span class="sillydroid-host-switch-track" aria-hidden="true"></span>
+                </label>
+                <label class="sillydroid-host-control sillydroid-host-switch" for="sillydroid_android_host_sound_notification">
+                    <span class="sillydroid-host-switch-label">提示音</span>
+                    <input id="sillydroid_android_host_sound_notification" type="checkbox" />
+                    <span class="sillydroid-host-switch-track" aria-hidden="true"></span>
+                </label>
+            </div>
+        </fieldset>
+        <fieldset class="sillydroid-host-section">
+            <legend class="sillydroid-host-section-title">主题切换</legend>
+            <div class="sillydroid-host-grid">
+                <label class="sillydroid-host-control sillydroid-host-select-control" for="sillydroid_android_host_theme">
+                    <span class="sillydroid-host-select-label">主题风格</span>
+                    <select id="sillydroid_android_host_theme" class="text_pole sillydroid-host-select">
+                        <option value="default" selected>默认</option>
+                        <option value="glass">毛玻璃</option>
+                    </select>
+                </label>
+                <label class="sillydroid-host-control sillydroid-host-select-control" for="sillydroid_android_host_theme_mode" hidden>
+                    <span class="sillydroid-host-select-label">明暗模式</span>
+                    <select id="sillydroid_android_host_theme_mode" class="text_pole sillydroid-host-select">
+                        <option value="auto" selected>自动</option>
+                        <option value="light">浅色</option>
+                        <option value="dark">深色</option>
+                    </select>
+                </label>
+                <label class="sillydroid-host-control sillydroid-host-select-control" for="sillydroid_android_host_theme_performance" hidden>
+                    <span class="sillydroid-host-select-label">性能模式</span>
+                    <select id="sillydroid_android_host_theme_performance" class="text_pole sillydroid-host-select">
+                        <option value="auto" selected>自动</option>
+                        <option value="simple">简约</option>
+                        <option value="quality">高质量</option>
+                    </select>
+                </label>
+                <div class="sillydroid-host-control sillydroid-host-color-control" data-sillydroid-color-role="accent" style="--sillydroid-host-color-value: #6f8fbf;" hidden>
+                    <span class="sillydroid-host-select-label">主题主色</span>
+                    <div class="sillydroid-host-color-controls">
+                        <button type="button" class="sillydroid-host-color-trigger" data-sillydroid-color-role="accent" aria-label="打开主题主色颜色面板" aria-expanded="false">
+                            <span class="sillydroid-host-color-preview" aria-hidden="true"></span>
+                            <span class="sillydroid-host-color-value-text">#6f8fbf</span>
+                        </button>
+                        <div class="sillydroid-host-color-panel" data-sillydroid-color-role="accent" hidden>
+                            <div class="sillydroid-host-color-panel-title">推荐颜色</div>
+                            <div class="sillydroid-host-color-swatches" aria-label="主题主色推荐色">
+                                <button type="button" class="sillydroid-host-color-swatch" data-sillydroid-color-role="accent" data-sillydroid-color="#6f8fbf" style="--sillydroid-host-swatch-color: #6f8fbf;" aria-label="使用雾蓝#6f8fbf"></button>
+                                <button type="button" class="sillydroid-host-color-swatch" data-sillydroid-color-role="accent" data-sillydroid-color="#5f92a3" style="--sillydroid-host-swatch-color: #5f92a3;" aria-label="使用霁青#5f92a3"></button>
+                                <button type="button" class="sillydroid-host-color-swatch" data-sillydroid-color-role="accent" data-sillydroid-color="#6687b8" style="--sillydroid-host-swatch-color: #6687b8;" aria-label="使用暮蓝#6687b8"></button>
+                                <button type="button" class="sillydroid-host-color-swatch" data-sillydroid-color-role="accent" data-sillydroid-color="#6f9a86" style="--sillydroid-host-swatch-color: #6f9a86;" aria-label="使用松绿#6f9a86"></button>
+                                <button type="button" class="sillydroid-host-color-swatch" data-sillydroid-color-role="accent" data-sillydroid-color="#8587a5" style="--sillydroid-host-swatch-color: #8587a5;" aria-label="使用月影#8587a5"></button>
+                                <button type="button" class="sillydroid-host-color-swatch" data-sillydroid-color-role="accent" data-sillydroid-color="#8b8174" style="--sillydroid-host-swatch-color: #8b8174;" aria-label="使用岩茶#8b8174"></button>
+                            </div>
+                            <div class="sillydroid-host-color-panel-title">自定义</div>
+                            <div class="sillydroid-host-color-input-group">
+                                <button id="sillydroid_android_host_theme_accent" type="button" class="sillydroid-host-custom-color-preview" data-sillydroid-color-role="accent" style="--sillydroid-host-color-value: #6f8fbf;" aria-label="编辑主题主色自定义颜色" title="主题主色 #6f8fbf"></button>
+                                <input id="sillydroid_android_host_theme_accent_code" class="text_pole sillydroid-host-color-code" type="text" inputmode="text" maxlength="7" value="#6f8fbf" aria-label="主题主色 HEX" spellcheck="false" />
+                            </div>
+                            <div class="sillydroid-host-color-channel-grid" aria-label="主题主色自定义颜色">
+                                <label class="sillydroid-host-color-channel-row">
+                                    <span class="sillydroid-host-color-channel-label">R</span>
+                                    <input class="sillydroid-host-color-channel" type="range" min="0" max="255" step="1" value="111" data-sillydroid-color-role="accent" data-sillydroid-color-channel="r" aria-label="R 通道" />
+                                    <span class="sillydroid-host-color-channel-value">111</span>
+                                </label>
+                                <label class="sillydroid-host-color-channel-row">
+                                    <span class="sillydroid-host-color-channel-label">G</span>
+                                    <input class="sillydroid-host-color-channel" type="range" min="0" max="255" step="1" value="143" data-sillydroid-color-role="accent" data-sillydroid-color-channel="g" aria-label="G 通道" />
+                                    <span class="sillydroid-host-color-channel-value">143</span>
+                                </label>
+                                <label class="sillydroid-host-color-channel-row">
+                                    <span class="sillydroid-host-color-channel-label">B</span>
+                                    <input class="sillydroid-host-color-channel" type="range" min="0" max="255" step="1" value="191" data-sillydroid-color-role="accent" data-sillydroid-color-channel="b" aria-label="B 通道" />
+                                    <span class="sillydroid-host-color-channel-value">191</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="sillydroid-host-control sillydroid-host-color-control" data-sillydroid-color-role="secondary" style="--sillydroid-host-color-value: #8fb8a7;" hidden>
+                    <span class="sillydroid-host-select-label">主题辅色</span>
+                    <div class="sillydroid-host-color-controls">
+                        <button type="button" class="sillydroid-host-color-trigger" data-sillydroid-color-role="secondary" aria-label="打开主题辅色颜色面板" aria-expanded="false">
+                            <span class="sillydroid-host-color-preview" aria-hidden="true"></span>
+                            <span class="sillydroid-host-color-value-text">#8fb8a7</span>
+                        </button>
+                        <div class="sillydroid-host-color-panel" data-sillydroid-color-role="secondary" hidden>
+                            <div class="sillydroid-host-color-panel-title">推荐颜色</div>
+                            <div class="sillydroid-host-color-swatches" aria-label="主题辅色推荐色">
+                                <button type="button" class="sillydroid-host-color-swatch" data-sillydroid-color-role="secondary" data-sillydroid-color="#8fb8a7" style="--sillydroid-host-swatch-color: #8fb8a7;" aria-label="使用薄荷#8fb8a7"></button>
+                                <button type="button" class="sillydroid-host-color-swatch" data-sillydroid-color-role="secondary" data-sillydroid-color="#a8a075" style="--sillydroid-host-swatch-color: #a8a075;" aria-label="使用鼠尾草#a8a075"></button>
+                                <button type="button" class="sillydroid-host-color-swatch" data-sillydroid-color-role="secondary" data-sillydroid-color="#b08f8b" style="--sillydroid-host-swatch-color: #b08f8b;" aria-label="使用雾玫#b08f8b"></button>
+                                <button type="button" class="sillydroid-host-color-swatch" data-sillydroid-color-role="secondary" data-sillydroid-color="#799985" style="--sillydroid-host-swatch-color: #799985;" aria-label="使用茶绿#799985"></button>
+                                <button type="button" class="sillydroid-host-color-swatch" data-sillydroid-color-role="secondary" data-sillydroid-color="#b4a16f" style="--sillydroid-host-swatch-color: #b4a16f;" aria-label="使用沙金#b4a16f"></button>
+                                <button type="button" class="sillydroid-host-color-swatch" data-sillydroid-color-role="secondary" data-sillydroid-color="#879cac" style="--sillydroid-host-swatch-color: #879cac;" aria-label="使用灰蓝#879cac"></button>
+                            </div>
+                            <div class="sillydroid-host-color-panel-title">自定义</div>
+                            <div class="sillydroid-host-color-input-group">
+                                <button id="sillydroid_android_host_theme_secondary" type="button" class="sillydroid-host-custom-color-preview" data-sillydroid-color-role="secondary" style="--sillydroid-host-color-value: #8fb8a7;" aria-label="编辑主题辅色自定义颜色" title="主题辅色 #8fb8a7"></button>
+                                <input id="sillydroid_android_host_theme_secondary_code" class="text_pole sillydroid-host-color-code" type="text" inputmode="text" maxlength="7" value="#8fb8a7" aria-label="主题辅色 HEX" spellcheck="false" />
+                            </div>
+                            <div class="sillydroid-host-color-channel-grid" aria-label="主题辅色自定义颜色">
+                                <label class="sillydroid-host-color-channel-row">
+                                    <span class="sillydroid-host-color-channel-label">R</span>
+                                    <input class="sillydroid-host-color-channel" type="range" min="0" max="255" step="1" value="143" data-sillydroid-color-role="secondary" data-sillydroid-color-channel="r" aria-label="R 通道" />
+                                    <span class="sillydroid-host-color-channel-value">143</span>
+                                </label>
+                                <label class="sillydroid-host-color-channel-row">
+                                    <span class="sillydroid-host-color-channel-label">G</span>
+                                    <input class="sillydroid-host-color-channel" type="range" min="0" max="255" step="1" value="184" data-sillydroid-color-role="secondary" data-sillydroid-color-channel="g" aria-label="G 通道" />
+                                    <span class="sillydroid-host-color-channel-value">184</span>
+                                </label>
+                                <label class="sillydroid-host-color-channel-row">
+                                    <span class="sillydroid-host-color-channel-label">B</span>
+                                    <input class="sillydroid-host-color-channel" type="range" min="0" max="255" step="1" value="167" data-sillydroid-color-role="secondary" data-sillydroid-color-channel="b" aria-label="B 通道" />
+                                    <span class="sillydroid-host-color-channel-value">167</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="sillydroid_android_host_theme_notice" class="sillydroid-host-theme-notice" hidden>
+                <span>提示：毛玻璃会增加 WebView / GPU 渲染负担，低端机、长聊天或多弹窗场景可能出现卡顿、闪烁。</span>
+                <span id="sillydroid_android_host_theme_performance_status" class="sillydroid-host-theme-performance-status"></span>
+            </div>
+        </fieldset>
     </div>
 </div>

@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SillyDroid</string>
+    <string name="host_notification_channel_foreground_title">SillyDroid 前台运行</string>
+    <string name="host_notification_channel_foreground_description">用于展示启动中的本地服务和已启动后的常驻状态。</string>
+    <string name="host_notification_channel_message_title">SillyDroid 消息提醒</string>
+    <string name="host_notification_channel_message_description">用于展示 WebView 页面和宿主业务发起的消息提醒。</string>
+    <string name="host_notification_channel_downloads_title">SillyDroid 下载与安装</string>
+    <string name="host_notification_channel_downloads_description">用于展示普通下载、应用更新下载和安装就绪通知。</string>
 </resources>

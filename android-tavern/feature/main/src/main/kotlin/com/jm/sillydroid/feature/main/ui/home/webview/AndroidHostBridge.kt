@@ -7,10 +7,12 @@ class AndroidHostBridge(
     private val runOnUiThread: (() -> Unit) -> Unit,
     private val openSettings: () -> Unit,
     private val showFloatingLogsBubble: () -> Unit,
+    private val requestOpenCurrentPageInBrowser: () -> Unit,
     // 这里必须和 @JavascriptInterface 方法名区分开，避免 Kotlin 在 lambda 里解析成当前桥接方法并递归调用。
     private val applyFloatingLogsBubbleEnabled: (Boolean) -> Unit,
     private val applyWebViewPullRefreshEnabled: (Boolean) -> Unit,
     private val applySystemBarsBackgroundColor: (String) -> Unit,
+    private val applySystemBarsBackgroundColors: (String, String) -> Unit,
     private val reloadTavern: () -> Unit,
     private val hostVersionInfoJson: () -> String
 ) {
@@ -31,6 +33,16 @@ class AndroidHostBridge(
         }
 
         runOnUiThread(showFloatingLogsBubble)
+        return true
+    }
+
+    @JavascriptInterface
+    fun openCurrentPageInBrowser(): Boolean {
+        if (!isHostActive()) {
+            return false
+        }
+
+        runOnUiThread(requestOpenCurrentPageInBrowser)
         return true
     }
 
@@ -66,6 +78,18 @@ class AndroidHostBridge(
 
         runOnUiThread {
             applySystemBarsBackgroundColor(hexColor)
+        }
+        return true
+    }
+
+    @JavascriptInterface
+    fun setSystemBarsBackgroundColors(statusBarHexColor: String, navigationBarHexColor: String): Boolean {
+        if (!isHostActive() || statusBarHexColor.isBlank() || navigationBarHexColor.isBlank()) {
+            return false
+        }
+
+        runOnUiThread {
+            applySystemBarsBackgroundColors(statusBarHexColor, navigationBarHexColor)
         }
         return true
     }

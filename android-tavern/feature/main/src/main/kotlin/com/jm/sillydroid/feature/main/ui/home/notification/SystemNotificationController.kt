@@ -1,106 +1,82 @@
 package com.jm.sillydroid.feature.main.ui.home.notification
 
-import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
+import com.jm.sillydroid.core.model.notification.HostNotificationAction
+import com.jm.sillydroid.core.model.notification.HostNotificationChannel
+import com.jm.sillydroid.core.model.notification.HostNotificationKind
+import com.jm.sillydroid.core.model.notification.HostNotificationSpec
+import com.jm.sillydroid.core.model.notification.HostNotificationTapSpec
+import com.jm.sillydroid.domain.notification.HostNotificationService
 import com.jm.sillydroid.feature.main.model.notification.SystemNotificationRequest
 import org.json.JSONObject
-import kotlin.math.absoluteValue
 
-class SystemNotificationController(
-    private val context: Context,
-    private val channelId: String,
-    private val channelTitle: String,
-    private val channelDescription: String,
-    private val smallIconResId: Int,
-    private val launchIntent: Intent,
-    private val pendingIntentRequestCode: Int
+/**
+ * WebView 通知桥只负责解析 payload 并转成统一通知 spec；
+ * channel、builder、点击行为、notify/cancel 全部收敛到 HostNotificationService。
+ */
+open class SystemNotificationController(
+    private val hostNotificationService: HostNotificationService,
+    private val smallIconResId: Int
 ) {
-    private val appContext = context.applicationContext
-
-    fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return
-        }
-
-        val channel = NotificationChannel(
-            channelId,
-            channelTitle,
-            NotificationManager.IMPORTANCE_DEFAULT
-        ).apply {
-            description = channelDescription
-        }
-
-        appContext.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+    open fun canPost(): Boolean {
+        return hostNotificationService.canPostNotifications()
     }
 
-    fun canPost(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            return true
-        }
-
-        return ContextCompat.checkSelfPermission(appContext, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
-    }
-
-    fun permissionState(): String {
+    open fun permissionState(): String {
         return if (canPost()) "granted" else "default"
     }
 
-    fun parseRequest(payload: String?): SystemNotificationRequest? {
-        val normalizedPayload = payload?.trim().orEmpty()
-        if (normalizedPayload.isBlank()) {
-            return null
-        }
-
-        val json = JSONObject(normalizedPayload)
-        return SystemNotificationRequest(
-            notificationId = json.optString("notificationId").trim(),
-            title = json.optString("title").trim().ifBlank { "通知" },
-            body = json.optString("body").trim(),
-            tag = json.optString("tag").trim()
-        )
+    open fun parseRequest(payload: String?): SystemNotificationRequest? {
+        return parseSystemNotificationRequestPayload(payload)
     }
 
-    fun show(request: SystemNotificationRequest): Boolean {
-        ensureChannel()
-        val notification = NotificationCompat.Builder(appContext, channelId)
-            .setSmallIcon(smallIconResId)
-            .setContentTitle(request.title)
-            .setContentText(request.body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(request.body))
-            .setAutoCancel(true)
-            .setContentIntent(createContentIntent())
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .build()
+    open fun show(request: SystemNotificationRequest): Boolean {
+        val notificationKey = resolveNotificationKey(request)
+        if (notificationKey.isBlank()) {
+            return false
+        }
 
-        val notifyTag = request.tag.ifBlank { request.notificationId }
-        NotificationManagerCompat.from(appContext).notify(
-            notifyTag.ifBlank { null },
-            resolveRequestCode(request),
-            notification
+        hostNotificationService.post(
+            HostNotificationSpec(
+                notificationKey = notificationKey,
+                kind = HostNotificationKind.WEB_MESSAGE,
+                channel = HostNotificationChannel.MESSAGE_ALERTS,
+                title = request.title,
+                body = request.body,
+                ongoing = false,
+                autoCancel = true,
+                tapSpec = HostNotificationTapSpec(HostNotificationAction.OPEN_MAIN),
+                smallIconResId = smallIconResId
+            )
         )
         return true
     }
 
-    private fun createContentIntent(): PendingIntent {
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        return PendingIntent.getActivity(appContext, pendingIntentRequestCode, launchIntent, flags)
+    private fun resolveNotificationKey(request: SystemNotificationRequest): String {
+        return request.tag.ifBlank {
+            request.notificationId.ifBlank { request.title }
+        }.trim()
+    }
+}
+
+internal fun parseSystemNotificationRequestPayload(payload: String?): SystemNotificationRequest? {
+    val normalizedPayload = payload?.trim().orEmpty()
+    if (normalizedPayload.isBlank()) {
+        return null
     }
 
-    private fun resolveRequestCode(request: SystemNotificationRequest): Int {
-        val seed = request.notificationId
-            .ifBlank { request.tag }
-            .ifBlank { request.title }
-            .hashCode()
-        return if (seed == Int.MIN_VALUE) 0 else seed.absoluteValue
+    val json = JSONObject(normalizedPayload)
+    val notificationId = json.optString("notificationId").trim()
+    val title = json.optString("title").trim().ifBlank { "通知" }
+    val body = json.optString("body").trim()
+    val tag = json.optString("tag").trim()
+    if (body.isBlank()) {
+        return null
     }
+
+    return SystemNotificationRequest(
+        notificationId = notificationId,
+        title = title,
+        body = body,
+        tag = tag
+    )
 }

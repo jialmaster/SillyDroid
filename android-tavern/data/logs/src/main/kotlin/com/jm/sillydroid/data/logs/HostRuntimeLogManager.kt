@@ -34,6 +34,8 @@ class HostRuntimeLogManager(context: Context) : RuntimeLogManager {
 
     override fun currentServerLogFileName(): String = HostLogManager.currentServerLogFileName(appContext)
 
+    override fun currentRootfsRuntimeLogFile(): File = HostLogManager.currentRootfsRuntimeLogFile(appContext)
+
     override fun currentRootfsRuntimeLogFileName(): String =
         HostLogManager.currentRootfsRuntimeLogFileName(appContext)
 

@@ -11,6 +11,7 @@ import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.jm.sillydroid.feature.main.components.download.resolveDownloadFileName
+import com.jm.sillydroid.feature.main.model.download.BlobDownloadSavedFile
 import com.jm.sillydroid.feature.main.model.download.BlobDownloadRequest
 import com.jm.sillydroid.feature.main.model.download.BrowserDownloadRequest
 import com.jm.sillydroid.feature.main.model.download.DownloadFailureReport
@@ -347,7 +348,7 @@ class BlobDownloadController(
         )
     }
 
-    suspend fun persist(request: BlobDownloadRequest): String {
+    suspend fun persist(request: BlobDownloadRequest): BlobDownloadSavedFile {
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, request.fileName)
             put(MediaStore.MediaColumns.MIME_TYPE, request.mimeType)
@@ -368,10 +369,40 @@ class BlobDownloadController(
                 put(MediaStore.MediaColumns.IS_PENDING, 0)
             }
             contentResolver.update(targetUri, completedValues, null, null)
-            return request.fileName
+            val savedFileName = resolvePersistedDisplayName(targetUri, request.fileName)
+            return BlobDownloadSavedFile(
+                fileName = savedFileName,
+                mimeType = request.mimeType,
+                contentUri = targetUri.toString(),
+                displayPath = buildDownloadsDisplayPath(savedFileName)
+            )
         } catch (error: Exception) {
             contentResolver.delete(targetUri, null, null)
             throw error
         }
+    }
+
+    private fun resolvePersistedDisplayName(targetUri: android.net.Uri, fallbackFileName: String): String {
+        return contentResolver.query(
+            targetUri,
+            arrayOf(MediaStore.MediaColumns.DISPLAY_NAME),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+            if (nameIndex >= 0 && cursor.moveToFirst()) {
+                cursor.getString(nameIndex)?.trim()?.takeIf { name -> name.isNotEmpty() }
+            } else {
+                null
+            }
+        } ?: fallbackFileName
+    }
+
+    @Suppress("DEPRECATION")
+    private fun buildDownloadsDisplayPath(fileName: String): String {
+        return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            .resolve(fileName)
+            .absolutePath
     }
 }

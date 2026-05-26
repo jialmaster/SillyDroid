@@ -64,14 +64,17 @@ class BrowserDownloadController(
         }
 
         return try {
+            val mimeType = request.mimeType.ifBlank { "application/octet-stream" }
             val systemRequest = DownloadManager.Request(Uri.parse(targetUrl)).apply {
                 setTitle(fileName)
                 setDescription(pendingDescription(fileName))
-                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                // 普通下载完成通知改由宿主统一通知出口接管；
+                // 这里先关闭系统“完成后提醒”，避免和宿主自管通知重复。
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
                 setAllowedOverMetered(true)
                 setAllowedOverRoaming(true)
                 setVisibleInDownloadsUi(true)
-                setMimeType(request.mimeType.ifBlank { "application/octet-stream" })
+                setMimeType(mimeType)
 
                 val cookieHeader = CookieManager.getInstance().getCookie(targetUrl)
                 if (!cookieHeader.isNullOrBlank()) {
@@ -86,11 +89,19 @@ class BrowserDownloadController(
             }
 
             val downloadId = downloadManager.enqueue(systemRequest)
+            val localUri = Uri.parse(
+                "file://${Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).resolve(fileName).absolutePath}"
+            ).toString()
             recordDiagnostic(
-                "event=download_manager_enqueued downloadId=$downloadId fileName=$fileName mime=${request.mimeType.ifBlank { "application/octet-stream" }} " +
+                "event=download_manager_enqueued downloadId=$downloadId fileName=$fileName mime=$mimeType " +
                     "url=$targetUrl hasCookie=${!CookieManager.getInstance().getCookie(targetUrl).isNullOrBlank()} hasUserAgent=${request.userAgent.isNotBlank()}"
             )
-            BrowserDownloadResult.Started(fileName)
+            BrowserDownloadResult.Started(
+                downloadId = downloadId,
+                fileName = fileName,
+                mimeType = mimeType,
+                localUri = localUri
+            )
         } catch (error: Exception) {
             recordDiagnostic(
                 "event=download_manager_enqueue_failed fileName=$fileName url=$targetUrl error=${error.message.orEmpty().ifBlank { error.javaClass.simpleName }}"

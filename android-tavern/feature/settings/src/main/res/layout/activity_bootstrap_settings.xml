@@ -129,6 +129,17 @@
                 android:maxLines="1"
                 android:minHeight="@dimen/sillydroid_input_min_height" />
         </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/bootstrapSettingsQuickActionsButton"
+            style="@style/Widget.SillyDroid.SettingsButton.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/sillydroid_space_md"
+            android:layout_marginTop="@dimen/sillydroid_space_sm"
+            android:layout_marginEnd="@dimen/sillydroid_space_md"
+            android:text="@string/bootstrap_settings_quick_actions_button"
+            android:visibility="gone" />
     </LinearLayout>
 
     <androidx.core.widget.NestedScrollView
@@ -178,13 +189,6 @@
                             android:text="@string/bootstrap_settings_data_summary"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="10sp" />
-
-                        <LinearLayout
-                            android:id="@+id/bootstrapSettingsQuickFieldContainer"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/sillydroid_field_vertical_spacing"
-                            android:orientation="vertical" />
 
                         <com.google.android.material.card.MaterialCardView
                             style="@style/Widget.SillyDroid.SettingsNestedCard"
@@ -528,6 +532,15 @@
                             android:textColor="?attr/colorError"
                             app:strokeColor="?attr/colorError" />
 
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/bootstrapSettingsClearBrowserDataButton"
+                            style="@style/Widget.SillyDroid.SettingsButton.Outlined"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/sillydroid_field_vertical_spacing"
+                            android:minHeight="@dimen/sillydroid_control_min_height"
+                            android:text="@string/bootstrap_settings_clear_browser_data" />
+
                         <com.google.android.material.card.MaterialCardView
                             style="@style/Widget.SillyDroid.SettingsNestedCard"
                             android:layout_width="match_parent"
@@ -754,6 +767,15 @@
                     android:text="@string/bootstrap_settings_settings_summary"
                     android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="10sp" />
+
+                <!-- 启动端口等酒馆配置字段必须跟随“酒馆设置”页签展示，
+                     避免继续留在数据页造成“导入导出”和“配置编辑”语义混杂。 -->
+                <LinearLayout
+                    android:id="@+id/bootstrapSettingsQuickFieldContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/sillydroid_space_md"
+                    android:orientation="vertical" />
 
                 <LinearLayout
                     android:id="@+id/bootstrapSettingsSectionContainer"
@@ -1209,7 +1231,7 @@
             android:visibility="gone" />
     </LinearLayout>
 
-    <!-- 保存并启动固定在设置页底部，避免跟随设置内容一起滚出可视区。 -->
+    <!-- 保存并启动固定在“酒馆设置”页签底部，避免跟随设置内容一起滚出可视区。 -->
     <LinearLayout
         android:id="@+id/bootstrapSettingsBottomActionBar"
         android:layout_width="match_parent"

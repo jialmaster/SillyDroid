@@ -10,6 +10,8 @@ import com.jm.sillydroid.domain.bootstrap.RuntimeMetadataRepository
 import com.jm.sillydroid.domain.bootstrap.RuntimeConfigRepository
 import com.jm.sillydroid.domain.extensions.ExtensionsRepository
 import com.jm.sillydroid.domain.logs.HostLogRepository
+import com.jm.sillydroid.domain.notification.HostNotificationService
+import com.jm.sillydroid.domain.notification.HostDownloadNotificationCoordinator
 import com.jm.sillydroid.domain.runtime.RuntimeLogManager
 import com.jm.sillydroid.domain.settings.DataArchiveRepository
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
@@ -20,6 +22,8 @@ interface SillyDroidAppGraph {
     val dispatchers: DispatcherProvider
     val hostConfigStore: HostPreferencesRepository
     val hostLogRepository: HostLogRepository
+    val hostNotificationService: HostNotificationService
+    val hostDownloadNotificationCoordinator: HostDownloadNotificationCoordinator
     val runtimeLogManager: RuntimeLogManager
     val bootstrapController: BootstrapController
     val runtimeConfigRepository: RuntimeConfigRepository

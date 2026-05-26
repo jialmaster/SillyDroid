@@ -1,65 +1,44 @@
 package com.jm.sillydroid.feature.main.ui.home.webview
 
-import android.content.SharedPreferences
-import android.net.Uri
-import android.webkit.CookieManager
 import android.webkit.WebView
-import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.ScriptHandler
-import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
-import org.json.JSONObject
 
+/**
+ * 在 local Tavern 页面 document-start 阶段注入宿主脚本：
+ * 1) 修正首屏 loader 的全屏展示；
+ * 2) 用扩展保存的主题运行态同步开屏 mini CSS；
+ * 3) 安装宿主 Notification shim。
+ *
+ * 这里不再保存或还原页面 sessionStorage；WebView 会话恢复只依赖 WebView 自身 restoreState。
+ */
 class WebSessionPersistenceController(
     private val webView: WebView,
-    private val preferences: SharedPreferences,
-    private val storageKey: String,
-    private val bridgeName: String,
     private val systemNotificationBridgeName: String,
+    private val androidHostBridgeName: String,
     private val allowedOrigin: () -> String
 ) {
     private var scriptHandler: ScriptHandler? = null
 
-    fun install() {
-        check(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-            "当前设备的 Android System WebView 不支持 WebMessageListener，无法固化 WebView sessionStorage。"
-        }
-        check(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            "当前设备的 Android System WebView 不支持 document-start script，无法在页面初始化前恢复 sessionStorage。"
-        }
-
-        val originRules = setOf(allowedOrigin())
-        WebViewCompat.addWebMessageListener(
-            webView,
-            bridgeName,
-            originRules,
-            object : WebViewCompat.WebMessageListener {
-                override fun onPostMessage(
-                    view: WebView,
-                    message: WebMessageCompat,
-                    sourceOrigin: Uri,
-                    isMainFrame: Boolean,
-                    replyProxy: JavaScriptReplyProxy
-                ) {
-                    if (!isMainFrame || sourceOrigin.toString() != allowedOrigin()) {
-                        return
-                    }
-
-                    persistWebStateChange(message.data)
-                }
-            }
-        )
-        refreshScript()
+    fun install(): Boolean {
+        return refreshScript()
     }
 
-    fun refreshScript() {
+    fun refreshScript(): Boolean {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            scriptHandler?.remove()
+            scriptHandler = null
+            return false
+        }
+
         scriptHandler?.remove()
         scriptHandler = WebViewCompat.addDocumentStartJavaScript(
             webView,
-            buildPersistenceScript(),
+            buildDocumentStartScript(),
             setOf(allowedOrigin())
         )
+        return true
     }
 
     fun close() {
@@ -67,76 +46,17 @@ class WebSessionPersistenceController(
         scriptHandler = null
     }
 
-    private fun buildPersistenceScript(): String {
-        val persistedSnapshot = JSONObject.quote(readPersistedSnapshot())
-
+    private fun buildDocumentStartScript(): String {
         return """
             (function() {
-                const persistedPayload = $persistedSnapshot;
-                const nativeBridge = globalThis.$bridgeName;
+                ${buildStartupLoaderScript()}
+                ${buildStartupThemeScript()}
 
-                const restoredEntries = persistedPayload ? JSON.parse(persistedPayload) : {};
-                sessionStorage.clear();
-                for (const [key, value] of Object.entries(restoredEntries)) {
-                    if (typeof value === 'string') {
-                        sessionStorage.setItem(key, value);
-                    }
-                }
-
-                if (globalThis.__staiAndroidSessionPersistenceInstalled) {
+                if (globalThis.__staiAndroidHostDocumentStartInstalled) {
                     return;
                 }
 
-                globalThis.__staiAndroidSessionPersistenceInstalled = true;
-
-                const collectSessionStorage = function() {
-                    const snapshot = {};
-                    for (let index = 0; index < sessionStorage.length; index += 1) {
-                        const key = sessionStorage.key(index);
-                        if (typeof key === 'string') {
-                            snapshot[key] = sessionStorage.getItem(key) ?? '';
-                        }
-                    }
-                    return snapshot;
-                };
-
-                const publishStateChange = function(type) {
-                    nativeBridge.postMessage(JSON.stringify({
-                        type,
-                        sessionStorage: collectSessionStorage()
-                    }));
-                };
-
-                const originalSetItem = sessionStorage.setItem.bind(sessionStorage);
-                sessionStorage.setItem = function(key, value) {
-                    const result = originalSetItem(key, value);
-                    publishStateChange('sessionStorage');
-                    return result;
-                };
-
-                const originalRemoveItem = sessionStorage.removeItem.bind(sessionStorage);
-                sessionStorage.removeItem = function(key) {
-                    const result = originalRemoveItem(key);
-                    publishStateChange('sessionStorage');
-                    return result;
-                };
-
-                const originalClear = sessionStorage.clear.bind(sessionStorage);
-                sessionStorage.clear = function() {
-                    const result = originalClear();
-                    publishStateChange('sessionStorage');
-                    return result;
-                };
-
-                addEventListener('pagehide', function() {
-                    publishStateChange('pagehide');
-                }, true);
-                document.addEventListener('visibilitychange', function() {
-                    if (document.visibilityState === 'hidden') {
-                        publishStateChange('visibilitychange');
-                    }
-                }, true);
-
+                globalThis.__staiAndroidHostDocumentStartInstalled = true;
                 ${buildNotificationShimScript()}
             })();
         """.trimIndent()
@@ -241,28 +161,175 @@ class WebSessionPersistenceController(
         """.trimIndent()
     }
 
-    private fun readPersistedSnapshot(): String {
-        return preferences.getString(storageKey, "{}") ?: "{}"
+    private fun buildStartupLoaderScript(): String {
+        return """
+            document.documentElement.dataset.sillydroidStartupFullscreenLoader = 'true';
+            if (!document.getElementById('sillydroid-startup-loader-style')) {
+                const startupLoaderStyle = document.createElement('style');
+                startupLoaderStyle.id = 'sillydroid-startup-loader-style';
+                startupLoaderStyle.textContent = `
+                    html[data-sillydroid-startup-fullscreen-loader="true"] :is(
+                        dialog.popup,
+                        #dialogue_popup,
+                        .popup
+                    ):has(#loader.splash-screen) {
+                        /* SillyTavern 1.18 初始化 loader 由 Popup 包裹；首屏始终是全屏状态页，不允许被通用 popup 尺寸包成小卡片。 */
+                        position: fixed !important;
+                        inset: 0 !important;
+                        top: 0 !important;
+                        left: 0 !important;
+                        right: auto !important;
+                        transform: none !important;
+                        width: 100vw !important;
+                        width: 100dvw !important;
+                        height: 100vh !important;
+                        height: 100dvh !important;
+                        min-width: 100vw !important;
+                        min-width: 100dvw !important;
+                        min-height: 100vh !important;
+                        min-height: 100dvh !important;
+                        max-width: none !important;
+                        max-height: none !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: var(--sillydroid-startup-bg, var(--SmartThemeBlurTintColor, #111827)) !important;
+                        box-shadow: none !important;
+                        border: 0 !important;
+                        border-radius: 0 !important;
+                        overflow: hidden !important;
+                    }
+
+                    html[data-sillydroid-startup-fullscreen-loader="true"] :is(
+                        dialog.popup,
+                        #dialogue_popup,
+                        .popup
+                    ):has(#loader.splash-screen) :is(.popup-body, .popup-content, #loader.splash-screen),
+                    html[data-sillydroid-startup-fullscreen-loader="true"] #loader.splash-screen {
+                        width: 100% !important;
+                        height: 100% !important;
+                        min-width: 100% !important;
+                        min-height: 100% !important;
+                        max-width: none !important;
+                        max-height: none !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        border: 0 !important;
+                        border-radius: 0 !important;
+                        background: transparent !important;
+                        color: var(--sillydroid-startup-text, var(--SmartThemeBodyColor, #eef3ff)) !important;
+                        box-shadow: none !important;
+                        backdrop-filter: none !important;
+                        -webkit-backdrop-filter: none !important;
+                        overflow: hidden !important;
+                    }
+
+                    html[data-sillydroid-startup-fullscreen-loader="true"] #loader.splash-screen :is(.splash-message, .loader-text, .loader-message, p, span) {
+                        color: var(--sillydroid-startup-muted, var(--SmartThemeBodyColor, #eef3ff)) !important;
+                        text-shadow: none !important;
+                    }
+                `;
+                document.documentElement.appendChild(startupLoaderStyle);
+            }
+        """.trimIndent()
     }
 
-    private fun persistWebStateChange(payload: String?) {
-        val changeEnvelope = if (payload.isNullOrBlank()) JSONObject() else JSONObject(payload)
-        val sessionStorageSnapshot = changeEnvelope.optJSONObject("sessionStorage") ?: JSONObject()
+    private fun buildStartupThemeScript(): String {
+        return """
+            const sillydroidStartupThemeStateKey = 'sillydroidAndroidHostStartupThemeState';
+            const sillydroidThemeColorPattern = /^#[\da-f]{6}$/i;
+            const sillydroidReadStartupThemeState = function() {
+                const payload = localStorage.getItem(sillydroidStartupThemeStateKey)
+                    || sessionStorage.getItem(sillydroidStartupThemeStateKey);
+                if (!payload) {
+                    return null;
+                }
 
-        persistSessionSnapshot(sessionStorageSnapshot)
-        CookieManager.getInstance().flush()
-    }
+                try {
+                    return JSON.parse(payload);
+                } catch (_) {
+                    localStorage.removeItem(sillydroidStartupThemeStateKey);
+                    sessionStorage.removeItem(sillydroidStartupThemeStateKey);
+                    return null;
+                }
+            };
+            const sillydroidValidColor = function(value, fallback) {
+                return typeof value === 'string' && sillydroidThemeColorPattern.test(value) ? value : fallback;
+            };
+            const sillydroidStartupTheme = sillydroidReadStartupThemeState();
+            if (sillydroidStartupTheme && sillydroidStartupTheme.theme === 'glass') {
+                const resolvedMode = sillydroidStartupTheme.resolvedMode === 'light' ? 'light' : 'dark';
+                const primary = sillydroidValidColor(sillydroidStartupTheme.primary, '#6f8fbf');
+                const secondary = sillydroidValidColor(sillydroidStartupTheme.secondary, '#8fb8a7');
+                const startupSystemBars = sillydroidStartupTheme.systemBarColors || {};
+                const statusBarColor = sillydroidValidColor(startupSystemBars.statusBarColor, resolvedMode === 'light' ? '#eef5ff' : '#10131c');
+                const navigationBarColor = sillydroidValidColor(startupSystemBars.navigationBarColor, resolvedMode === 'light' ? '#fff8ea' : '#10131c');
 
-    private fun persistSessionSnapshot(snapshot: JSONObject) {
-        val normalizedSnapshot = JSONObject()
-        val keys = snapshot.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            normalizedSnapshot.put(key, snapshot.optString(key))
-        }
+                document.documentElement.dataset.sillydroidStartupTheme = 'glass';
+                document.documentElement.dataset.sillydroidStartupThemeResolvedMode = resolvedMode;
+                document.documentElement.style.setProperty('--sillydroid-startup-primary', primary);
+                document.documentElement.style.setProperty('--sillydroid-startup-secondary', secondary);
 
-        preferences.edit()
-            .putString(storageKey, normalizedSnapshot.toString())
-            .commit()
+                const androidHostBridge = globalThis.$androidHostBridgeName;
+                if (androidHostBridge && typeof androidHostBridge.setSystemBarsBackgroundColors === 'function') {
+                    // 开屏 mini CSS 消费扩展保存的同一份主题运行态，避免扩展未加载前状态栏/手势条使用旧颜色。
+                    androidHostBridge.setSystemBarsBackgroundColors(statusBarColor, navigationBarColor);
+                } else if (androidHostBridge && typeof androidHostBridge.setSystemBarsBackgroundColor === 'function') {
+                    androidHostBridge.setSystemBarsBackgroundColor(statusBarColor);
+                }
+
+                if (!document.getElementById('sillydroid-startup-theme-style')) {
+                    const startupStyle = document.createElement('style');
+                    startupStyle.id = 'sillydroid-startup-theme-style';
+                    startupStyle.textContent = `
+                        html[data-sillydroid-startup-theme="glass"] {
+                            --sillydroid-startup-bg:
+                                radial-gradient(ellipse at 18% 12%, color-mix(in srgb, var(--sillydroid-startup-primary) 18%, transparent), transparent 56%),
+                                radial-gradient(ellipse at 86% 86%, color-mix(in srgb, var(--sillydroid-startup-secondary) 16%, transparent), transparent 58%),
+                                linear-gradient(135deg,
+                                    color-mix(in srgb, var(--sillydroid-startup-primary) 34%, rgb(6 10 18)) 0%,
+                                    color-mix(in srgb, var(--sillydroid-startup-primary) 18%, rgb(9 14 24)) 34%,
+                                    color-mix(in srgb, var(--sillydroid-startup-secondary) 18%, rgb(10 15 26)) 66%,
+                                    color-mix(in srgb, var(--sillydroid-startup-secondary) 32%, rgb(7 11 20)) 100%);
+                            --sillydroid-startup-text: rgb(238 243 255);
+                            --sillydroid-startup-muted: rgb(184 196 214);
+                        }
+
+                        html[data-sillydroid-startup-theme="glass"][data-sillydroid-startup-theme-resolved-mode="light"] {
+                            --sillydroid-startup-bg:
+                                radial-gradient(ellipse at 18% 12%, color-mix(in srgb, var(--sillydroid-startup-primary) 14%, transparent), transparent 58%),
+                                radial-gradient(ellipse at 86% 86%, color-mix(in srgb, var(--sillydroid-startup-secondary) 13%, transparent), transparent 60%),
+                                linear-gradient(135deg,
+                                    color-mix(in srgb, var(--sillydroid-startup-primary) 28%, rgb(248 252 255)) 0%,
+                                    color-mix(in srgb, var(--sillydroid-startup-primary) 14%, rgb(246 250 255)) 34%,
+                                    color-mix(in srgb, var(--sillydroid-startup-secondary) 14%, rgb(255 250 241)) 66%,
+                                    color-mix(in srgb, var(--sillydroid-startup-secondary) 26%, rgb(239 247 255)) 100%);
+                            --sillydroid-startup-text: rgb(30 39 58);
+                            --sillydroid-startup-muted: rgb(86 101 124);
+                        }
+
+                        html[data-sillydroid-startup-theme="glass"],
+                        html[data-sillydroid-startup-theme="glass"] body {
+                            background: var(--sillydroid-startup-bg) !important;
+                            color: var(--sillydroid-startup-text) !important;
+                        }
+
+                        html[data-sillydroid-startup-theme="glass"] #bg1 {
+                            background: var(--sillydroid-startup-bg) !important;
+                        }
+
+                        html[data-sillydroid-startup-theme="glass"] #loader.splash-screen :is(.splash-message, .loader-text, .loader-message, p, span) {
+                            color: var(--sillydroid-startup-muted) !important;
+                            text-shadow: none !important;
+                        }
+                    `;
+                    document.documentElement.appendChild(startupStyle);
+                }
+            } else {
+                document.documentElement.removeAttribute('data-sillydroid-startup-theme');
+                document.documentElement.removeAttribute('data-sillydroid-startup-theme-resolved-mode');
+                document.documentElement.style.removeProperty('--sillydroid-startup-primary');
+                document.documentElement.style.removeProperty('--sillydroid-startup-secondary');
+            }
+        """.trimIndent()
     }
 }

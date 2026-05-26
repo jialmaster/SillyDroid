@@ -36,6 +36,7 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.google.android.material.R as MaterialR
 import java.net.ServerSocket
+import java.util.ArrayList
 import java.util.LinkedHashMap
 
 class BootstrapSettingsFormController(
@@ -68,6 +69,7 @@ class BootstrapSettingsFormController(
         val path: String
         val containerView: View
         fun currentValue(): Any?
+        fun applyProgrammaticValue(field: TavernConfigFieldSpec, rawValue: Any?)
         fun clearError()
         fun setError(message: String)
         fun requestFocus()
@@ -79,6 +81,17 @@ class BootstrapSettingsFormController(
         private val switch: MaterialSwitch
     ) : FieldBinding {
         override fun currentValue(): Any = switch.isChecked
+
+        override fun applyProgrammaticValue(field: TavernConfigFieldSpec, rawValue: Any?) {
+            val nextChecked = when (rawValue) {
+                is Boolean -> rawValue
+                is String -> rawValue.equals("true", ignoreCase = true)
+                else -> field.defaultValue as? Boolean ?: false
+            }
+            if (switch.isChecked != nextChecked) {
+                switch.isChecked = nextChecked
+            }
+        }
 
         override fun clearError() {
         }
@@ -104,6 +117,24 @@ class BootstrapSettingsFormController(
                 blankFallbackText
             } else {
                 value
+            }
+        }
+
+        override fun applyProgrammaticValue(field: TavernConfigFieldSpec, rawValue: Any?) {
+            val nextText = when (field.kind) {
+                TavernConfigFieldKind.STRING_LIST -> {
+                    val listValue = rawValue as? Iterable<*>
+                    listValue?.mapNotNull { item -> item?.toString()?.trim() }
+                        ?.filter { item -> item.isNotBlank() }
+                        ?.joinToString(separator = "\n")
+                        .orEmpty()
+                }
+
+                else -> rawValue?.toString().orEmpty()
+            }
+            if (input.text?.toString().orEmpty() != nextText) {
+                input.setText(nextText)
+                input.setSelection(nextText.length)
             }
         }
 
@@ -137,7 +168,7 @@ class BootstrapSettingsFormController(
         sectionBindings.clear()
         quickFieldPaths.clear()
 
-        // 异步加载真实配置前，先用默认端口占位，避免“数据”页签首屏出现空白跳动。
+        // 异步加载真实配置前，先用默认端口占位，避免“酒馆设置”页签首屏出现空白跳动。
         quickFieldContainer.addView(
             createPortFieldView(
                 field = portField,
@@ -228,6 +259,27 @@ class BootstrapSettingsFormController(
             typedValues[field.path] = resolveTypedFieldValue(field, binding.currentValue())
         }
         return typedValues
+    }
+
+    fun currentTypedValues(resolveTypedFieldValue: (TavernConfigFieldSpec, Any?) -> Any): LinkedHashMap<String, Any?> {
+        return collectTypedValues(resolveTypedFieldValue)
+    }
+
+    fun applyProgrammaticValues(valuesByPath: Map<String, Any?>) {
+        if (valuesByPath.isEmpty()) {
+            return
+        }
+
+        for ((path, rawValue) in valuesByPath) {
+            val field = configRepository.fieldsByPath[path] ?: continue
+            val binding = fieldBindings[path] ?: continue
+            // 快捷功能直接改当前表单控件，保证 dirty 状态、显隐联动和后续保存仍然走设置页现有链路。
+            binding.applyProgrammaticValue(field, rawValue)
+        }
+
+        updateFieldVisibility()
+        onFieldEdited(null)
+        onFormChanged()
     }
 
     fun captureSnapshot(): String {

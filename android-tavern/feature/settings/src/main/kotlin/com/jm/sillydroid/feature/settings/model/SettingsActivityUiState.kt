@@ -10,5 +10,6 @@ data class SettingsActivityUiState(
     val debugDiagnosticsEnabled: Boolean = false,
     val unrestrictedFileImportSelectionEnabled: Boolean = false,
     val shouldStartBootstrap: Boolean = false,
-    val shouldReloadTavernUi: Boolean = false
+    val shouldReloadTavernUi: Boolean = false,
+    val shouldForceFreshWebViewLoad: Boolean = false
 )

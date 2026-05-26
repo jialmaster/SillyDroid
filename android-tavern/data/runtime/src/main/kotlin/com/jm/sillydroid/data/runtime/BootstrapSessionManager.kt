@@ -3,6 +3,7 @@ import android.content.Context
 import android.util.Log
 import com.jm.sillydroid.core.model.bootstrap.BootstrapCurrentLogTargets
 import com.jm.sillydroid.core.model.bootstrap.BootstrapEvent
+import com.jm.sillydroid.core.model.bootstrap.BootstrapFailureDiagnosis
 import com.jm.sillydroid.core.model.bootstrap.BootstrapFailureSnapshot
 import com.jm.sillydroid.core.model.bootstrap.BootstrapLifecycle
 import com.jm.sillydroid.core.model.bootstrap.BootstrapLogKind
@@ -266,6 +267,26 @@ class BootstrapSessionManager(
                     result = BootstrapStepResult.SUCCESS,
                     details = "检测到现有本地 Tavern 服务，当前启动会话将直接复用。"
                 )
+                startStep(
+                    stepId = BootstrapStepId.PREPARE_SERVER_ASSETS,
+                    detection = BootstrapStepDetection.REUSED_RUNNING_SERVER,
+                    statusMessage = "正在同步宿主内置扩展。",
+                    statusDetails = "检测到本地服务已运行，仅同步 APK 内置 host 扩展资产。"
+                )
+                // 复用已运行的 Tavern 服务时也必须同步轻量 host 扩展资产；否则 APK 升级后会继续服务旧版安卓宿主 JS/CSS。
+                extractor.prepareHostExtensionAssets(paths) { details, progressPercent ->
+                    heartbeatStep(
+                        stepId = BootstrapStepId.PREPARE_SERVER_ASSETS,
+                        details = details,
+                        progressPercent = progressPercent
+                    )
+                }
+                completeStep(
+                    stepId = BootstrapStepId.PREPARE_SERVER_ASSETS,
+                    detection = BootstrapStepDetection.REUSED_RUNNING_SERVER,
+                    result = BootstrapStepResult.SUCCESS,
+                    details = "APK 内置 host 扩展已同步到运行目录。"
+                )
                 skipRemainingPendingSteps(
                     details = "已复用现有本地 Tavern 服务实例。",
                     result = BootstrapStepResult.SKIPPED_REUSED,
@@ -321,6 +342,7 @@ class BootstrapSessionManager(
                 statusDetails = "正在创建 bootstrap、data 和日志目录。"
             )
             extractor.prepareWorkDirectories(paths)
+            appendStartupLog(describeHostRuntimeSelection(appContext, paths))
             completeStep(
                 stepId = BootstrapStepId.PREPARE_WORKDIRS,
                 detection = BootstrapStepDetection.REQUIRED,
@@ -361,12 +383,25 @@ class BootstrapSessionManager(
 
             val serverInspection = extractor.inspectServerAssets(paths)
             if (serverInspection.detection == BootstrapStepDetection.UP_TO_DATE) {
-                skipStep(
+                startStep(
                     stepId = BootstrapStepId.PREPARE_SERVER_ASSETS,
                     detection = serverInspection.detection,
-                    result = BootstrapStepResult.SKIPPED_UP_TO_DATE,
                     statusMessage = "Tavern 资产已是最新。",
-                    details = serverInspection.details
+                    statusDetails = "Tavern payload 已是最新，仅同步 APK 内置 host 扩展资产。"
+                )
+                // server payload 不需要重解包时，仍必须同步轻量 host 扩展资产，保证 APK 内置 JS/CSS 能覆盖旧运行目录。
+                extractor.prepareHostExtensionAssets(paths) { details, progressPercent ->
+                    heartbeatStep(
+                        stepId = BootstrapStepId.PREPARE_SERVER_ASSETS,
+                        details = details,
+                        progressPercent = progressPercent
+                    )
+                }
+                completeStep(
+                    stepId = BootstrapStepId.PREPARE_SERVER_ASSETS,
+                    detection = serverInspection.detection,
+                    result = BootstrapStepResult.SUCCESS,
+                    details = "Tavern payload 已是最新，APK 内置 host 扩展已同步到运行目录。"
                 )
             } else {
                 startStep(
@@ -437,8 +472,9 @@ class BootstrapSessionManager(
                 statusMessage = "正在初始化离线 Linux 运行时。",
                 statusDetails = "首次启动时这里可能需要几十秒，请稍等。"
             )
-            RootfsRuntimeProvisioner(launcher, paths).ensure(
-                logFileName = runtimeLogs.currentRootfsRuntimeLogFileName()
+            val rootfsRuntime = RootfsRuntimeProvisioner(launcher, paths).ensure(
+                logFileName = runtimeLogs.currentRootfsRuntimeLogFileName(),
+                onAttemptLog = ::appendStartupLog
             ) { elapsedSeconds ->
                 val progressPercent = (15 + elapsedSeconds * 8).coerceAtMost(95)
                 heartbeatStep(
@@ -460,12 +496,14 @@ class BootstrapSessionManager(
                 statusMessage = "正在启动 Tavern 进程。",
                 statusDetails = "正在启动本地 Node 服务进程。"
             )
+            appendStartupLog("Starting Tavern server with prootMode=${rootfsRuntime.mode.displayName}.")
             stopManagedProcesses()
             serverProcess = ServerController(
                 launcher = launcher,
                 paths = paths,
                 servicePort = servicePort,
-                logFileName = runtimeLogs.currentServerLogFileName()
+                logFileName = runtimeLogs.currentServerLogFileName(),
+                prootMode = rootfsRuntime.mode
             ).start()
             completeStep(
                 stepId = BootstrapStepId.START_SERVER_PROCESS,
@@ -755,6 +793,12 @@ class BootstrapSessionManager(
     ) {
         val failedStepId = currentSnapshot.currentStepId
         val nowMillis = System.currentTimeMillis()
+        val diagnosis = buildFailureDiagnosis(
+            stepId = failedStepId,
+            title = title,
+            details = details,
+            errorKind = errorKind
+        )
         val updatedSteps = BootstrapStepLedger.failed(
             steps = currentSnapshot.steps,
             stepId = failedStepId,
@@ -775,7 +819,8 @@ class BootstrapSessionManager(
                     isBlocked = blocked,
                     throwableType = throwableType,
                     errorKind = errorKind,
-                    happenedAtMillis = nowMillis
+                    happenedAtMillis = nowMillis,
+                    diagnosis = diagnosis
                 )
             ),
             logLine = "step_failed id=$failedStepId blocked=$blocked details=$details"
@@ -808,12 +853,31 @@ class BootstrapSessionManager(
         stopReadyWatchdog(reason = "pausing bootstrap for configuration intervention")
         healthMonitor.stopServerMonitor()
         resetAutoRestartBudget()
+        val nowMillis = System.currentTimeMillis()
+        val failureStepId = BootstrapStepId.START_SERVER_PROCESS
+        val diagnosis = buildFailureDiagnosis(
+            stepId = failureStepId,
+            title = "启动前配置需要调整。",
+            details = details,
+            errorKind = "ConfigIntervention"
+        )
         publishSnapshot(
             currentSnapshot.copy(
                 lifecycle = BootstrapLifecycle.CONFIGURING,
                 currentStepId = null,
                 statusMessage = "已暂停启动，请调整 Tavern 配置。",
-                statusDetails = details
+                statusDetails = details,
+                // 配置干预不是 crash，但仍记录为 lastFailure，供 UI 展示阶段、原因、方案和最近日志。
+                lastFailure = BootstrapFailureSnapshot(
+                    stepId = failureStepId,
+                    title = "启动前配置需要调整。",
+                    details = details,
+                    isBlocked = true,
+                    throwableType = null,
+                    errorKind = "ConfigIntervention",
+                    happenedAtMillis = nowMillis,
+                    diagnosis = diagnosis
+                )
             ),
             logLine = "lifecycle=${BootstrapLifecycle.CONFIGURING} details=$details"
         )
@@ -848,6 +912,13 @@ class BootstrapSessionManager(
         stopReadyWatchdog(reason = "scheduling auto-restart")
         healthMonitor.stopServerMonitor()
         val attempt = autoRestartBudget.recordAttempt(System.currentTimeMillis()) ?: run {
+            val failureStepId = currentSnapshot.lastFailure?.stepId
+            val diagnosis = buildFailureDiagnosis(
+                stepId = failureStepId,
+                title = "本地 Tavern 服务反复异常，已停止自动重启。",
+                details = details,
+                errorKind = "AutoRestartBudgetExhausted"
+            )
             publishSnapshot(
                 currentSnapshot.copy(
                     lifecycle = BootstrapLifecycle.FAILED_ERROR,
@@ -855,12 +926,13 @@ class BootstrapSessionManager(
                     statusMessage = "本地 Tavern 服务反复异常，已停止自动重启。",
                     statusDetails = details,
                     lastFailure = BootstrapFailureSnapshot(
-                        stepId = currentSnapshot.lastFailure?.stepId,
+                        stepId = failureStepId,
                         title = "本地 Tavern 服务反复异常，已停止自动重启。",
                         details = details,
                         isBlocked = false,
                         throwableType = "AutoRestartBudgetExhausted",
-                        errorKind = "AutoRestartBudgetExhausted"
+                        errorKind = "AutoRestartBudgetExhausted",
+                        diagnosis = diagnosis
                     ),
                     localUrl = localUrl,
                     restartBudget = buildRestartBudgetSnapshot()
@@ -930,7 +1002,7 @@ class BootstrapSessionManager(
     }
 
     private fun buildServerExitDetails(exitCode: Int): String {
-        val excerpt = readServerLogExcerpt()
+        val excerpt = readLogExcerpt(runtimeLogs.currentServerLogFile())
         if (excerpt.isBlank()) {
             return "Tavern 进程退出码：$exitCode"
         }
@@ -943,14 +1015,41 @@ class BootstrapSessionManager(
         }
     }
 
-    private fun readServerLogExcerpt(maxLines: Int = 24, maxChars: Int = 1800): String {
-        val serverLogFile = runtimeLogs.currentServerLogFile()
+    private fun buildFailureDiagnosis(
+        stepId: BootstrapStepId?,
+        title: String,
+        details: String,
+        errorKind: String?
+    ): BootstrapFailureDiagnosis {
+        val stageTitle = stepId?.let(::resolveStepTitle) ?: title
+        val logFile = logFileForFailureStep(stepId)
+        val logExcerpt = logFile?.let(::readLogExcerpt).orEmpty()
+        return BootstrapFailureDiagnoser.diagnose(
+            stepId = stepId,
+            stageTitle = stageTitle,
+            details = details,
+            errorKind = errorKind,
+            logFileName = logFile?.name,
+            logExcerpt = logExcerpt
+        )
+    }
+
+    private fun logFileForFailureStep(stepId: BootstrapStepId?): File? {
+        return when (stepId?.defaultLogKind()) {
+            BootstrapLogKind.TAVERN_SERVER -> runtimeLogs.currentServerLogFile()
+            BootstrapLogKind.ROOTFS_RUNTIME -> runtimeLogs.currentRootfsRuntimeLogFile()
+            BootstrapLogKind.STARTUP,
+            null -> runtimeLogs.currentStartupLogFile()
+        }
+    }
+
+    private fun readLogExcerpt(logFile: File, maxLines: Int = 24, maxChars: Int = 1800): String {
         val excerpt = runCatching {
-            if (!serverLogFile.exists()) {
+            if (!logFile.exists()) {
                 return@runCatching ""
             }
 
-            serverLogFile.readLines()
+            logFile.readLines()
                 .takeLast(maxLines)
                 .joinToString("\n") { it.trimEnd() }
                 .trim()

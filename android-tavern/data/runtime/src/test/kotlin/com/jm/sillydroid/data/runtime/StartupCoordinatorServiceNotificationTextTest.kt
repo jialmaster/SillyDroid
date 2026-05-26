@@ -6,8 +6,11 @@ import com.jm.sillydroid.core.model.bootstrap.BootstrapStepId
 import com.jm.sillydroid.core.model.bootstrap.BootstrapStepResult
 import com.jm.sillydroid.core.model.bootstrap.BootstrapStepStatus
 import com.jm.sillydroid.core.model.bootstrap.defaultBootstrapSteps
+import com.jm.sillydroid.core.model.bootstrap.isHttpReadyTransitionSnapshot
 import com.jm.sillydroid.core.model.bootstrap.withDerivedUiFlags
+import com.jm.sillydroid.core.model.notification.HostNotificationProgress
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -51,6 +54,7 @@ class StartupCoordinatorServiceNotificationTextTest {
             "SillyTavern 已启动，点击返回酒馆",
             resolveForegroundNotificationContentText(snapshot)
         )
+        assertTrue(snapshot.isHttpReadyTransitionSnapshot())
     }
 
     @Test
@@ -76,5 +80,34 @@ class StartupCoordinatorServiceNotificationTextTest {
             "正在等待 HTTP 服务就绪。 (67%)",
             resolveForegroundNotificationContentText(snapshot)
         )
+    }
+
+    @Test
+    fun `ready transition no longer keeps progress bar`() {
+        val snapshot = BootstrapSessionSnapshot(
+            lifecycle = BootstrapLifecycle.RUNNING,
+            currentStepId = BootstrapStepId.WAIT_HTTP_READY,
+            progressPercent = 100,
+            statusMessage = "正在等待 HTTP 服务就绪。",
+            steps = defaultBootstrapSteps().map { step ->
+                if (step.id == BootstrapStepId.WAIT_HTTP_READY) {
+                    step.copy(
+                        status = BootstrapStepStatus.COMPLETED,
+                        result = BootstrapStepResult.SUCCESS,
+                        progressPercent = 100
+                    )
+                } else {
+                    step
+                }
+            }
+        ).withDerivedUiFlags()
+
+        val progress = when {
+            !snapshot.derivedUiFlags.showProgress || shouldShowForegroundReadyState(snapshot) -> HostNotificationProgress.None
+            snapshot.progressPercent <= 0 -> HostNotificationProgress.Indeterminate
+            else -> HostNotificationProgress.Determinate(snapshot.progressPercent.coerceIn(0, 100), 100)
+        }
+
+        assertEquals(HostNotificationProgress.None, progress)
     }
 }

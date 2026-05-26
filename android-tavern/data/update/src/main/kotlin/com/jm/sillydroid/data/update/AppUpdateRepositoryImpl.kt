@@ -99,7 +99,9 @@ class AppUpdateRepositoryImpl(
         val request = DownloadManager.Request(Uri.parse(release.apkDownloadUrl)).apply {
             setTitle(release.releaseTitle)
             setDescription(downloadDescription)
-            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            // 更新下载改由宿主统一通知出口接管完成态；
+            // 这里保留下载中的可见性，避免触发系统隐藏通知所需的额外权限约束。
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
             setAllowedOverMetered(true)
             setAllowedOverRoaming(true)
             @Suppress("DEPRECATION")

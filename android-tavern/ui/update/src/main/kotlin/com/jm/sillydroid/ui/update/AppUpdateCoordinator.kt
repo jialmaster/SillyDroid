@@ -24,6 +24,7 @@ import com.jm.sillydroid.core.model.update.AppDownloadStatus
 import com.jm.sillydroid.core.model.update.AppUpdateBuildConfig
 import com.jm.sillydroid.core.model.update.AppUpdateRequestConfig
 import com.jm.sillydroid.domain.bootstrap.RuntimeMetadataRepository
+import com.jm.sillydroid.domain.notification.HostDownloadNotificationCoordinator
 import com.jm.sillydroid.domain.update.AppUpdateRepository
 import com.jm.sillydroid.ui.update.R
 import com.google.android.material.button.MaterialButton
@@ -39,6 +40,7 @@ class AppUpdateCoordinator(
     private val runtimeMetadataRepository: RuntimeMetadataRepository,
     private val buildConfig: AppUpdateBuildConfig,
     private val dispatchers: DispatcherProvider,
+    private val hostDownloadNotificationCoordinator: HostDownloadNotificationCoordinator,
     private val overlayUi: OverlayUi? = null,
     private val aboutUi: AboutUi? = null
 ) : DefaultLifecycleObserver {
@@ -151,6 +153,8 @@ class AppUpdateCoordinator(
 
         withContext(dispatchers.io) {
             appUpdateRepository.startDownload(availableRelease)
+        }.also { downloadState ->
+            hostDownloadNotificationCoordinator.postAppUpdateDownloadStarted(downloadState)
         }
         renderState()
         showMessage(R.string.app_update_download_started)
@@ -201,15 +205,18 @@ class AppUpdateCoordinator(
             AppDownloadStatus.PENDING,
             AppDownloadStatus.PAUSED,
             AppDownloadStatus.RUNNING -> {
+                hostDownloadNotificationCoordinator.refreshAppUpdateDownload(currentDownload)
                 renderState()
             }
 
             AppDownloadStatus.SUCCESSFUL -> {
+                hostDownloadNotificationCoordinator.refreshAppUpdateDownload(currentDownload)
                 verifyAndMaybeOpenDownload(currentDownload, openInstallerIfReady, showErrors)
             }
 
             AppDownloadStatus.FAILED,
             AppDownloadStatus.MISSING -> {
+                hostDownloadNotificationCoordinator.postAppUpdateDownloadFailed(currentDownload.versionName)
                 clearDownloadState(removeDownload = true)
                 if (showErrors) {
                     showMessage(R.string.app_update_download_failed)
@@ -231,6 +238,7 @@ class AppUpdateCoordinator(
                 appUpdateRepository.verifyDownloadedApk(downloadState)
             }
             if (!verified) {
+                hostDownloadNotificationCoordinator.postAppUpdateDownloadFailed(downloadState.versionName)
                 clearDownloadState(removeDownload = true)
                 if (showErrors) {
                     showMessage(R.string.app_update_sha_failed)
@@ -245,6 +253,11 @@ class AppUpdateCoordinator(
         }
 
         renderState()
+        hostDownloadNotificationCoordinator.postAppUpdateReadyToInstall(
+            apkPath = appUpdateRepository.downloadedApkPath(currentState),
+            canRequestPackageInstalls = Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+                activity.packageManager.canRequestPackageInstalls()
+        )
         if (openInstallerIfReady) {
             openVerifiedDownload(currentState)
         }
@@ -310,6 +323,7 @@ class AppUpdateCoordinator(
 
     private fun clearDownloadState(removeDownload: Boolean) {
         appUpdateRepository.clearDownloadState(removeDownload)
+        hostDownloadNotificationCoordinator.clearAppUpdateNotifications()
     }
 
     private fun registerDownloadReceiver() {

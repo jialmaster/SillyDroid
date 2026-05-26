@@ -1050,7 +1050,8 @@ class BootstrapSettingsExtensionsCoordinator(
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_TEXT_FLAG_MULTI_LINE
             setSingleLine(false)
             gravity = android.view.Gravity.TOP or android.view.Gravity.START
-            isVerticalScrollBarEnabled = true
+            // 扩展安装弹窗只保留外层内容滚动条，避免输入框和弹窗内容区同时出现两条竖向滚动条。
+            isVerticalScrollBarEnabled = false
             minLines = 5
             maxLines = 10
             textSize = 13f

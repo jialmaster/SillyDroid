@@ -15,6 +15,8 @@ import com.jm.sillydroid.feature.main.ui.home.HomeViewModel
  */
 class SystemBarInsetsController(
     private val contentRoot: View,
+    private val statusBarBackground: View,
+    private val navigationBarBackground: View,
     private val homeViewModel: HomeViewModel,
     private val displayModeProvider: () -> HostDisplayMode,
     private val onImeChanged: (Boolean) -> Unit,
@@ -53,6 +55,9 @@ class SystemBarInsetsController(
                 HostDisplayMode.NORMAL,
                 HostDisplayMode.STATUS_BAR_HIDDEN -> systemBarsInsets.bottom
             }
+            // 系统栏底色和内容安全区使用同一份 insets，避免根容器只能单色导致顶部/底部无法分色。
+            updateInsetBackgroundHeight(statusBarBackground, topInset)
+            updateInsetBackgroundHeight(navigationBarBackground, bottomSystemInset)
             view.setPadding(
                 initialLeftPadding + systemBarsInsets.left,
                 initialTopPadding + topInset,
@@ -67,5 +72,14 @@ class SystemBarInsetsController(
 
     fun refresh() {
         ViewCompat.requestApplyInsets(contentRoot)
+    }
+
+    private fun updateInsetBackgroundHeight(view: View, height: Int) {
+        if (view.layoutParams.height == height) {
+            return
+        }
+        view.layoutParams = view.layoutParams.also { params ->
+            params.height = height
+        }
     }
 }

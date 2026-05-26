@@ -18,6 +18,7 @@ interface RuntimeLogManager {
     fun currentStartupLogFileName(): String
     fun currentServerLogFile(): File
     fun currentServerLogFileName(): String
+    fun currentRootfsRuntimeLogFile(): File
     fun currentRootfsRuntimeLogFileName(): String
     fun startCurrentServerTail()
     fun stopCurrentServerTail()

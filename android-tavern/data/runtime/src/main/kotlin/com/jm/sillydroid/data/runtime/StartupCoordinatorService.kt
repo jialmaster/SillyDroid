@@ -1,20 +1,22 @@
 package com.jm.sillydroid.data.runtime
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
+import com.jm.sillydroid.core.model.notification.HostForegroundBehavior
+import com.jm.sillydroid.core.model.notification.HostNotificationChannel
+import com.jm.sillydroid.core.model.notification.HostNotificationKind
+import com.jm.sillydroid.core.model.notification.HostNotificationProgress
+import com.jm.sillydroid.core.model.notification.HostNotificationSpec
+import com.jm.sillydroid.core.model.notification.HostNotificationTapSpec
+import com.jm.sillydroid.core.model.notification.HostNotificationAction
 import com.jm.sillydroid.core.model.bootstrap.BootstrapLifecycle
 import com.jm.sillydroid.core.model.bootstrap.BootstrapSessionSnapshot
 import com.jm.sillydroid.core.model.bootstrap.isHttpReadyTransitionSnapshot
 import com.jm.sillydroid.domain.app.SillyDroidAppGraphProvider
+import com.jm.sillydroid.domain.notification.HostNotificationService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,6 +29,7 @@ class StartupCoordinatorService : Service() {
         private const val ACTION_RETRY = "com.jm.sillydroid.action.RETRY"
         private const val ACTION_STOP_FOR_SETTINGS = "com.jm.sillydroid.action.STOP_FOR_SETTINGS"
         private const val notificationTitle = "SillyDroid 启动服务"
+        private const val foregroundNotificationKey = "foreground-bootstrap"
 
         fun createStartIntent(context: Context, retry: Boolean = false): Intent {
             return Intent(context, StartupCoordinatorService::class.java).apply {
@@ -43,6 +46,7 @@ class StartupCoordinatorService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var sessionManager: BootstrapSessionManager
+    private lateinit var hostNotificationService: HostNotificationService
 
     override fun onCreate() {
         super.onCreate()
@@ -51,7 +55,8 @@ class StartupCoordinatorService : Service() {
         BootstrapSessionRuntimeStore.reset()
         val graph = (applicationContext as SillyDroidAppGraphProvider).sillyDroidAppGraph
         graph.runtimeLogManager.initializeForAppStart()
-        ensureNotificationChannel()
+        hostNotificationService = graph.hostNotificationService
+        hostNotificationService.ensureChannels()
         sessionManager = BootstrapSessionManager(
             context = applicationContext,
             scope = serviceScope,
@@ -59,10 +64,7 @@ class StartupCoordinatorService : Service() {
             hostPreferences = graph.hostConfigStore,
             settingsConfig = graph.tavernConfigRepository(),
             onSnapshotChanged = { snapshot ->
-                NotificationManagerCompat.from(this).notify(
-                    BootConfig.notificationId,
-                    buildNotification(snapshot)
-                )
+                hostNotificationService.postForeground(this@StartupCoordinatorService, buildForegroundNotificationSpec(snapshot))
             }
         )
     }
@@ -73,6 +75,7 @@ class StartupCoordinatorService : Service() {
         if (intent?.action == ACTION_STOP_FOR_SETTINGS) {
             serviceScope.launch {
                 sessionManager.stopForSettings()
+                hostNotificationService.remove(foregroundNotificationKey)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                 } else {
@@ -85,16 +88,12 @@ class StartupCoordinatorService : Service() {
         }
 
         val retry = intent?.action == ACTION_RETRY
-        val notification = buildNotification(BootstrapSessionRuntimeStore.snapshot.value)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                BootConfig.notificationId,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            )
-        } else {
-            startForeground(BootConfig.notificationId, notification)
-        }
+        // 前台通知必须走统一通知服务的 foreground 入口：
+        // 这里不直接 startForeground / notify，避免启动阶段和 ready 阶段出现两套更新语义。
+        hostNotificationService.postForeground(
+            this,
+            buildForegroundNotificationSpec(BootstrapSessionRuntimeStore.snapshot.value)
+        )
         sessionManager.start(forceRestart = retry)
         return START_STICKY
     }
@@ -102,6 +101,7 @@ class StartupCoordinatorService : Service() {
     override fun onDestroy() {
         sessionManager.close()
         serviceScope.cancel()
+        hostNotificationService.remove(foregroundNotificationKey)
         super.onDestroy()
     }
 
@@ -111,51 +111,45 @@ class StartupCoordinatorService : Service() {
         return resolveForegroundNotificationContentText(snapshot)
     }
 
-    private fun buildNotification(snapshot: BootstrapSessionSnapshot): Notification {
+    private fun buildForegroundNotificationSpec(snapshot: BootstrapSessionSnapshot): HostNotificationSpec {
         val normalizedProgress = snapshot.progressPercent.coerceIn(0, 100)
         val showReadyState = shouldShowForegroundReadyState(snapshot)
-        val showProgress = snapshot.derivedUiFlags.showProgress && !showReadyState
-        val indeterminate = normalizedProgress <= 0
+        val progress = when {
+            !snapshot.derivedUiFlags.showProgress || showReadyState -> HostNotificationProgress.None
+            normalizedProgress <= 0 -> HostNotificationProgress.Indeterminate
+            else -> HostNotificationProgress.Determinate(
+                current = normalizedProgress,
+                max = 100
+            )
+        }
         val contentText = resolveNotificationContentText(snapshot)
         val ongoing = snapshot.lifecycle == BootstrapLifecycle.RUNNING ||
             snapshot.lifecycle == BootstrapLifecycle.READY_MONITORING ||
             snapshot.lifecycle == BootstrapLifecycle.RESTART_SCHEDULED ||
             snapshot.lifecycle == BootstrapLifecycle.PAUSING_FOR_SETTINGS
 
-        return NotificationCompat.Builder(this, BootConfig.notificationChannelId)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
-            .setContentTitle(notificationTitle)
-            .setContentText(contentText)
-            .setOngoing(ongoing)
-            .setOnlyAlertOnce(true)
-            .setContentIntent(createContentIntent())
-            .setProgress(
-                if (showProgress) 100 else 0,
-                if (showProgress) normalizedProgress else 0,
-                showProgress && indeterminate
+        return HostNotificationSpec(
+            notificationKey = foregroundNotificationKey,
+            kind = HostNotificationKind.FOREGROUND_BOOTSTRAP,
+            channel = HostNotificationChannel.FOREGROUND_RUNTIME,
+            title = notificationTitle,
+            body = contentText,
+            progress = progress,
+            ongoing = ongoing,
+            autoCancel = false,
+            tapSpec = HostNotificationTapSpec(action = HostNotificationAction.OPEN_MAIN),
+            smallIconResId = android.R.drawable.stat_notify_sync,
+            foregroundBehavior = HostForegroundBehavior(
+                serviceNotificationId = BootConfig.notificationId,
+                foregroundServiceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                } else {
+                    null
+                }
             )
-            .build()
-    }
-
-    private fun createContentIntent(): PendingIntent {
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-            ?: Intent(Intent.ACTION_MAIN).setPackage(packageName)
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        return PendingIntent.getActivity(this, 0, launchIntent, flags)
-    }
-
-    private fun ensureNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return
-        }
-
-        val channel = NotificationChannel(
-            BootConfig.notificationChannelId,
-            notificationTitle,
-            NotificationManager.IMPORTANCE_LOW
         )
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
+
 }
 
 internal fun shouldShowForegroundReadyState(snapshot: BootstrapSessionSnapshot): Boolean {

@@ -93,7 +93,15 @@ class BootstrapOverlayHost(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         homeViewModel.isOpeningBootstrapSettings = false
+        val shouldForceFreshWebViewLoad = result.resultCode == Activity.RESULT_OK &&
+            shouldForceFreshWebViewLoadFromSettingsResult(result.data)
         if (result.resultCode == Activity.RESULT_OK && shouldStartBootstrapFromSettingsResult(result.data)) {
+            if (shouldForceFreshWebViewLoad) {
+                // “清空宿主数据并重新初始化”会重解压新的 server 资产；旧 WebView 若继续复用同一站点会话，
+                // 即使服务端已经起来，也可能还显示旧内存态页面，所以这里先记一个单次 fresh-load 请求，
+                // 等 bootstrap 真正 ready 后由 WebView host 统一清站点状态并重新 load。
+                homeViewModel.shouldForceFreshWebViewLoad = true
+            }
             homeViewModel.resetForBootstrapRestart()
             overlay.isVisible = true
             webViewHost.hideForBootstrapRestart()
@@ -102,6 +110,10 @@ class BootstrapOverlayHost(
         }
 
         val currentSnapshot = processManager.currentSnapshot()
+        if (shouldForceFreshWebViewLoad) {
+            // 单独“清空浏览器数据”不需要重启 Tavern 服务，但仍必须复用 WebView host 的完整站点状态清理链路。
+            homeViewModel.shouldForceFreshWebViewLoad = true
+        }
         render(currentSnapshot)
         if (result.resultCode == Activity.RESULT_OK && shouldReloadTavernUiFromSettingsResult(result.data)) {
             webViewHost.reloadTavernUiIfPossible(currentSnapshot)
@@ -115,6 +127,7 @@ class BootstrapOverlayHost(
             runtimeMetadataRepository = appGraph.runtimeMetadataRepository,
             buildConfig = appGraph.appUpdateBuildConfig,
             dispatchers = appGraph.dispatchers,
+            hostDownloadNotificationCoordinator = appGraph.hostDownloadNotificationCoordinator,
             overlayUi = AppUpdateCoordinator.OverlayUi(
                 container = updateButtonContainer,
                 button = updateButton,
@@ -202,5 +215,9 @@ class BootstrapOverlayHost(
 
     private fun shouldReloadTavernUiFromSettingsResult(data: Intent?): Boolean {
         return data?.getBooleanExtra(SettingsNavigationContract.resultShouldReloadTavernUiKey, false) == true
+    }
+
+    private fun shouldForceFreshWebViewLoadFromSettingsResult(data: Intent?): Boolean {
+        return data?.getBooleanExtra(SettingsNavigationContract.resultShouldForceFreshWebViewLoadKey, false) == true
     }
 }

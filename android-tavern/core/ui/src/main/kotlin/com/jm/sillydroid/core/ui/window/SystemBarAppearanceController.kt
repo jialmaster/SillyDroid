@@ -64,10 +64,27 @@ object SystemBarAppearanceController {
         mode: HostDisplayMode,
         @ColorInt backgroundColor: Int
     ) {
-        val opaqueBackgroundColor = ColorUtils.setAlphaComponent(backgroundColor, 255)
+        applyForColors(
+            activity = activity,
+            mode = mode,
+            statusBarColor = backgroundColor,
+            navigationBarColor = backgroundColor
+        )
+    }
+
+    fun applyForColors(
+        activity: Activity,
+        mode: HostDisplayMode,
+        @ColorInt statusBarColor: Int,
+        @ColorInt navigationBarColor: Int
+    ) {
+        val opaqueStatusBarColor = ColorUtils.setAlphaComponent(statusBarColor, 255)
+        val opaqueNavigationBarColor = ColorUtils.setAlphaComponent(navigationBarColor, 255)
         val insetsController = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-        val shouldUseDarkForeground =
-            ColorUtils.calculateLuminance(opaqueBackgroundColor) >= LIGHT_SURFACE_LUMINANCE_THRESHOLD
+        val shouldUseDarkStatusForeground =
+            ColorUtils.calculateLuminance(opaqueStatusBarColor) >= LIGHT_SURFACE_LUMINANCE_THRESHOLD
+        val shouldUseDarkNavigationForeground =
+            ColorUtils.calculateLuminance(opaqueNavigationBarColor) >= LIGHT_SURFACE_LUMINANCE_THRESHOLD
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // 手势导航下底部“小白条”后面的发白区域，很多机型其实是系统为了可读性强加的 contrast scrim。
@@ -75,19 +92,21 @@ object SystemBarAppearanceController {
             activity.window.isNavigationBarContrastEnforced = false
             activity.window.isStatusBarContrastEnforced = false
         }
-        activity.window.statusBarColor = opaqueBackgroundColor
-        activity.window.navigationBarColor = opaqueBackgroundColor
+        activity.window.statusBarColor = opaqueStatusBarColor
+        activity.window.navigationBarColor = opaqueNavigationBarColor
         applyVisibilityMode(insetsController, mode)
         applyForegroundAppearance(
             insetsController = insetsController,
-            shouldUseDarkForeground = shouldUseDarkForeground
+            shouldUseDarkStatusForeground = shouldUseDarkStatusForeground,
+            shouldUseDarkNavigationForeground = shouldUseDarkNavigationForeground
         )
         // 某些 OEM 在 show/hide system bars 之后会把前景明暗标志刷回默认值；
         // 这里在下一帧再补打一遍，优先保证浅色背景下状态栏文字不是白的。
         activity.window.decorView.post {
             applyForegroundAppearance(
                 insetsController = WindowCompat.getInsetsController(activity.window, activity.window.decorView),
-                shouldUseDarkForeground = shouldUseDarkForeground
+                shouldUseDarkStatusForeground = shouldUseDarkStatusForeground,
+                shouldUseDarkNavigationForeground = shouldUseDarkNavigationForeground
             )
         }
     }
@@ -115,10 +134,11 @@ object SystemBarAppearanceController {
 
     private fun applyForegroundAppearance(
         insetsController: WindowInsetsControllerCompat,
-        shouldUseDarkForeground: Boolean
+        shouldUseDarkStatusForeground: Boolean,
+        shouldUseDarkNavigationForeground: Boolean
     ) {
         // Android 的 "light system bars" 标志实际含义是“使用深色前景”，所以这里按背景亮度反着算。
-        insetsController.isAppearanceLightStatusBars = shouldUseDarkForeground
-        insetsController.isAppearanceLightNavigationBars = shouldUseDarkForeground
+        insetsController.isAppearanceLightStatusBars = shouldUseDarkStatusForeground
+        insetsController.isAppearanceLightNavigationBars = shouldUseDarkNavigationForeground
     }
 }

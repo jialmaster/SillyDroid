@@ -69,12 +69,14 @@ class SettingsActivityViewModel(
 
     fun markResultFlags(
         shouldStartBootstrap: Boolean = false,
-        shouldReloadTavernUi: Boolean = false
+        shouldReloadTavernUi: Boolean = false,
+        shouldForceFreshWebViewLoad: Boolean = false
     ) {
         _uiState.update { current ->
             current.copy(
                 shouldStartBootstrap = current.shouldStartBootstrap || shouldStartBootstrap,
-                shouldReloadTavernUi = current.shouldReloadTavernUi || shouldReloadTavernUi
+                shouldReloadTavernUi = current.shouldReloadTavernUi || shouldReloadTavernUi,
+                shouldForceFreshWebViewLoad = current.shouldForceFreshWebViewLoad || shouldForceFreshWebViewLoad
             )
         }
     }

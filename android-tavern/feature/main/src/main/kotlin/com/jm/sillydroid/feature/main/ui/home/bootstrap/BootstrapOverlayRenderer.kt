@@ -10,6 +10,7 @@ import android.widget.TextView
 import androidx.core.view.isVisible
 import com.jm.sillydroid.core.model.bootstrap.BootstrapLifecycle
 import com.jm.sillydroid.core.model.bootstrap.BootstrapSessionSnapshot
+import com.jm.sillydroid.core.model.bootstrap.displayText
 
 class BootstrapOverlayRenderer(
     private val views: BootstrapOverlayViews,
@@ -106,6 +107,20 @@ class BootstrapOverlayRenderer(
             if (tavernLogLine != null) {
                 sections += text.tavernLogTail(tavernLogLine)
             }
+        }
+
+        val failureDiagnosis = snapshot.lastFailure
+            ?.takeIf {
+                snapshot.lifecycle == BootstrapLifecycle.CONFIGURING ||
+                    snapshot.lifecycle == BootstrapLifecycle.FAILED_BLOCKED ||
+                    snapshot.lifecycle == BootstrapLifecycle.FAILED_ERROR
+            }
+            ?.diagnosis
+            ?.displayText()
+            .orEmpty()
+        if (failureDiagnosis.isNotBlank()) {
+            // 失败诊断必须跟随 overlay 主提示展示，保证用户不用先打开实时日志也能看到阶段、原因和处理方案。
+            sections += failureDiagnosis
         }
 
         return sections.joinToString(separator = "\n")

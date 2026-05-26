@@ -17,12 +17,12 @@ import android.util.Log
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebView
+import android.webkit.WebStorage
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.webkit.WebViewCompat
@@ -66,10 +66,8 @@ class TavernWebViewHost(
         private const val LOG_TAG = "SillyDroidMain"
         private const val WEB_VIEW_STATE_KEY = "tavern.webview.state"
         private const val LOADED_URL_STATE_KEY = "tavern.webview.loadedUrl"
-        private const val WEB_SESSION_BRIDGE_NAME = "StaiWebSessionBridge"
         private const val SYSTEM_NOTIFICATION_BRIDGE_NAME = "AndroidSystemNotificationBridge"
-        private const val WEB_SESSION_STORAGE_PREFS_NAME = "sillydroid-webview-session"
-        private const val WEB_SESSION_STORAGE_SNAPSHOT_KEY = "session-storage"
+        private const val ANDROID_HOST_BRIDGE_NAME = "SillyDroidAndroidHostBridge"
         // 恢复出来的 WebView 以 onPageCommitVisible 作为健康信号；在超时后仍未获得信号
         // 表示 surface 可能被系统回收成空白，退回 loadUrl 以重新拉起页面。
         private const val RESTORED_STATE_COMMIT_VISIBLE_TIMEOUT_MS = 6_000L
@@ -96,10 +94,6 @@ class TavernWebViewHost(
     private val bootstrapOverlay: android.view.View = activity.findViewById(R.id.bootstrapOverlay)
 
     private var webSessionPersistenceController: WebSessionPersistenceController? = null
-
-    private val webSessionStoragePreferences by lazy {
-        activity.getSharedPreferences(WEB_SESSION_STORAGE_PREFS_NAME, Context.MODE_PRIVATE)
-    }
 
     private val activityManager by lazy {
         activity.getSystemService(ActivityManager::class.java)
@@ -170,6 +164,13 @@ class TavernWebViewHost(
     }
 
     private var debugRendererCrashReceiver: BroadcastReceiver? = null
+
+    fun currentRuntimeCompatibility(): WebViewRuntimeCompatibility {
+        return WebViewRuntimeCompatibility.from(
+            webView = webView,
+            providerPackageInfo = currentWebViewPackageInfo()
+        )
+    }
 
     fun configure() {
         val webViewBackgroundColor = ContextCompat.getColor(activity, R.color.tavern_webview_background)
@@ -322,6 +323,10 @@ class TavernWebViewHost(
         webViewRefreshLayout.isVisible = true
         webView.isVisible = true
         updateRefreshLayoutEnabled()
+        if (homeViewModel.shouldForceFreshWebViewLoad) {
+            forceFreshWebViewLoad(baseUrl)
+            return
+        }
         if (homeViewModel.hasRestoredWebViewState) {
             // 已恢复出原来的 WebView 会话时，不再重新 load baseUrl，避免把前端状态重置到首页。
             homeViewModel.hasRestoredWebViewState = false
@@ -371,6 +376,31 @@ class TavernWebViewHost(
         webView.isVisible = false
         // 返回 bootstrap overlay 时，把系统栏背景也切回宿主自己的遮罩色，避免残留上一页的 WebView 主题色。
         restoreHostSystemBarAppearance()
+    }
+
+    private fun forceFreshWebViewLoad(baseUrl: String) {
+        val targetUrl = buildInitialTavernUrl(baseUrl)
+        // 清空宿主数据并重解压后，WebView 不能继续复用旧内存页面 / history / cache / sessionStorage；
+        // 否则 showWebView 会因为还是同一 local URL 而跳过 loadUrl，用户仍看到旧前端信息。
+        cancelRestoredStateWatchdog()
+        homeViewModel.shouldForceFreshWebViewLoad = false
+        homeViewModel.hasRestoredWebViewState = false
+        homeViewModel.pendingLocalRetryAttempts = 0
+        homeViewModel.loadedUrl = targetUrl
+        clearCurrentPageSessionState()
+        clearPersistedWebSiteState()
+        recordHostDiagnostic(
+            category = "webview",
+            body = buildString {
+                append("event=force_fresh_webview_load")
+                append(" targetUrl=${normalizeDiagnosticValue(targetUrl)}")
+                append(" action=clear_site_state_and_load")
+                append(' ')
+                append(currentWebViewDiagnosticState())
+            }
+        )
+        webView.loadUrl("about:blank")
+        webView.loadUrl(targetUrl)
     }
 
     fun reloadTavernUiIfPossible(snapshot: BootstrapSessionSnapshot) {
@@ -496,6 +526,21 @@ class TavernWebViewHost(
     }
 
     fun openExternalBrowser(targetUri: Uri): Boolean {
+        launchExternalBrowser(targetUri)
+        return true
+    }
+
+    fun openCurrentPageInExternalBrowser(): Boolean {
+        // 宿主设置里的“在浏览器中打开”必须带出当前酒馆页，避免外部浏览器只回首页后丢掉当前路由上下文。
+        val targetUrl = currentKnownWebViewUrl().trim()
+        if (targetUrl.isBlank()) {
+            showOpenExternalBrowserFailure()
+            return false
+        }
+        return launchExternalBrowser(Uri.parse(targetUrl))
+    }
+
+    private fun launchExternalBrowser(targetUri: Uri): Boolean {
         return try {
             activity.startActivity(
                 Intent(Intent.ACTION_VIEW, targetUri).apply {
@@ -504,9 +549,13 @@ class TavernWebViewHost(
             )
             true
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(activity, R.string.browser_open_external_failed, Toast.LENGTH_SHORT).show()
-            true
+            showOpenExternalBrowserFailure()
+            false
         }
+    }
+
+    private fun showOpenExternalBrowserFailure() {
+        Toast.makeText(activity, R.string.browser_open_external_failed, Toast.LENGTH_SHORT).show()
     }
 
     private fun handleWebViewPageStarted(sourceWebView: WebView, url: String?) {
@@ -569,9 +618,26 @@ class TavernWebViewHost(
                             return '';
                         }
 
-                        const rgbaMatch = value.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*([0-9.]+))?\s*\)$/);
+                        const hexMatch = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
+                        if (hexMatch) {
+                            const hex = hexMatch[1];
+                            if (hex.length === 3) {
+                                return '#' + hex.split('').map(function(char) { return char + char; }).join('');
+                            }
+                            if (hex.length === 8) {
+                                const alpha = parseInt(hex.slice(6, 8), 16);
+                                if (alpha <= 3) {
+                                    return '';
+                                }
+                                return '#' + hex.slice(0, 6);
+                            }
+                            return '#' + hex.slice(0, 6);
+                        }
+
+                        const rgbaMatch = value.match(/^rgba?\(\s*(\d{1,3})(?:\s*,\s*|\s+)(\d{1,3})(?:\s*,\s*|\s+)(\d{1,3})(?:\s*(?:\/|,)\s*([0-9.]+%?))?\s*\)$/);
                         if (rgbaMatch) {
-                            const alpha = rgbaMatch[4] == null ? 1 : Number(rgbaMatch[4]);
+                            const alphaText = rgbaMatch[4];
+                            const alpha = alphaText && alphaText.endsWith('%') ? Number(alphaText.slice(0, -1)) / 100 : Number(alphaText == null ? 1 : alphaText);
                             if (!Number.isFinite(alpha) || alpha <= 0.01) {
                                 return '';
                             }
@@ -582,23 +648,7 @@ class TavernWebViewHost(
                             return '#' + rgb.join('');
                         }
 
-                        const hexMatch = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
-                        if (!hexMatch) {
-                            return '';
-                        }
-
-                        const hex = hexMatch[1];
-                        if (hex.length === 3) {
-                            return '#' + hex.split('').map(function(char) { return char + char; }).join('');
-                        }
-                        if (hex.length === 8) {
-                            const alpha = parseInt(hex.slice(6, 8), 16);
-                            if (alpha <= 3) {
-                                return '';
-                            }
-                            return '#' + hex.slice(0, 6);
-                        }
-                        return '#' + hex.slice(0, 6);
+                        return '';
                     }
 
                     function firstSolidBackgroundHex() {
@@ -608,7 +658,7 @@ class TavernWebViewHost(
                             return metaColor;
                         }
 
-                        const candidates = [document.body, document.documentElement];
+                        const candidates = [document.getElementById('bg1'), document.body, document.documentElement];
                         for (const node of candidates) {
                             if (!node) {
                                 continue;
@@ -622,6 +672,10 @@ class TavernWebViewHost(
                     }
 
                     function notifyBridge() {
+                        if (document.documentElement && document.documentElement.dataset.sillydroidTheme === 'glass') {
+                            return;
+                        }
+
                         const nextColor = firstSolidBackgroundHex();
                         if (!nextColor || nextColor === window.__sillyDroidLastSystemBarColor) {
                             return;
@@ -748,14 +802,45 @@ class TavernWebViewHost(
         webSessionPersistenceController?.close()
         webSessionPersistenceController = WebSessionPersistenceController(
             webView = webView,
-            preferences = webSessionStoragePreferences,
-            storageKey = WEB_SESSION_STORAGE_SNAPSHOT_KEY,
-            bridgeName = WEB_SESSION_BRIDGE_NAME,
             systemNotificationBridgeName = SYSTEM_NOTIFICATION_BRIDGE_NAME,
+            androidHostBridgeName = ANDROID_HOST_BRIDGE_NAME,
             allowedOrigin = { runtimeConfigRepository.localServiceUrl() }
         ).also { controller ->
-            controller.install()
+            val documentStartInstalled = controller.install()
+            if (!documentStartInstalled) {
+                // 部分华为 WebView 不支持 DOCUMENT_START_SCRIPT；启动样式/通知 shim 属于增强能力，不能因此阻断主界面启动。
+                recordHostDiagnostic(
+                    category = "webview",
+                    body = "event=document_start_script_skipped reason=unsupported_feature ${currentWebViewDiagnosticState()}"
+                )
+            }
         }
+    }
+
+    private fun clearPersistedWebSiteState() {
+        webSessionPersistenceController?.refreshScript()
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
+        WebStorage.getInstance().deleteAllData()
+        webView.clearHistory()
+        webView.clearFormData()
+        webView.clearSslPreferences()
+        webView.clearMatches()
+        webView.clearCache(true)
+    }
+
+    private fun clearCurrentPageSessionState() {
+        // 强制全新载入前先清空当前文档站点存储，避免旧页面上的临时会话继续影响下一次本地 URL 打开。
+        webView.evaluateJavascript(
+            """
+                (function() {
+                    try { sessionStorage.clear(); } catch (_) {}
+                    try { localStorage.clear(); } catch (_) {}
+                    return 'cleared';
+                })();
+            """.trimIndent(),
+            null
+        )
     }
 
     private fun ensureVisibleWebViewUrlHealth(trigger: String, observedUrl: String? = null) {
@@ -1067,20 +1152,25 @@ class TavernWebViewHost(
     }
 
     private fun resolveWebViewProviderSummary(): String {
-        return runCatching { WebViewCompat.getCurrentWebViewPackage(activity) }
+        return runCatching { currentWebViewPackageInfo() }
             .map { packageInfo ->
                 if (packageInfo == null) {
-                    "providerPackage=- providerVersionName=- providerVersionCode=-"
+                    currentRuntimeCompatibility().toDiagnosticText()
                 } else {
-                    "providerPackage=${normalizeDiagnosticValue(packageInfo.packageName)} " +
-                        "providerVersionName=${normalizeDiagnosticValue(packageInfo.versionName)} " +
-                        "providerVersionCode=${PackageInfoCompat.getLongVersionCode(packageInfo)}"
+                    WebViewRuntimeCompatibility.from(
+                        webView = webView,
+                        providerPackageInfo = packageInfo
+                    ).toDiagnosticText()
                 }
             }
             .getOrElse { error ->
                 "providerPackage=- providerVersionName=- providerVersionCode=- providerError=${normalizeDiagnosticValue(error.message ?: error.javaClass.simpleName)}"
             }
     }
+
+    private fun currentWebViewPackageInfo() = runCatching {
+        WebViewCompat.getCurrentWebViewPackage(activity)
+    }.getOrNull()
 
     private fun resolveViewLayerTypeName(layerType: Int): String {
         return when (layerType) {

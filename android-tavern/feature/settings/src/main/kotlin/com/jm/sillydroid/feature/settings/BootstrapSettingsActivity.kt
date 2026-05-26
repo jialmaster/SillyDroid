@@ -42,6 +42,7 @@ import com.jm.sillydroid.feature.settings.ui.logs.BootstrapSettingsLogsCoordinat
 import com.jm.sillydroid.feature.settings.ui.screen.BootstrapSettingsScreenController
 import com.jm.sillydroid.feature.settings.ui.screen.SettingsActivityStateController
 import com.jm.sillydroid.feature.settings.ui.settings.BootstrapSettingsSettingsCoordinator
+import com.jm.sillydroid.feature.settings.ui.settings.BootstrapSettingsQuickActionsController
 import com.jm.sillydroid.feature.settings.ui.terminal.HostConsoleSessionStoreRegistry
 import com.jm.sillydroid.feature.settings.ui.terminal.TerminalExtraKeysStripView
 import com.jm.sillydroid.feature.settings.ui.terminal.TerminalPageController
@@ -59,6 +60,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     companion object {
         private const val resultShouldStartKey = SettingsNavigationContract.resultShouldStartKey
         private const val resultShouldReloadTavernUiKey = SettingsNavigationContract.resultShouldReloadTavernUiKey
+        private const val resultShouldForceFreshWebViewLoadKey = SettingsNavigationContract.resultShouldForceFreshWebViewLoadKey
         private const val openExtensionsTabKey = SettingsNavigationContract.openExtensionsTabKey
         private const val openDefaultExtensionsInstallerKey = SettingsNavigationContract.openDefaultExtensionsInstallerKey
 
@@ -79,6 +81,10 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         fun shouldReloadTavernUi(data: Intent?): Boolean {
             return data?.getBooleanExtra(resultShouldReloadTavernUiKey, false) == true
         }
+
+        fun shouldForceFreshWebViewLoad(data: Intent?): Boolean {
+            return data?.getBooleanExtra(resultShouldForceFreshWebViewLoadKey, false) == true
+        }
     }
 
     private lateinit var toolbar: MaterialToolbar
@@ -91,6 +97,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var loadingIndicator: LinearProgressIndicator
     private lateinit var searchLayout: TextInputLayout
     private lateinit var searchInput: TextInputEditText
+    private lateinit var quickActionsButton: MaterialButton
     private lateinit var dataPanelView: View
     private lateinit var quickFieldContainer: LinearLayout
     private lateinit var floatingLogsSwitch: MaterialSwitch
@@ -142,6 +149,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var importButton: MaterialButton
     private lateinit var exportButton: MaterialButton
     private lateinit var clearDataButton: MaterialButton
+    private lateinit var clearBrowserDataButton: MaterialButton
     private lateinit var saveStartButton: MaterialButton
 
     private val appGraph: SillyDroidAppGraph
@@ -163,6 +171,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var aboutController: BootstrapSettingsAboutController
     private lateinit var formController: BootstrapSettingsFormController
     private lateinit var settingsCoordinator: BootstrapSettingsSettingsCoordinator
+    private lateinit var quickActionsController: BootstrapSettingsQuickActionsController
     private lateinit var dataCoordinator: BootstrapSettingsDataCoordinator
     private lateinit var extensionsCoordinator: BootstrapSettingsExtensionsCoordinator
     private lateinit var logsCoordinator: BootstrapSettingsLogsCoordinator
@@ -235,9 +244,21 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         clearDataButton.setOnClickListener {
             screenController.confirmClearData {
                 dataCoordinator.clearDataAndRestart {
-                    setResult(Activity.RESULT_OK, Intent().putExtra(resultShouldStartKey, true))
+                    updateResultFlags(
+                        shouldStartBootstrap = true,
+                        shouldForceFreshWebViewLoad = true
+                    )
                     finish()
                 }
+            }
+        }
+        clearBrowserDataButton.setOnClickListener {
+            screenController.confirmClearBrowserData {
+                // 设置页没有直接持有主界面 WebView；这里发一次性 fresh-load 结果，
+                // 回到主界面后由 TavernWebViewHost 统一清 IndexedDB/Cookie/Cache 等站点状态。
+                updateResultFlags(shouldForceFreshWebViewLoad = true)
+                screenController.showMessage(getString(R.string.bootstrap_settings_clear_browser_data_success))
+                finish()
             }
         }
         saveStartButton.setOnClickListener {
@@ -251,6 +272,9 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             } else {
                 null
             }
+        }
+        quickActionsButton.setOnClickListener {
+            quickActionsController.showQuickActionsMenu()
         }
 
         // 设置页仍然等真实配置异步回填，但“启动端口”先放默认值占位，避免首屏出现空白洞。
@@ -290,6 +314,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         loadingIndicator = findViewById(R.id.bootstrapSettingsLoading)
         searchLayout = findViewById(R.id.bootstrapSettingsSearchLayout)
         searchInput = findViewById(R.id.bootstrapSettingsSearchInput)
+        quickActionsButton = findViewById(R.id.bootstrapSettingsQuickActionsButton)
         dataPanelView = findViewById(R.id.bootstrapSettingsDataPanel)
         quickFieldContainer = findViewById(R.id.bootstrapSettingsQuickFieldContainer)
         floatingLogsSwitch = findViewById(R.id.bootstrapSettingsFloatingLogsSwitch)
@@ -341,6 +366,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         importButton = findViewById(R.id.bootstrapSettingsImportButton)
         exportButton = findViewById(R.id.bootstrapSettingsExportButton)
         clearDataButton = findViewById(R.id.bootstrapSettingsClearDataButton)
+        clearBrowserDataButton = findViewById(R.id.bootstrapSettingsClearBrowserDataButton)
         saveStartButton = findViewById(R.id.bootstrapSettingsSaveButton)
     }
 
@@ -364,6 +390,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             warningView = warningView,
             loadingIndicator = loadingIndicator,
             searchLayout = searchLayout,
+            quickActionsButton = quickActionsButton,
             floatingLogsSwitch = floatingLogsSwitch,
             pullRefreshSwitch = pullRefreshSwitch,
             hostDisplayModeRow = displayModeRow,
@@ -372,7 +399,26 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             importButton = importButton,
             exportButton = exportButton,
             clearDataButton = clearDataButton,
+            clearBrowserDataButton = clearBrowserDataButton,
             saveStartButton = saveStartButton,
+            busyLockedControls = listOf(
+                extensionsInstallButton,
+                extensionsBatchDeleteButton,
+                extensionsReloadButton,
+                logsSelectButton,
+                logsExportButton,
+                logsReloadButton,
+                logsClearButton,
+                logsScrollToBottomButton,
+                terminalRetryButton,
+                terminalCtrlCButton,
+                terminalClearButton,
+                terminalResetButton,
+                terminalSelectButton,
+                terminalSettingsButton,
+                aboutUpdateButton,
+                aboutGithubButton
+            ),
             onTabChanged = { tab ->
                 settingsActivityViewModel.selectTab(tab)
                 if (this::extensionsCoordinator.isInitialized && tab == SettingsTab.EXTENSIONS) {
@@ -409,6 +455,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             runtimeMetadataRepository = appGraph.runtimeMetadataRepository,
             buildConfig = appGraph.appUpdateBuildConfig,
             dispatchers = appGraph.dispatchers,
+            hostDownloadNotificationCoordinator = appGraph.hostDownloadNotificationCoordinator,
             aboutUi = AppUpdateCoordinator.AboutUi(
                 versionView = aboutVersionView,
                 statusView = aboutUpdateStatusView,
@@ -437,6 +484,11 @@ class BootstrapSettingsActivity : AppCompatActivity() {
                 updateResultFlags(shouldStartBootstrap = true)
                 finish()
             }
+        )
+        quickActionsController = BootstrapSettingsQuickActionsController(
+            activity = this,
+            settingsCoordinator = settingsCoordinator,
+            showMessage = screenController::showMessage
         )
         dataCoordinator = BootstrapSettingsDataCoordinator(
             activity = this,
@@ -520,17 +572,19 @@ class BootstrapSettingsActivity : AppCompatActivity() {
 
     private fun updateResultFlags(
         shouldStartBootstrap: Boolean = false,
-        shouldReloadTavernUi: Boolean = false
+        shouldReloadTavernUi: Boolean = false,
+        shouldForceFreshWebViewLoad: Boolean = false
     ) {
         settingsActivityViewModel.markResultFlags(
             shouldStartBootstrap = shouldStartBootstrap,
-            shouldReloadTavernUi = shouldReloadTavernUi
+            shouldReloadTavernUi = shouldReloadTavernUi,
+            shouldForceFreshWebViewLoad = shouldForceFreshWebViewLoad
         )
         renderResultFlags(settingsActivityViewModel.uiState.value)
     }
 
     private fun renderResultFlags(state: SettingsActivityUiState) {
-        if (!state.shouldStartBootstrap && !state.shouldReloadTavernUi) {
+        if (!state.shouldStartBootstrap && !state.shouldReloadTavernUi && !state.shouldForceFreshWebViewLoad) {
             return
         }
 
@@ -539,6 +593,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             Intent()
                 .putExtra(resultShouldStartKey, state.shouldStartBootstrap)
                 .putExtra(resultShouldReloadTavernUiKey, state.shouldReloadTavernUi)
+                .putExtra(resultShouldForceFreshWebViewLoadKey, state.shouldForceFreshWebViewLoad)
         )
     }
 

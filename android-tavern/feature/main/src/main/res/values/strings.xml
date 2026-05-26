@@ -58,4 +58,8 @@
     <string name="bootstrap_settings_logs_clear_failed">清空日志失败。</string>
     <string name="bootstrap_settings_open_stop_timeout">停止本地 Tavern 服务超时，暂时无法打开设置。</string>
     <string name="browser_open_external_failed">无法在系统浏览器中打开该链接。</string>
+    <string name="webview_outdated_dialog_title">建议更新 WebView</string>
+    <string name="webview_outdated_dialog_message">检测到当前系统 WebView 的真实 Chromium 内核版本较低：%1$s。\n\n旧内核可能导致酒馆布局错位、主题颜色失效、毛玻璃异常或部分按钮显示不正确。\n\n建议在系统应用市场更新“系统 WebView / Android System WebView / 华为 WebView”，或更新系统浏览器后再使用。这个提示不会阻止启动，你也可以先继续使用。</string>
+    <string name="webview_outdated_dialog_continue">继续启动</string>
+    <string name="webview_unknown_version">未知</string>
 </resources>

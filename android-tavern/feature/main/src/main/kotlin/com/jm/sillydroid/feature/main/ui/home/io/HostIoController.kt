@@ -14,9 +14,10 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.jm.sillydroid.domain.notification.HostNotificationService
+import com.jm.sillydroid.domain.notification.HostDownloadNotificationCoordinator
 import com.jm.sillydroid.domain.bootstrap.RuntimeConfigRepository
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
-import com.jm.sillydroid.feature.main.MainActivity
 import com.jm.sillydroid.feature.main.R
 import com.jm.sillydroid.feature.main.model.download.BrowserDownloadRequest
 import com.jm.sillydroid.feature.main.model.download.BrowserDownloadResult
@@ -38,6 +39,8 @@ class HostIoController(
     private val activity: AppCompatActivity,
     private val runtimeConfigRepository: RuntimeConfigRepository,
     private val hostPreferencesRepository: HostPreferencesRepository,
+    private val hostNotificationService: HostNotificationService,
+    private val hostDownloadNotificationCoordinator: HostDownloadNotificationCoordinator,
     private val blobDownloadBridgeName: String,
     private val downloadDiagnosticSink: (String) -> Unit = {},
 ) {
@@ -68,15 +71,8 @@ class HostIoController(
 
     val systemNotificationController: SystemNotificationController by lazy {
         SystemNotificationController(
-            context = activity,
-            channelId = runtimeConfigRepository.systemNotificationChannelId,
-            channelTitle = activity.getString(R.string.system_notification_channel_title),
-            channelDescription = activity.getString(R.string.system_notification_channel_description),
-            smallIconResId = android.R.drawable.stat_notify_chat,
-            launchIntent = Intent(activity, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            },
-            pendingIntentRequestCode = runtimeConfigRepository.notificationId
+            hostNotificationService = hostNotificationService,
+            smallIconResId = android.R.drawable.stat_notify_chat
         )
     }
 
@@ -98,7 +94,7 @@ class HostIoController(
     }
 
     fun ensureNotificationChannel() {
-        systemNotificationController.ensureChannel()
+        hostNotificationService.ensureChannels()
     }
 
     fun requestNotificationPermissionIfNeeded() {
@@ -138,6 +134,12 @@ class HostIoController(
         }
         when (val result = browserDownloadController.enqueue(request)) {
             is BrowserDownloadResult.Started -> {
+                hostDownloadNotificationCoordinator.recordBrowserDownloadStarted(
+                    downloadId = result.downloadId,
+                    fileName = result.fileName,
+                    mimeType = result.mimeType,
+                    localUri = result.localUri
+                )
                 recordDownloadDiagnostic("event=handle_page_download_started fileName=${result.fileName}")
                 Toast.makeText(
                     activity,

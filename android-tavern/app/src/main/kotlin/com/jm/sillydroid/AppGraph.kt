@@ -31,6 +31,8 @@ import com.jm.sillydroid.domain.bootstrap.ConsoleRuntimeRepository
 import com.jm.sillydroid.domain.bootstrap.RuntimeMetadataRepository
 import com.jm.sillydroid.domain.bootstrap.RuntimeConfigRepository
 import com.jm.sillydroid.domain.logs.HostLogRepository
+import com.jm.sillydroid.domain.notification.HostNotificationService
+import com.jm.sillydroid.domain.notification.HostDownloadNotificationCoordinator
 import com.jm.sillydroid.domain.extensions.ExtensionsRepository
 import com.jm.sillydroid.domain.runtime.RuntimeLogManager
 import com.jm.sillydroid.domain.settings.DataArchiveRepository
@@ -57,6 +59,18 @@ class AppGraph(private val application: Application) : SillyDroidAppGraph {
 
     override val hostLogRepository: HostLogRepository by lazy {
         HostLogRepositoryImpl(application)
+    }
+
+    override val hostNotificationService: HostNotificationService by lazy {
+        HostNotificationServiceImpl(application)
+    }
+
+    override val hostDownloadNotificationCoordinator: HostDownloadNotificationCoordinator by lazy {
+        HostDownloadNotificationCoordinatorImpl(
+            context = application,
+            hostNotificationService = hostNotificationService,
+            downloadManager = application.getSystemService(DownloadManager::class.java)
+        )
     }
 
     override val runtimeLogManager: RuntimeLogManager by lazy {

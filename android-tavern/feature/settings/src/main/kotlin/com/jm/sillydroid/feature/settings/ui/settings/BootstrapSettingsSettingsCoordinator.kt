@@ -6,6 +6,7 @@ import com.jm.sillydroid.core.model.settings.LoadedTavernConfig
 import com.jm.sillydroid.domain.settings.SettingsConfigRepository
 import com.jm.sillydroid.feature.settings.R
 import com.jm.sillydroid.feature.settings.model.BootstrapSettingsValidationIssue
+import com.jm.sillydroid.feature.settings.model.SettingsNavigationPolicy
 import com.jm.sillydroid.feature.settings.ui.form.BootstrapSettingsFormController
 import com.jm.sillydroid.feature.settings.ui.screen.BootstrapSettingsScreenController
 import com.jm.sillydroid.feature.settings.validation.BootstrapSettingsFormValidator
@@ -66,30 +67,58 @@ class BootstrapSettingsSettingsCoordinator(
 
     fun saveAndStart() {
         clearBlockingFeedback()
-        val updatedRoot = configRepository.copyRoot(currentRoot)
-        val typedValues = try {
-            formController.collectTypedValues(BootstrapSettingsFormValidator::coerceFieldValue)
-        } catch (exception: IllegalArgumentException) {
-            screenController.showMessage(exception.message ?: activity.getString(R.string.bootstrap_settings_validation_failed))
+        val typedValues = collectTypedValuesOrShowError() ?: return
+        val updatedRoot = buildUpdatedRoot(typedValues)
+
+        val validationIssue = validateUpdatedRoot(updatedRoot, typedValues)
+        if (validationIssue != null) {
+            showValidationIssue(validationIssue)
             return
         }
+
+        saveUpdatedRootAndRestart(updatedRoot)
+    }
+
+    fun currentTypedValues(): LinkedHashMap<String, Any?>? {
+        return collectTypedValuesOrShowError()
+    }
+
+    fun applyProgrammaticValues(valuesByPath: Map<String, Any?>) {
+        formController.applyProgrammaticValues(valuesByPath)
+    }
+
+    private fun collectTypedValuesOrShowError(): LinkedHashMap<String, Any?>? {
+        return try {
+            formController.currentTypedValues(BootstrapSettingsFormValidator::coerceFieldValue)
+        } catch (exception: IllegalArgumentException) {
+            screenController.showMessage(exception.message ?: activity.getString(R.string.bootstrap_settings_validation_failed))
+            null
+        }
+    }
+
+    private fun buildUpdatedRoot(typedValues: LinkedHashMap<String, Any?>): LinkedHashMap<String, Any?> {
+        val updatedRoot = configRepository.copyRoot(currentRoot)
 
         for ((fieldPath, typedValue) in typedValues) {
             configRepository.writeValue(updatedRoot, fieldPath, typedValue)
         }
+        return updatedRoot
+    }
 
-        val validationIssue = BootstrapSettingsFormValidator.validate(
+    private fun validateUpdatedRoot(
+        updatedRoot: LinkedHashMap<String, Any?>,
+        typedValues: Map<String, Any?>
+    ): BootstrapSettingsValidationIssue? {
+        return BootstrapSettingsFormValidator.validate(
             values = typedValues,
             defaultServicePort = defaultServicePort
         )
             ?: configRepository.validateConfig(updatedRoot)?.let { message ->
                 BootstrapSettingsValidationIssue(message = message)
             }
-        if (validationIssue != null) {
-            showValidationIssue(validationIssue)
-            return
-        }
+    }
 
+    private fun saveUpdatedRootAndRestart(updatedRoot: LinkedHashMap<String, Any?>) {
         activity.lifecycleScope.launch {
             screenController.setBusy(true)
             val saveResult = withContext(dispatchers.io) {
@@ -119,6 +148,11 @@ class BootstrapSettingsSettingsCoordinator(
     }
 
     fun attemptFinish() {
+        if (!SettingsNavigationPolicy.canFinish(screenController.isBusy())) {
+            screenController.showMessage(activity.getString(R.string.bootstrap_settings_busy_return_blocked))
+            return
+        }
+
         if (!hasUnsavedChanges()) {
             activity.finish()
             return

@@ -1,6 +1,7 @@
 package com.jm.sillydroid.feature.main.ui.home.download
 
 import android.webkit.JavascriptInterface
+import com.jm.sillydroid.feature.main.model.download.BlobDownloadSavedFile
 import com.jm.sillydroid.feature.main.model.download.DownloadFailureReport
 import kotlinx.coroutines.CoroutineScope
 import com.jm.sillydroid.core.common.DispatcherProvider
@@ -16,7 +17,7 @@ class AndroidBlobDownloadBridge(
     private val emptyPayloadMessage: () -> String,
     private val onPreparing: (String) -> Unit,
     private val onSaving: (String) -> Unit,
-    private val onSaved: (String) -> Unit,
+    private val onSaved: (BlobDownloadSavedFile) -> Unit,
     private val onFailure: (DownloadFailureReport) -> Unit,
     private val diagnosticSink: (String) -> Unit = {}
 ) {
@@ -67,9 +68,9 @@ class AndroidBlobDownloadBridge(
                 }
             }
 
-            result.onSuccess { fileName ->
-                recordDiagnostic("event=blob_bridge_saved fileName=$fileName")
-                onSaved(fileName)
+            result.onSuccess { savedFile ->
+                recordDiagnostic("event=blob_bridge_saved fileName=${savedFile.fileName} uri=${savedFile.contentUri}")
+                onSaved(savedFile)
             }.onFailure { error ->
                 recordDiagnostic(
                     "event=blob_bridge_save_failed fileName=${request.fileName} error=${error.message ?: error.javaClass.simpleName}"

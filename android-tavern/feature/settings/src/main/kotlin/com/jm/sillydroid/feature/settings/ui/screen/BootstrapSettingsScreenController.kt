@@ -47,6 +47,7 @@ class BootstrapSettingsScreenController(
     private val warningView: TextView,
     private val loadingIndicator: LinearProgressIndicator,
     private val searchLayout: TextInputLayout,
+    private val quickActionsButton: MaterialButton,
     private val floatingLogsSwitch: MaterialSwitch,
     private val pullRefreshSwitch: MaterialSwitch,
     private val hostDisplayModeRow: View,
@@ -55,7 +56,9 @@ class BootstrapSettingsScreenController(
     private val importButton: MaterialButton,
     private val exportButton: MaterialButton,
     private val clearDataButton: MaterialButton,
+    private val clearBrowserDataButton: MaterialButton,
     private val saveStartButton: MaterialButton,
+    private val busyLockedControls: List<View> = emptyList(),
     private val onTabChanged: (SettingsTab) -> Unit = {}
 ) {
     private var selectedTab = SettingsTab.DATA
@@ -83,7 +86,12 @@ class BootstrapSettingsScreenController(
     fun setBusy(busy: Boolean) {
         this.busy = busy
         loadingIndicator.isVisible = busy
+        // 宿主数据、扩展安装、日志导出、保存启动等任务不能并行触发；
+        // busy 期间统一锁住所有会切页、写数据或发起异步任务的入口，避免状态交错。
+        setTabNavigationEnabled(!busy)
+        toolbarAboutEntryView.isEnabled = !busy
         searchLayout.isEnabled = !busy
+        quickActionsButton.isEnabled = !busy
         floatingLogsSwitch.isEnabled = !busy
         pullRefreshSwitch.isEnabled = !busy
         hostDisplayModeRow.isEnabled = !busy
@@ -92,7 +100,15 @@ class BootstrapSettingsScreenController(
         importButton.isEnabled = !busy
         exportButton.isEnabled = !busy
         clearDataButton.isEnabled = !busy
+        clearBrowserDataButton.isEnabled = !busy
+        busyLockedControls.forEach { view ->
+            view.isEnabled = !busy
+        }
         syncSaveStartButtonState()
+    }
+
+    fun isBusy(): Boolean {
+        return busy
     }
 
     fun updateDirtyState(hasUnsavedChanges: Boolean) {
@@ -106,7 +122,9 @@ class BootstrapSettingsScreenController(
     }
 
     fun focusValidationTab(isQuickField: Boolean) {
-        val targetTab = if (isQuickField) SettingsTab.DATA else SettingsTab.SETTINGS
+        // 启动端口等 quick field 已经迁回“酒馆设置”页签；
+        // 校验失败时仍要把焦点切到真实承载该字段的页签，避免继续误跳到数据页。
+        val targetTab = SettingsTab.SETTINGS
         targetTab.tabPosition?.let { position ->
             tabLayout.getTabAt(position)?.select()
         }
@@ -221,6 +239,17 @@ class BootstrapSettingsScreenController(
             .show()
     }
 
+    fun confirmClearBrowserData(onConfirm: () -> Unit) {
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.bootstrap_settings_clear_browser_data_confirm_title)
+            .setMessage(R.string.bootstrap_settings_clear_browser_data_confirm_message)
+            .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
+            .setPositiveButton(R.string.bootstrap_settings_clear_browser_data_confirm_action) { _, _ ->
+                onConfirm()
+            }
+            .show()
+    }
+
     private fun setupTabs() {
         if (tabLayout.tabCount == 0) {
             tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_data))
@@ -252,12 +281,20 @@ class BootstrapSettingsScreenController(
         // 关于入口从 tab strip 移到标题右侧后，仍然复用原 about 面板，
         // 这样版本信息、更新状态和 GitHub 跳转逻辑都继续收敛在同一块 UI 上。
         toolbarAboutEntryView.setOnClickListener {
+            if (busy) {
+                return@setOnClickListener
+            }
             switchTab(SettingsTab.ABOUT)
         }
         renderAboutEntryState()
     }
 
     private fun switchTab(tab: SettingsTab) {
+        if (busy && tab != selectedTab) {
+            syncPrimaryNavigationSelection()
+            return
+        }
+
         selectedTab = tab
         val isLogsTab = tab == SettingsTab.LOGS
         val isTerminalTab = tab == SettingsTab.TERMINAL
@@ -269,7 +306,8 @@ class BootstrapSettingsScreenController(
         settingsPanelView.isVisible = tab == SettingsTab.SETTINGS
         aboutPanelView.isVisible = tab == SettingsTab.ABOUT
         searchLayout.isVisible = tab == SettingsTab.SETTINGS
-        // 保存按钮必须常驻在设置页底部，不再跟随设置内容滚动。
+        quickActionsButton.isVisible = tab == SettingsTab.SETTINGS
+        // 保存按钮必须常驻在“酒馆设置”页签底部，不再跟随设置内容滚动。
         bottomActionBarView.isVisible = tab == SettingsTab.SETTINGS
         applyBottomInsets()
         syncPrimaryNavigationSelection()
@@ -424,6 +462,15 @@ class BootstrapSettingsScreenController(
             }
 
             tabLayout.requestLayout()
+            setTabNavigationEnabled(!busy)
+        }
+    }
+
+    private fun setTabNavigationEnabled(enabled: Boolean) {
+        tabLayout.isEnabled = enabled
+        val tabStrip = tabLayout.getChildAt(0) as? ViewGroup ?: return
+        for (index in 0 until tabStrip.childCount) {
+            tabStrip.getChildAt(index).isEnabled = enabled
         }
     }
 

@@ -968,6 +968,10 @@ sillydroid_progress_stage 2 3 "开始把 runtime image 和 server payload 写入
 apply_runtime_image "$runtime_image_path" "$android_root"
 apply_server_package "$server_package_path" "$android_root"
 
+# Gradle may reuse an existing APK file in the staged build cache. When large stored
+# assets shrink or move, stale bytes can remain in the archive and bloat the final APK.
+rm -f "$apk_path" "$apk_output_dir/output-metadata.json"
+
 sillydroid_progress_stage 3 3 "开始执行 Gradle 任务：$gradle_task"
 (
     cd "$android_root"

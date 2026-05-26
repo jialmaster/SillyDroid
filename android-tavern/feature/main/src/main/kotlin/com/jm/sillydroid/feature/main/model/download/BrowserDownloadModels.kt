@@ -11,7 +11,12 @@ data class BrowserDownloadRequest(
 )
 
 sealed interface BrowserDownloadResult {
-    data class Started(val fileName: String) : BrowserDownloadResult
+    data class Started(
+        val downloadId: Long,
+        val fileName: String,
+        val mimeType: String,
+        val localUri: String
+    ) : BrowserDownloadResult
     data class Delegated(val fileName: String) : BrowserDownloadResult
     data class Failed(val fileName: String, val message: String) : BrowserDownloadResult
 }
@@ -20,6 +25,13 @@ data class BlobDownloadRequest(
     val fileName: String,
     val mimeType: String,
     val base64Data: String
+)
+
+data class BlobDownloadSavedFile(
+    val fileName: String,
+    val mimeType: String,
+    val contentUri: String,
+    val displayPath: String
 )
 
 data class DownloadFailureReport(

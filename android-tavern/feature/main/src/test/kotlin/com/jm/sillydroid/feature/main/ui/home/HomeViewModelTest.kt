@@ -77,6 +77,7 @@ class HomeViewModelTest {
         assertFalse(viewModel.isOpeningBootstrapSettings)
         assertFalse(viewModel.isPullGestureRefreshing)
         assertFalse(viewModel.isImeVisible)
+        assertFalse(viewModel.shouldForceFreshWebViewLoad)
     }
 
     @Test
@@ -85,6 +86,7 @@ class HomeViewModelTest {
             loadedUrl = "https://example.test/page"
             hasRestoredWebViewState = true
             pendingLocalRetryAttempts = 4
+            shouldForceFreshWebViewLoad = true
             isOpeningBootstrapSettings = true
             isPullGestureRefreshing = true
             isImeVisible = true
@@ -95,6 +97,7 @@ class HomeViewModelTest {
         assertEquals("", viewModel.loadedUrl)
         assertFalse(viewModel.hasRestoredWebViewState)
         assertEquals(0, viewModel.pendingLocalRetryAttempts)
+        assertTrue(viewModel.shouldForceFreshWebViewLoad)
         // 仅清理 WebView 恢复 / 重试相关字段；其它瞬态字段保持原值。
         assertTrue(viewModel.isOpeningBootstrapSettings)
         assertTrue(viewModel.isPullGestureRefreshing)

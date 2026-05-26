@@ -90,8 +90,78 @@ data class BootstrapFailureSnapshot(
      * 历史/未分类错误为 `null`，UI 应回退到 [title] / [details] 文案。
      */
     val errorKind: String? = null,
-    val happenedAtMillis: Long = System.currentTimeMillis()
+    val happenedAtMillis: Long = System.currentTimeMillis(),
+    val diagnosis: BootstrapFailureDiagnosis = BootstrapFailureDiagnosis()
 )
+
+data class BootstrapFailureDiagnosis(
+    /** 当前失败归属的启动阶段，UI 用它把“哪里坏了”放在提示第一行。 */
+    val stageTitle: String = "",
+    /** 最近日志文件名，配合 [logExcerpt] 告诉用户诊断依据来自哪份日志。 */
+    val logFileName: String? = null,
+    /** 失败发生时截取的最近日志尾部，避免用户先手动打开日志才能看到关键异常。 */
+    val logExcerpt: String = "",
+    /** 由已知 SillyTavern / Android 宿主错误模式推断出的原因。 */
+    val suspectedReason: String = "",
+    /** 面向用户的下一步处理建议，按优先级展示。 */
+    val solutions: List<String> = emptyList()
+)
+
+fun BootstrapFailureDiagnosis.hasContent(): Boolean {
+    return stageTitle.isNotBlank() ||
+        logFileName?.isNotBlank() == true ||
+        logExcerpt.isNotBlank() ||
+        suspectedReason.isNotBlank() ||
+        solutions.isNotEmpty()
+}
+
+fun BootstrapFailureDiagnosis.displayText(): String {
+    if (!hasContent()) {
+        return ""
+    }
+
+    return buildString {
+        if (stageTitle.isNotBlank()) {
+            append("失败阶段：")
+            append(stageTitle)
+        }
+
+        if (suspectedReason.isNotBlank()) {
+            appendSectionSeparatorIfNeeded()
+            append("可能原因：")
+            append(suspectedReason)
+        }
+
+        if (solutions.isNotEmpty()) {
+            appendSectionSeparatorIfNeeded()
+            append("解决方案：")
+            solutions.forEachIndexed { index, solution ->
+                append('\n')
+                append(index + 1)
+                append(". ")
+                append(solution)
+            }
+        }
+
+        if (logExcerpt.isNotBlank()) {
+            appendSectionSeparatorIfNeeded()
+            append("最近日志")
+            if (!logFileName.isNullOrBlank()) {
+                append("（")
+                append(logFileName)
+                append("）")
+            }
+            append("：\n")
+            append(logExcerpt)
+        }
+    }
+}
+
+private fun StringBuilder.appendSectionSeparatorIfNeeded() {
+    if (isNotEmpty()) {
+        append("\n")
+    }
+}
 
 data class BootstrapCurrentLogTargets(
     val preferredKind: BootstrapLogKind = BootstrapLogKind.STARTUP,

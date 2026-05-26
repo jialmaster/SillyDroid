@@ -1,0 +1,718 @@
+.sillydroid-host-panel,
+.sillydroid-host-color-panel {
+    /* 宿主扩展设置和顶层色板浮层共用同一套密度 token，避免浮层移出 panel 后丢失布局变量。 */
+    --sillydroid-host-primary: var(--sillydroid-theme-primary, var(--SmartThemeBodyColor));
+    --sillydroid-host-secondary: var(--sillydroid-theme-secondary, var(--SmartThemeBodyColor));
+    --sillydroid-host-switch-primary: var(--sillydroid-theme-primary, var(--SmartThemeQuoteColor));
+    --sillydroid-host-switch-secondary: var(--sillydroid-theme-secondary, var(--SmartThemeQuoteColor));
+    --sillydroid-host-border: color-mix(in srgb, var(--SmartThemeBodyColor) 22%, var(--grey5050a));
+    --sillydroid-host-border-strong: color-mix(in srgb, var(--SmartThemeBodyColor) 34%, var(--grey5050a));
+    --sillydroid-host-panel-bg: var(--SmartThemeBlurTintColor, var(--SmartThemeChatTintColor, rgb(0 0 0 / 0.18)));
+    --sillydroid-host-field: transparent;
+    --sillydroid-host-field-hover: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
+    --sillydroid-host-space-xs: calc(var(--mainFontSize) * 0.18);
+    --sillydroid-host-space-sm: calc(var(--mainFontSize) * 0.24);
+    --sillydroid-host-space-md: calc(var(--mainFontSize) * 0.34);
+    --sillydroid-host-radius-sm: calc(var(--mainFontSize) * 0.28);
+    --sillydroid-host-radius-md: calc(var(--mainFontSize) * 0.42);
+    --sillydroid-host-control-height: calc(var(--mainFontSize) * 1.58);
+    --sillydroid-host-control-min: calc(var(--mainFontSize) * 6.2);
+    --sillydroid-host-color-min: calc(var(--mainFontSize) * 12);
+    --sillydroid-host-picker-size: calc(var(--mainFontSize) * 1.55);
+    --sillydroid-host-swatch-size: calc(var(--mainFontSize) * 1.08);
+    --sillydroid-host-color-panel-width: min(calc(var(--mainFontSize) * 14.5), calc(100vw - var(--mainFontSize) * 2));
+    --sillydroid-host-switch-width: calc(var(--mainFontSize) * 1.9);
+    --sillydroid-host-switch-height: calc(var(--mainFontSize) * 1.05);
+    --sillydroid-host-switch-thumb: calc(var(--mainFontSize) * 0.75);
+    --sillydroid-host-transition: 0.18s ease;
+}
+
+.sillydroid-host-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sillydroid-host-space-md);
+}
+
+.sillydroid-host-section {
+    min-inline-size: 0;
+    margin: 0;
+    padding: var(--sillydroid-host-space-md);
+    border: 1px solid var(--sillydroid-host-border);
+    border-inline-color: var(--sillydroid-host-border);
+    border-radius: var(--sillydroid-host-radius-md);
+    background: transparent;
+}
+
+.sillydroid-host-section-title {
+    padding: 0 var(--sillydroid-host-space-md);
+    font-size: calc(var(--mainFontSize) * 0.8);
+    font-weight: 700;
+    color: var(--SmartThemeBodyColor);
+}
+
+.sillydroid-host-version-line {
+    margin-bottom: calc(var(--mainFontSize) * 0.3);
+    font-size: calc(var(--mainFontSize) * 0.75);
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 72%, transparent);
+}
+
+.sillydroid-host-grid {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: var(--sillydroid-host-space-sm);
+}
+
+.sillydroid-host-control {
+    /* 设置项使用 flow 布局，最小宽度由 token 控制，窄屏左栏不会因为固定三列挤掉文字。 */
+    flex: 1 1 var(--sillydroid-host-control-min);
+    min-width: 0;
+    min-height: var(--sillydroid-host-control-height);
+    margin: 0;
+    padding: var(--sillydroid-host-space-xs) var(--sillydroid-host-space-sm);
+    border: 1px solid var(--sillydroid-host-border);
+    border-radius: var(--sillydroid-host-radius-sm);
+    background: var(--sillydroid-host-field);
+    color: var(--SmartThemeBodyColor);
+    font-size: calc(var(--mainFontSize) * 0.8);
+    accent-color: var(--sillydroid-host-primary);
+}
+
+.sillydroid-host-switch {
+    flex: 0 1 auto;
+}
+
+.sillydroid-host-action-button {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sillydroid-host-space-sm);
+    white-space: nowrap;
+}
+
+.sillydroid-host-action-button:hover {
+    border-color: var(--sillydroid-host-border-strong);
+    background: var(--sillydroid-host-field-hover);
+}
+
+.sillydroid-host-action-button i {
+    color: currentColor;
+}
+
+.sillydroid-host-switch,
+.sillydroid-host-select-control,
+.sillydroid-host-color-control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sillydroid-host-space-sm);
+}
+
+.sillydroid-host-switch input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.sillydroid-host-switch-track {
+    width: var(--sillydroid-host-switch-width);
+    height: var(--sillydroid-host-switch-height);
+    flex: 0 0 auto;
+    border: 1px solid var(--sillydroid-host-border);
+    border-radius: 999px;
+    background: transparent;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sillydroid-host-primary) 18%, transparent);
+    transition: background-color var(--sillydroid-host-transition), border-color var(--sillydroid-host-transition), box-shadow var(--sillydroid-host-transition);
+}
+
+.sillydroid-host-switch-track::after {
+    content: "";
+    display: block;
+    width: var(--sillydroid-host-switch-thumb);
+    height: var(--sillydroid-host-switch-thumb);
+    margin: calc(var(--mainFontSize) * 0.11);
+    border-radius: 50%;
+    background: var(--sillydroid-host-switch-primary);
+    transition: transform var(--sillydroid-host-transition), background-color var(--sillydroid-host-transition);
+}
+
+.sillydroid-host-switch input:checked + .sillydroid-host-switch-track {
+    border-color: var(--sillydroid-host-switch-primary);
+    background: transparent;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--sillydroid-host-switch-primary) 34%, transparent);
+}
+
+.sillydroid-host-switch input:checked + .sillydroid-host-switch-track::after {
+    background: var(--sillydroid-host-switch-primary);
+    transform: translateX(calc(var(--mainFontSize) * 0.82));
+}
+
+.sillydroid-host-select {
+    min-width: calc(var(--mainFontSize) * 4.5);
+    height: calc(var(--mainFontSize) * 1.34);
+    flex: 1 1 calc(var(--mainFontSize) * 4.5);
+    margin: 0;
+    padding: 0 var(--sillydroid-host-space-sm);
+    border-color: var(--sillydroid-host-border);
+    background: var(--sillydroid-host-field);
+    color: var(--SmartThemeBodyColor);
+    font-size: calc(var(--mainFontSize) * 0.85);
+    accent-color: var(--sillydroid-host-primary);
+}
+
+.sillydroid-host-color-controls {
+    position: relative;
+    min-width: 0;
+    flex: 1 1 calc(var(--mainFontSize) * 6.8);
+    display: flex;
+    align-items: stretch;
+}
+
+.sillydroid-host-color-trigger {
+    width: 100%;
+    min-height: calc(var(--mainFontSize) * 1.34);
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sillydroid-host-space-sm);
+    margin: 0;
+    padding: 0 var(--sillydroid-host-space-sm);
+    border: 1px solid var(--sillydroid-host-border);
+    border-radius: var(--sillydroid-host-radius-sm);
+    background: var(--sillydroid-host-field);
+    color: var(--SmartThemeBodyColor);
+    cursor: pointer;
+}
+
+.sillydroid-host-color-trigger:hover,
+.sillydroid-host-color-trigger:focus-visible,
+.sillydroid-host-color-trigger[aria-expanded="true"] {
+    border-color: var(--sillydroid-host-border-strong);
+    background: var(--sillydroid-host-field-hover);
+}
+
+.sillydroid-host-color-preview {
+    width: calc(var(--mainFontSize) * 1.1);
+    height: calc(var(--mainFontSize) * 1.1);
+    flex: 0 0 auto;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 30%, transparent);
+    border-radius: 50%;
+    background: var(--sillydroid-host-color-value);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.26);
+}
+
+.sillydroid-host-color-value-text {
+    min-width: 0;
+    overflow: hidden;
+    font-family: var(--monoFontFamily, monospace);
+    font-size: calc(var(--mainFontSize) * 0.76);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sillydroid-host-color-panel {
+    position: fixed;
+    z-index: 100000;
+    top: var(--sillydroid-host-color-panel-top, 0);
+    left: var(--sillydroid-host-color-panel-left, 0);
+    width: var(--sillydroid-host-color-panel-width);
+    max-width: calc(100vw - var(--mainFontSize) * 2);
+    max-height: calc(100vh - var(--mainFontSize) * 2);
+    max-height: calc(100dvh - var(--mainFontSize) * 2);
+    display: grid;
+    gap: var(--sillydroid-host-space-sm);
+    padding: var(--sillydroid-host-space-md);
+    border: 1px solid var(--sillydroid-host-border-strong);
+    border-radius: var(--sillydroid-host-radius-md);
+    background: var(--sillydroid-host-panel-bg);
+    box-shadow: 0 10px 28px rgb(0 0 0 / 0.2);
+    overflow: auto;
+    isolation: isolate;
+}
+
+.sillydroid-host-color-panel[hidden] {
+    display: none !important;
+}
+
+.sillydroid-host-color-panel-title {
+    font-size: calc(var(--mainFontSize) * 0.72);
+    font-weight: 700;
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 82%, transparent);
+}
+
+.sillydroid-host-color-input-group {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--sillydroid-host-space-sm);
+}
+
+.sillydroid-host-custom-color-preview {
+    width: var(--sillydroid-host-picker-size);
+    height: var(--sillydroid-host-picker-size);
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 28%, transparent);
+    border-radius: 999px;
+    background: var(--sillydroid-host-color-value);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.26);
+    cursor: pointer;
+    transition: border-color var(--sillydroid-host-transition), box-shadow var(--sillydroid-host-transition), transform var(--sillydroid-host-transition);
+}
+
+.sillydroid-host-custom-color-preview:hover,
+.sillydroid-host-custom-color-preview:focus-visible {
+    border-color: var(--sillydroid-host-border-strong);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--sillydroid-host-primary) 24%, transparent), inset 0 0 0 1px rgb(255 255 255 / 0.34);
+    transform: translateY(-1px);
+}
+
+.sillydroid-host-color-code {
+    width: calc(var(--mainFontSize) * 4.8);
+    height: calc(var(--mainFontSize) * 1.34);
+    min-width: 0;
+    margin: 0;
+    padding: 0 var(--sillydroid-host-space-sm);
+    border-color: var(--sillydroid-host-border);
+    background: var(--sillydroid-host-field);
+    color: var(--SmartThemeBodyColor);
+    font-family: var(--monoFontFamily, monospace);
+    font-size: calc(var(--mainFontSize) * 0.75);
+}
+
+.sillydroid-host-color-code[aria-invalid] {
+    border-color: var(--fullred, #ff5555);
+}
+
+.sillydroid-host-color-channel-grid {
+    display: grid;
+    gap: var(--sillydroid-host-space-xs);
+}
+
+.sillydroid-host-color-channel-row {
+    display: grid;
+    grid-template-columns: calc(var(--mainFontSize) * 0.8) minmax(0, 1fr) calc(var(--mainFontSize) * 1.8);
+    align-items: center;
+    gap: var(--sillydroid-host-space-sm);
+    min-width: 0;
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 82%, transparent);
+    font-size: calc(var(--mainFontSize) * 0.72);
+}
+
+.sillydroid-host-color-channel-label {
+    font-weight: 700;
+    text-align: center;
+}
+
+.sillydroid-host-color-channel {
+    width: 100%;
+    min-width: 0;
+    accent-color: var(--sillydroid-host-primary);
+    cursor: pointer;
+}
+
+.sillydroid-host-color-channel-value {
+    font-family: var(--monoFontFamily, monospace);
+    text-align: right;
+}
+
+.sillydroid-host-color-swatches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(var(--sillydroid-host-swatch-size), 1fr));
+    gap: var(--sillydroid-host-space-sm);
+}
+
+.sillydroid-host-color-swatch {
+    width: var(--sillydroid-host-swatch-size);
+    height: var(--sillydroid-host-swatch-size);
+    justify-self: center;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 28%, transparent);
+    border-radius: 999px;
+    background: var(--sillydroid-host-swatch-color);
+    background-color: var(--sillydroid-host-swatch-color);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.22);
+    cursor: pointer;
+    transition: border-color var(--sillydroid-host-transition), box-shadow var(--sillydroid-host-transition), transform var(--sillydroid-host-transition);
+}
+
+.sillydroid-host-color-panel .sillydroid-host-color-swatch,
+.sillydroid-host-color-panel .sillydroid-host-custom-color-preview {
+    /* 色块必须展示真实颜色；毛玻璃主题的通用 button 规则不能覆盖这里的背景。 */
+    background-image: none !important;
+}
+
+.sillydroid-host-color-panel .sillydroid-host-color-swatch {
+    background: var(--sillydroid-host-swatch-color) !important;
+    background-color: var(--sillydroid-host-swatch-color) !important;
+}
+
+.sillydroid-host-color-panel .sillydroid-host-custom-color-preview {
+    background: var(--sillydroid-host-color-value) !important;
+    background-color: var(--sillydroid-host-color-value) !important;
+}
+
+.sillydroid-host-color-swatch:hover,
+.sillydroid-host-color-swatch:focus-visible {
+    border-color: var(--sillydroid-host-border-strong);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--sillydroid-host-primary) 24%, transparent), inset 0 0 0 1px rgb(255 255 255 / 0.28);
+    transform: translateY(-1px);
+}
+
+.sillydroid-host-color-swatch-active {
+    border-color: color-mix(in srgb, var(--sillydroid-host-primary) 82%, var(--SmartThemeBodyColor));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--sillydroid-host-primary) 34%, transparent), inset 0 0 0 1px rgb(255 255 255 / 0.36);
+}
+
+.sillydroid-host-theme-notice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sillydroid-host-space-xs);
+    margin-top: var(--sillydroid-host-space-sm);
+    padding: var(--sillydroid-host-space-sm) var(--sillydroid-host-space-md);
+    border: 1px solid var(--sillydroid-host-border);
+    border-radius: var(--sillydroid-host-radius-sm);
+    background: var(--sillydroid-host-field-hover);
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 76%, transparent);
+    font-size: calc(var(--mainFontSize) * 0.76);
+    line-height: 1.35;
+}
+
+.sillydroid-host-theme-performance-status {
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 86%, transparent);
+}
+
+.sillydroid-host-select-label,
+.sillydroid-host-switch-label {
+    flex: 0 0 auto;
+    max-width: none;
+    overflow: visible;
+    white-space: nowrap;
+    text-overflow: clip;
+}
+
+.sillydroid-host-select-control,
+.sillydroid-host-color-control {
+    flex-basis: var(--sillydroid-host-color-min);
+}
+
+.sillydroid-host-color-control {
+    flex-basis: var(--sillydroid-host-color-min);
+}
+
+html[data-sillydroid-chat-compact="true"] {
+    /* 聊天紧凑模式是宿主级布局开关：所有尺寸从 mainFontSize 派生，避免在移动端散落硬编码间距。 */
+    /* 上游用 --mes-right-spacing 给消息正文/思考区预留右侧 swipe 空间；紧凑模式已把 swipe 移到头部，必须在变量源头取消预留。 */
+    --mes-right-spacing: 0px;
+    --sillydroid-chat-compact-space-xs: calc(var(--mainFontSize) * 0.18);
+    --sillydroid-chat-compact-space-sm: calc(var(--mainFontSize) * 0.25);
+    --sillydroid-chat-compact-space-md: calc(var(--mainFontSize) * 0.34);
+    --sillydroid-chat-compact-card-padding-x: var(--sillydroid-chat-compact-space-md);
+    --sillydroid-chat-compact-block-padding-x: 0;
+    --sillydroid-chat-compact-content-padding-x: var(--sillydroid-chat-compact-space-md);
+    --sillydroid-chat-compact-action-size: calc(var(--mainFontSize) * 1.38);
+    --sillydroid-chat-compact-swipe-counter-inline-size: calc(var(--mainFontSize) * 2.35);
+    --sillydroid-chat-compact-swipe-right-block-inline-size: calc(var(--sillydroid-chat-compact-swipe-counter-inline-size) + var(--sillydroid-chat-compact-space-xs) + var(--sillydroid-chat-compact-action-size));
+    --sillydroid-chat-compact-swipe-actions-width: calc(var(--sillydroid-chat-compact-action-size) + var(--sillydroid-chat-compact-space-xs) + var(--sillydroid-chat-compact-swipe-right-block-inline-size));
+    --sillydroid-chat-compact-header-actions-reserved: calc(var(--sillydroid-chat-compact-swipe-actions-width) + var(--sillydroid-chat-compact-space-sm));
+    --sillydroid-chat-compact-header-action-offset-block: calc(var(--sillydroid-chat-compact-card-padding-x) + var(--sillydroid-chat-compact-space-sm));
+    --sillydroid-chat-compact-radius-sm: calc(var(--mainFontSize) * 0.45);
+    --sillydroid-chat-compact-user-max-inline-size: min(calc(var(--mainFontSize) * 44), calc(100% - (var(--sillydroid-chat-compact-card-padding-x) * 2)));
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes:not(.smallSysMes) {
+    /* 紧凑模式按移动端聊天卡片重新压缩外边距：上 10、右 5、下 0、左 5，避免左右空间被上游消息布局吃掉。 */
+    padding: 10px 5px 0 5px !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes:not(.smallSysMes) .mes_block {
+    min-inline-size: 0 !important;
+    /* 消息块左侧不再额外缩进；紧凑模式把横向空间优先留给正文。 */
+    padding-left: 0 !important;
+}
+
+html[data-sillydroid-chat-compact="true"] body.bubblechat #chat .mes:not(.smallSysMes) :is(
+    .mes_text,
+    .mes_media_wrapper,
+    .mes_file_wrapper
+) {
+    /* 上游 bubblechat 给正文右侧预留 swipe 空间；紧凑模式仅用 CSS 把 swipe 定位到头部后，正文左右 padding 必须重新对齐。 */
+    padding-inline: var(--sillydroid-chat-compact-content-padding-x) !important;
+}
+
+html[data-sillydroid-chat-compact="true"] body.bubblechat #chat .mes:not(.smallSysMes) .mes_text {
+    /* 聊天正文右侧不再给 swipe 预留空间；swipe 已移到 header 右侧占位区，正文右侧 padding 需要释放给内容。 */
+    padding-inline-end: 0 !important;
+}
+
+html[data-sillydroid-chat-compact="true"] body.bubblechat #chat .mes:not(.smallSysMes) .mes_reasoning_details {
+    margin-inline-end: var(--sillydroid-chat-compact-content-padding-x) !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes:not(.smallSysMes) .ch_name {
+    gap: var(--sillydroid-chat-compact-space-sm) !important;
+    box-sizing: border-box !important;
+    min-inline-size: 0 !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes.swipes_visible:not(.smallSysMes) .ch_name {
+    /* 只有上游真正显示 swipe 左右箭头时才给 header 右侧保留占位；普通消息要还原按钮位置，避免空 swipe 容器挤走操作按钮。 */
+    padding-inline-end: var(--sillydroid-chat-compact-header-actions-reserved) !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes:not(.smallSysMes) .ch_name > .flex-container.alignitemscenter {
+    min-inline-size: 0 !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    column-gap: var(--sillydroid-chat-compact-space-sm) !important;
+    row-gap: var(--sillydroid-chat-compact-space-xs) !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes:not(.smallSysMes) {
+    /* 紧凑模式禁止 JS 移动聊天 DOM；这里只把上游原始 swipe 摆到 header 右侧预留区，功能事件仍由原元素负责。 */
+    --sillydroid-chat-compact-swipe-right-size: var(--sillydroid-chat-compact-action-size);
+    position: relative;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes.swipes_visible:not(.smallSysMes) > .swipeRightBlock {
+    inline-size: var(--sillydroid-chat-compact-swipe-right-block-inline-size) !important;
+    block-size: var(--sillydroid-chat-compact-action-size) !important;
+    min-inline-size: 0 !important;
+    flex-flow: row nowrap !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: var(--sillydroid-chat-compact-space-xs) !important;
+    position: absolute !important;
+    inset-block-start: var(--sillydroid-chat-compact-header-action-offset-block) !important;
+    inset-block-end: auto !important;
+    inset-inline-start: auto !important;
+    inset-inline-end: var(--sillydroid-chat-compact-card-padding-x) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    transform: none !important;
+    z-index: 2 !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes.swipes_visible:not(.smallSysMes) > .swipe_left {
+    position: absolute !important;
+    inset-block-start: var(--sillydroid-chat-compact-header-action-offset-block) !important;
+    inset-block-end: auto !important;
+    inset-inline-start: auto !important;
+    inset-inline-end: calc(var(--sillydroid-chat-compact-card-padding-x) + var(--sillydroid-chat-compact-swipe-right-block-inline-size) + var(--sillydroid-chat-compact-space-xs)) !important;
+    z-index: 2 !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes.swipes_visible:not(.smallSysMes) > .swipe_left,
+html[data-sillydroid-chat-compact="true"] #chat .mes.swipes_visible:not(.smallSysMes) > .swipeRightBlock .swipe_right {
+    /* 左右 swipe 必须使用同一套 flex 居中；上游左箭头是 block，紧凑模式缩小后会产生图标贴边残影。 */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    inline-size: var(--sillydroid-chat-compact-action-size) !important;
+    block-size: var(--sillydroid-chat-compact-action-size) !important;
+    min-inline-size: var(--sillydroid-chat-compact-action-size) !important;
+    min-block-size: var(--sillydroid-chat-compact-action-size) !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: var(--sillydroid-chat-compact-radius-sm) !important;
+    font-size: calc(var(--mainFontSize) * 0.92) !important;
+    text-align: center !important;
+    line-height: var(--sillydroid-chat-compact-action-size) !important;
+    transform: none !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes.swipes_visible:not(.smallSysMes) > .swipeRightBlock .swipes-counter {
+    /* 保留上游 swipe 计数，例如 1/1；紧凑模式只调整尺寸，让它作为左右箭头中间的真实占位。 */
+    inline-size: var(--sillydroid-chat-compact-swipe-counter-inline-size) !important;
+    min-inline-size: var(--sillydroid-chat-compact-swipe-counter-inline-size) !important;
+    max-inline-size: var(--sillydroid-chat-compact-swipe-counter-inline-size) !important;
+    block-size: var(--sillydroid-chat-compact-action-size) !important;
+    flex: 0 0 var(--sillydroid-chat-compact-swipe-counter-inline-size) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    order: 1 !important;
+    white-space: nowrap !important;
+    text-align: center !important;
+    font-size: calc(var(--mainFontSize) * 0.76) !important;
+    line-height: var(--sillydroid-chat-compact-action-size) !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes.swipes_visible:not(.smallSysMes) > .swipeRightBlock .swipe_right {
+    order: 2 !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes:not(.swipes_visible):not(.smallSysMes) > :is(
+    .swipe_left,
+    .swipeRightBlock
+) {
+    /* 非 swipe 展开态的左右箭头本来就是上游隐藏态；紧凑模式把它们压成 0 尺寸并清掉主题表面，避免背景/内阴影留下灰条。 */
+    inline-size: 0 !important;
+    block-size: 0 !important;
+    min-inline-size: 0 !important;
+    min-block-size: 0 !important;
+    max-inline-size: 0 !important;
+    max-block-size: 0 !important;
+    flex: 0 0 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    text-shadow: none !important;
+    pointer-events: none !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes:not(.swipes_visible):not(.smallSysMes) > .swipeRightBlock :is(
+    .swipe_right,
+    .swipes-counter
+) {
+    /* 同步收起 swipeRightBlock 内部隐藏态元素，防止 1/1、箭头或空计数容器形成可见残影。 */
+    inline-size: 0 !important;
+    block-size: 0 !important;
+    min-inline-size: 0 !important;
+    min-block-size: 0 !important;
+    max-inline-size: 0 !important;
+    max-block-size: 0 !important;
+    flex: 0 0 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    text-shadow: none !important;
+    pointer-events: none !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes :is(
+    .mes_buttons,
+    .extraMesButtons,
+    .mes_edit_buttons
+) {
+    gap: var(--sillydroid-chat-compact-space-xs) !important;
+    padding: 0 !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes :is(
+    .mes_buttons,
+    .extraMesButtons,
+    .mes_edit_buttons
+) {
+    /* 紧凑模式会把消息按钮行压低；上游 .mes_buttons 仍可能保留 overflow-y:auto，WebView 会在按钮尾部画出灰色滚动槽。 */
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    scrollbar-width: none !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes :is(
+    .mes_buttons,
+    .extraMesButtons,
+    .mes_edit_buttons
+)::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes :is(
+    .mes_button,
+    .mes_buttons > .mes_btn,
+    .extraMesButtons > div,
+    .mes_edit_buttons .menu_button,
+    .mes_reasoning_actions .menu_button
+) {
+    inline-size: var(--sillydroid-chat-compact-action-size) !important;
+    block-size: var(--sillydroid-chat-compact-action-size) !important;
+    min-inline-size: var(--sillydroid-chat-compact-action-size) !important;
+    min-block-size: var(--sillydroid-chat-compact-action-size) !important;
+    /* 只调尺寸和图标行盒居中，不写 display；上游用 display/父容器控制“更多按钮”和编辑按钮是否出现。 */
+    padding: 0 !important;
+    text-align: center !important;
+    line-height: var(--sillydroid-chat-compact-action-size) !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes .mes_buttons > .mes_btn {
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+html[data-sillydroid-chat-compact="true"] #chat .mes:not(.smallSysMes) .timestamp-icon {
+    /* 时间戳后的模型来源图标在 custom API 下会显示为“?”；紧凑模式只隐藏该图标，不改消息操作按钮状态。 */
+    inline-size: 0 !important;
+    block-size: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    min-inline-size: 0 !important;
+    min-block-size: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    pointer-events: none !important;
+    flex: 0 0 0 !important;
+}
+
+html[data-sillydroid-chat-compact="true"] body.bubblechat #chat .mes[is_user="true"]:not(.smallSysMes) {
+    inline-size: fit-content !important;
+    width: fit-content !important;
+    max-inline-size: var(--sillydroid-chat-compact-user-max-inline-size) !important;
+    max-width: var(--sillydroid-chat-compact-user-max-inline-size) !important;
+    justify-content: flex-end !important;
+    margin-inline-start: auto !important;
+    margin-inline-end: var(--sillydroid-chat-compact-card-padding-x) !important;
+}
+
+html[data-sillydroid-chat-compact="true"] body.bubblechat #chat .mes[is_user="true"]:not(.smallSysMes) .mes_block {
+    inline-size: auto !important;
+    max-inline-size: 100% !important;
+}
+
+.sillydroid-host-control[hidden] {
+    display: none !important;
+}
+
+.sillydroid-host-theme-notice[hidden] {
+    display: none !important;
+}
+
+html[data-sillydroid-theme] #rightSendForm #send_but {
+    /* 发送按钮是输入栏主图标：即使旧主题 CSS 把 .interactable 当通用玻璃按钮处理，也必须保持透明底。 */
+    border: 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    color: var(--sillydroid-glass-icon-strong, var(--SmartThemeBodyColor)) !important;
+    text-shadow: none !important;
+}
+
+html[data-sillydroid-theme] #rightSendForm #send_but:is(:hover, :focus-visible, .active) {
+    border: 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    color: color-mix(in srgb, var(--sillydroid-theme-primary, var(--SmartThemeQuoteColor)) 82%, var(--SmartThemeBodyColor)) !important;
+}

@@ -20,6 +20,8 @@ import kotlinx.coroutines.launch
  * - bootstrapSnapshot: 由 ViewModel 在 viewModelScope 内持续订阅 processManager.snapshot；
  *   Activity 通过 repeatOnLifecycle 重新接收。
  * - loadedUrl / pendingLocalRetryAttempts 走 SavedStateHandle，可跨进程死亡恢复。
+ * - shouldForceFreshWebViewLoad 用来承接“清空宿主数据并重新初始化”这类必须丢弃旧 WebView
+ *   站点状态的单次请求；只在下一次 bootstrap ready 后消费一次，避免影响普通重启/刷新路径。
  * - 其余字段是进程生命期内的轻量瞬态状态，不走 SavedStateHandle。
  */
 class HomeViewModel(
@@ -39,6 +41,7 @@ class HomeViewModel(
         set(value) { savedStateHandle[KEY_PENDING_LOCAL_RETRY] = value }
 
     var hasRestoredWebViewState: Boolean = false
+    var shouldForceFreshWebViewLoad: Boolean = false
     var isOpeningBootstrapSettings: Boolean = false
     var isPullGestureRefreshing: Boolean = false
     var isImeVisible: Boolean = false

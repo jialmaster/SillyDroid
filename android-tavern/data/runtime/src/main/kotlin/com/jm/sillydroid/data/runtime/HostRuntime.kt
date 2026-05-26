@@ -174,6 +174,100 @@ data class HostPaths(
     }
 }
 
+fun describeHostRuntimeSelection(context: Context, paths: HostPaths): String {
+    val packageHostLibDirs = resolvePackageHostRuntimeDirectories(
+        sourceDirs = listOfNotNull(
+            context.applicationInfo.sourceDir,
+            context.applicationInfo.publicSourceDir,
+            *context.applicationInfo.splitSourceDirs.orEmpty()
+        ).map(::File),
+        nativeHostLibDir = File(context.applicationInfo.nativeLibraryDir)
+    )
+    val selectedPath = paths.hostLibDir.absolutePath
+    val packageCandidates = packageHostLibDirs.joinToString(separator = ",") { candidate ->
+        describeRuntimeDirectory(candidate, selectedPath)
+    }.ifBlank { "none" }
+
+    // 三星/Android 14 这类 ROM 差异通常只在真实 exec/proot 阶段暴露；
+    // 启动日志必须保留安装目录、ABI、SELinux 与可执行位，方便用户截图时直接定位失败层。
+    return buildString {
+        append("host_runtime ")
+        append("manufacturer=${Build.MANUFACTURER.orEmpty()} ")
+        append("model=${Build.MODEL.orEmpty()} ")
+        append("sdk=${Build.VERSION.SDK_INT} ")
+        append("release=${Build.VERSION.RELEASE.orEmpty()} ")
+        append("supportedAbis=${Build.SUPPORTED_ABIS?.joinToString(separator = ",").orEmpty()} ")
+        append("selinux=${readFirstCommandLine("getenforce").ifBlank { "unknown" }} ")
+        append("nativeLibraryDir=${context.applicationInfo.nativeLibraryDir} ")
+        append("selected=${describeRuntimeDirectory(paths.hostLibDir, selectedPath)} ")
+        append("packageCandidates=[$packageCandidates]")
+    }
+}
+
+private fun describeRuntimeDirectory(directory: File, selectedPath: String): String {
+    val fileStates = (requiredHostRuntimeFileNames + optionalHostRuntimeFileNames)
+        .distinct()
+        .joinToString(separator = ",") { fileName ->
+            describeRuntimeFile(File(directory, fileName))
+        }
+    return buildString {
+        append(directory.absolutePath)
+        if (directory.absolutePath == selectedPath) {
+            append("(selected)")
+        }
+        append("{exists=")
+        append(directory.exists())
+        append(",canRead=")
+        append(directory.canRead())
+        append(",canExecute=")
+        append(directory.canExecute())
+        append(",files=[")
+        append(fileStates)
+        append("]}")
+    }
+}
+
+private fun describeRuntimeFile(file: File): String {
+    val mode = readFileMode(file)
+    return buildString {
+        append(file.name)
+        append(":exists=")
+        append(file.exists())
+        append(",file=")
+        append(file.isFile)
+        append(",canRead=")
+        append(file.canRead())
+        append(",canExecute=")
+        append(file.canExecute())
+        append(",size=")
+        append(file.length())
+        if (mode.isNotBlank()) {
+            append(",mode=")
+            append(mode)
+        }
+    }
+}
+
+private fun readFileMode(file: File): String {
+    return runCatching {
+        val mode = Os.stat(file.absolutePath).st_mode and 0x1FF
+        mode.toString(radix = 8).padStart(3, '0')
+    }.getOrDefault("")
+}
+
+private fun readFirstCommandLine(command: String): String {
+    return runCatching {
+        ProcessBuilder("/system/bin/sh", "-c", command)
+            .redirectErrorStream(true)
+            .start()
+            .let { process ->
+                val output = process.inputStream.bufferedReader().use { reader -> reader.readText().trim() }
+                process.waitFor(1, TimeUnit.SECONDS)
+                output.lineSequence().firstOrNull().orEmpty()
+            }
+    }.getOrDefault("")
+}
+
 fun resolveHostLogsDir(context: Context): File {
     return File(context.applicationContext.filesDir, "android-tavern/logs")
 }
@@ -261,6 +355,23 @@ class AssetExtractor(private val context: Context) {
         synchronized(extractLock) {
             paths.ensureWorkingDirectories()
         }
+    }
+
+    fun prepareHostExtensionAssets(
+        paths: HostPaths,
+        onProgress: (details: String, progressPercent: Int) -> Unit = { _, _ -> }
+    ) = synchronized(extractLock) {
+        paths.ensureWorkingDirectories()
+        val skippedAssetRoots = mutableSetOf(
+            "${BootConfig.bootstrapAssetRoot}/rootfs",
+            "${BootConfig.bootstrapAssetRoot}/server"
+        )
+        onProgress("正在写入 bootstrap 脚本、配置与内置扩展目录。", 50)
+        copyNode(AssetCopySpec(BootConfig.bootstrapAssetRoot, paths.bootstrapRoot), skippedAssetRoots)
+        onProgress("正在把 APK 内置的 host 扩展安装到用户 extensions 目录。", 80)
+        // 即使本地 Tavern 服务已经在运行，APK 升级后的 host 扩展也必须覆盖到数据目录，否则 Web 会继续服务旧 JS/CSS。
+        installBundledHostExtensions(paths, replaceExisting = true)
+        onProgress("host 扩展资产已同步完成。", 100)
     }
 
     fun inspectRootfsAssets(paths: HostPaths): AssetPreparationInspection {
@@ -378,9 +489,9 @@ class AssetExtractor(private val context: Context) {
         onProgress("正在执行通用 dependency post-extract hook。", 72)
         runServerPostExtractHook(paths)
         onProgress("正在写入 bootstrap 脚本、配置与内置扩展目录。", 80)
-        copyNode(AssetCopySpec(BootConfig.bootstrapAssetRoot, paths.bootstrapRoot), skippedAssetRoots)
-        onProgress("正在把 APK 内置的 host 扩展安装到用户 extensions 目录。", 88)
-        installBundledHostExtensions(paths, replaceExisting = true)
+        prepareHostExtensionAssets(paths) { details, progressPercent ->
+            onProgress(details, 80 + ((progressPercent.coerceIn(0, 100) * 8) / 100))
+        }
         onProgress("正在准备 usr、tmp 与运行时依赖目录。", 94)
         refreshHostPrefixDirectory(paths, rootfsAssetsRefreshed)
         validatePreparedAssetDirectory(
@@ -579,13 +690,13 @@ class AssetExtractor(private val context: Context) {
             "正在写入 bootstrap 脚本、配置与内置扩展目录。",
             74
         )
-        copyNode(AssetCopySpec(BootConfig.bootstrapAssetRoot, paths.bootstrapRoot), skippedAssetRoots)
-        onProgress(
-            "正在同步宿主内置扩展。",
-            "正在把 APK 内置的 host 扩展安装到用户 extensions 目录。",
-            76
-        )
-        installBundledHostExtensions(paths, replaceExisting = true)
+        prepareHostExtensionAssets(paths) { details, progressPercent ->
+            onProgress(
+                "正在同步宿主内置扩展。",
+                details,
+                74 + ((progressPercent.coerceIn(0, 100) * 2) / 100)
+            )
+        }
         onProgress(
             "正在刷新 Linux 宿主目录。",
             "正在准备 usr、tmp 与运行时依赖目录。",
@@ -1188,6 +1299,20 @@ data class LaunchRequest(
     val logFileName: String = "$name.log"
 )
 
+enum class ProotLaunchMode(
+    val displayName: String,
+    val environment: Map<String, String>
+) {
+    Default(
+        displayName = "default",
+        environment = emptyMap()
+    ),
+    NoSeccomp(
+        displayName = "no-seccomp",
+        environment = mapOf("PROOT_NO_SECCOMP" to "1")
+    )
+}
+
 class ManagedProcess(
     val name: String,
     private val process: Process
@@ -1266,8 +1391,8 @@ object ServerProcessJanitor {
     }
 }
 
-class LinuxRuntimeLauncher(private val paths: HostPaths) {
-    fun start(request: LaunchRequest): ManagedProcess {
+open class LinuxRuntimeLauncher(private val paths: HostPaths) {
+    open fun start(request: LaunchRequest): ManagedProcess {
         if (!request.scriptFile.exists()) {
             throw BootstrapException("启动脚本不存在：${request.scriptFile.absolutePath}")
         }
@@ -1306,14 +1431,56 @@ class RootfsRuntimeProvisioner(
     private val launcher: LinuxRuntimeLauncher,
     private val paths: HostPaths
 ) {
-    fun ensure(logFileName: String, onHeartbeat: (elapsedSeconds: Int) -> Unit = {}) {
+    fun ensure(
+        logFileName: String,
+        onAttemptLog: (String) -> Unit = {},
+        onHeartbeat: (elapsedSeconds: Int) -> Unit = {}
+    ): RootfsRuntimeEnsureResult {
+        val defaultAttempt = runAttempt(
+            mode = ProotLaunchMode.Default,
+            logFileName = logFileName,
+            onHeartbeat = onHeartbeat
+        )
+        if (defaultAttempt.succeeded) {
+            onAttemptLog(defaultAttempt.toStartupLogLine())
+            onAttemptLog("rootfs-runtime selected prootMode=${ProotLaunchMode.Default.displayName} for this bootstrap session.")
+            return RootfsRuntimeEnsureResult(mode = defaultAttempt.mode)
+        }
+
+        onAttemptLog(defaultAttempt.toStartupLogLine())
+        if (defaultAttempt.shouldRetryWithoutSeccomp()) {
+            onAttemptLog("rootfs-runtime retrying with PROOT_NO_SECCOMP=1 because default proot attempt matched seccomp/ptrace crash diagnostics.")
+            val noSeccompAttempt = runAttempt(
+                mode = ProotLaunchMode.NoSeccomp,
+                logFileName = logFileName,
+                onHeartbeat = onHeartbeat
+            )
+            onAttemptLog(noSeccompAttempt.toStartupLogLine())
+            if (noSeccompAttempt.succeeded) {
+                onAttemptLog("rootfs-runtime selected prootMode=${ProotLaunchMode.NoSeccomp.displayName} for this bootstrap session.")
+                return RootfsRuntimeEnsureResult(mode = noSeccompAttempt.mode)
+            }
+            throw IllegalStateException(buildRootfsRuntimeFailureMessage(listOf(defaultAttempt, noSeccompAttempt)))
+        }
+
+        throw IllegalStateException(buildRootfsRuntimeFailureMessage(listOf(defaultAttempt)))
+    }
+
+    private fun runAttempt(
+        mode: ProotLaunchMode,
+        logFileName: String,
+        onHeartbeat: (elapsedSeconds: Int) -> Unit
+    ): RootfsRuntimeAttemptResult {
         val request = LaunchRequest(
             name = "rootfs-runtime",
             scriptFile = File(paths.scriptsDir, "ensure-rootfs-runtime.sh"),
             workingDirectory = paths.bootstrapRoot,
-            environment = emptyMap(),
+            // PROOT_NO_SECCOMP 这类开关必须在 proot 启动前注入；子进程崩溃后再 catch 已经无法改变运行模式。
+            environment = mode.environment,
             logFileName = logFileName
         )
+        val logFile = File(paths.logsDir, logFileName)
+        val logStartOffset = logFile.length().coerceAtLeast(0L)
         val process = launcher.start(request)
         var elapsedSeconds = 0
         while (!process.waitFor(1, TimeUnit.SECONDS)) {
@@ -1321,8 +1488,102 @@ class RootfsRuntimeProvisioner(
             onHeartbeat(elapsedSeconds)
         }
         val exitCode = process.waitFor()
-        if (exitCode != 0) {
-            throw IllegalStateException("Linux 离线运行时校验失败，请查看当前 app 启动对应的 rootfs-runtime 日志。")
+        return RootfsRuntimeAttemptResult(
+            mode = mode,
+            exitCode = exitCode,
+            logExcerpt = readLogExcerpt(logFile, startOffset = logStartOffset)
+        )
+    }
+
+    private fun buildRootfsRuntimeFailureMessage(attempts: List<RootfsRuntimeAttemptResult>): String {
+        return buildString {
+            append("Linux 离线运行时校验失败。")
+            attempts.forEach { attempt ->
+                append("\n\n")
+                append(attempt.toFailureMessageSection())
+            }
+        }
+    }
+
+    private fun readLogExcerpt(logFile: File, startOffset: Long = 0L, maxLines: Int = 32, maxChars: Int = 2200): String {
+        val excerpt = runCatching {
+            if (!logFile.exists()) {
+                return@runCatching ""
+            }
+
+            val normalizedOffset = startOffset.coerceIn(0L, logFile.length())
+            val readStartOffset = maxOf(normalizedOffset, logFile.length() - (maxChars.toLong() * 4L))
+            java.io.RandomAccessFile(logFile, "r").use { reader ->
+                reader.seek(readStartOffset)
+                val bytes = ByteArray((reader.length() - readStartOffset).coerceAtMost(maxChars.toLong() * 4L).toInt())
+                reader.readFully(bytes)
+                String(bytes)
+            }
+                .lines()
+                .takeLast(maxLines)
+                .joinToString("\n") { line -> line.trimEnd() }
+                .trim()
+        }.getOrDefault("")
+
+        if (excerpt.length <= maxChars) {
+            return excerpt
+        }
+
+        return excerpt.takeLast(maxChars).trimStart()
+    }
+}
+
+data class RootfsRuntimeEnsureResult(
+    val mode: ProotLaunchMode
+)
+
+data class RootfsRuntimeAttemptResult(
+    val mode: ProotLaunchMode,
+    val exitCode: Int,
+    val logExcerpt: String
+) {
+    val succeeded: Boolean
+        get() = exitCode == 0
+
+    fun shouldRetryWithoutSeccomp(): Boolean {
+        if (succeeded || mode == ProotLaunchMode.NoSeccomp) {
+            return false
+        }
+        val normalized = logExcerpt.lowercase()
+        return normalized.contains("signal 11") ||
+            normalized.contains("sigsegv") ||
+            normalized.contains("ptrace") ||
+            normalized.contains("seccomp") ||
+            normalized.contains("operation not permitted")
+    }
+
+    fun toStartupLogLine(): String {
+        return buildString {
+            append("rootfs-runtime attempt prootMode=")
+            append(mode.displayName)
+            append(" exitCode=")
+            append(exitCode)
+            if (logExcerpt.isBlank()) {
+                append(" logTail=<empty>")
+            } else {
+                append(" logTail=")
+                append(logExcerpt.replace('\n', ' ').trim())
+            }
+        }
+    }
+
+    fun toFailureMessageSection(): String {
+        return buildString {
+            append("prootMode=")
+            append(mode.displayName)
+            append("，退出码：")
+            append(exitCode)
+            if (logExcerpt.isBlank()) {
+                append("。rootfs-runtime 日志为空。")
+            } else {
+                append("\n最近 rootfs-runtime 日志：\n")
+                append(logExcerpt)
+            }
         }
     }
 }
@@ -1331,14 +1592,15 @@ class ServerController(
     private val launcher: LinuxRuntimeLauncher,
     private val paths: HostPaths,
     private val servicePort: Int,
-    private val logFileName: String
+    private val logFileName: String,
+    private val prootMode: ProotLaunchMode = ProotLaunchMode.Default
 ) {
     fun start(): ManagedProcess {
         val request = LaunchRequest(
             name = "sillydroid-server",
             scriptFile = File(paths.scriptsDir, "start-server.sh"),
             workingDirectory = paths.serverDir,
-            environment = mapOf(
+            environment = prootMode.environment + mapOf(
                 "APP_DATA_ROOT" to paths.serverDataDir.absolutePath,
                 "TAVERN_PORT" to servicePort.toString()
             ),
