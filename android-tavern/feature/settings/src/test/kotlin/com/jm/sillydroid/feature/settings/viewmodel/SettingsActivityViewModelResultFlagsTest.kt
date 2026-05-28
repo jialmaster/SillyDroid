@@ -1,7 +1,9 @@
 package com.jm.sillydroid.feature.settings.viewmodel
 
+import com.jm.sillydroid.core.model.settings.BrowserDataClearTarget
 import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -19,6 +21,20 @@ class SettingsActivityViewModelResultFlagsTest {
         assertTrue(state.shouldForceFreshWebViewLoad)
         assertTrue(state.shouldReloadTavernUi)
         assertFalse(state.shouldStartBootstrap)
+    }
+
+    @Test
+    fun `markResultFlags stores selected browser clear mask`() {
+        val viewModel = SettingsActivityViewModel(FakeHostPreferencesRepository())
+
+        viewModel.markResultFlags(
+            shouldForceFreshWebViewLoad = true,
+            browserDataClearMask = BrowserDataClearTarget.RESOURCE_CACHE.mask
+        )
+
+        val state = viewModel.uiState.value
+        assertTrue(state.shouldForceFreshWebViewLoad)
+        assertEquals(BrowserDataClearTarget.RESOURCE_CACHE.mask, state.browserDataClearMask)
     }
 
     private class FakeHostPreferencesRepository : HostPreferencesRepository {

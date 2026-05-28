@@ -1611,6 +1611,9 @@ class ServerController(
 }
 
 object HealthProbe {
+    // 手机端偶发 IO/GC/WebView 初始化会拖慢本地 HTTP 响应，探活超时放宽到 10 秒避免把短暂卡顿判定为服务掉线。
+    private const val readinessProbeTimeoutMillis = 10_000
+
     // watchdog/awaitReady 仅用来判断"本地 Tavern 进程是否在监听并响应 HTTP"。
     // 任何能完成 HTTP 握手的响应（含 3xx 重定向、4xx 认证挑战、5xx 服务自身错误）
     // 都说明 Node 进程仍然存活；只有 IOException/超时这类网络层失败才算掉线。
@@ -1633,9 +1636,8 @@ object HealthProbe {
     private fun checkOnce(targetUrl: String): Boolean {
         val connection = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            // 3000ms 比 1000ms 对手机端更宽容：允许偶发 GC、调度抖动以及 WebView 抢占 CPU 的瞬时延迟。
-            connectTimeout = 3_000
-            readTimeout = 3_000
+            connectTimeout = readinessProbeTimeoutMillis
+            readTimeout = readinessProbeTimeoutMillis
             instanceFollowRedirects = false
         }
 

@@ -11,5 +11,6 @@ data class SettingsActivityUiState(
     val unrestrictedFileImportSelectionEnabled: Boolean = false,
     val shouldStartBootstrap: Boolean = false,
     val shouldReloadTavernUi: Boolean = false,
-    val shouldForceFreshWebViewLoad: Boolean = false
+    val shouldForceFreshWebViewLoad: Boolean = false,
+    val browserDataClearMask: Int = 0
 )

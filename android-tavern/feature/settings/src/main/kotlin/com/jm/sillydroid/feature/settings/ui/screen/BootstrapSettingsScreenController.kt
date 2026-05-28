@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -15,6 +16,8 @@ import androidx.core.view.doOnNextLayout
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.core.widget.NestedScrollView
+import com.jm.sillydroid.core.model.settings.BrowserDataClearOptions
+import com.jm.sillydroid.core.model.settings.BrowserDataClearTarget
 import com.jm.sillydroid.core.model.settings.TavernDataArchiveKind
 import com.jm.sillydroid.core.model.settings.TavernDataArchivePreview
 import com.jm.sillydroid.feature.settings.R
@@ -239,15 +242,56 @@ class BootstrapSettingsScreenController(
             .show()
     }
 
-    fun confirmClearBrowserData(onConfirm: () -> Unit) {
-        MaterialAlertDialogBuilder(activity)
-            .setTitle(R.string.bootstrap_settings_clear_browser_data_confirm_title)
-            .setMessage(R.string.bootstrap_settings_clear_browser_data_confirm_message)
-            .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
-            .setPositiveButton(R.string.bootstrap_settings_clear_browser_data_confirm_action) { _, _ ->
-                onConfirm()
+    fun confirmClearBrowserData(onConfirm: (Int) -> Unit) {
+        val targets = BrowserDataClearTarget.values()
+        val labels = targets.map { target ->
+            when (target) {
+                BrowserDataClearTarget.RESOURCE_CACHE -> activity.getString(R.string.bootstrap_settings_clear_browser_data_target_resource_cache)
+                BrowserDataClearTarget.SITE_STORAGE -> activity.getString(R.string.bootstrap_settings_clear_browser_data_target_site_storage)
+                BrowserDataClearTarget.COOKIES -> activity.getString(R.string.bootstrap_settings_clear_browser_data_target_cookies)
+                BrowserDataClearTarget.HISTORY_AND_FORM_DATA -> activity.getString(R.string.bootstrap_settings_clear_browser_data_target_history_form)
             }
-            .show()
+        }.toTypedArray()
+        val checkedItems = BooleanArray(targets.size) { index -> targets[index].selectedByDefault }
+
+        fun selectedMask(): Int {
+            return BrowserDataClearOptions.maskOf(
+                targets.filterIndexed { index, _ -> checkedItems[index] }
+            )
+        }
+
+        val dialogTitle = buildString {
+            append(activity.getString(R.string.bootstrap_settings_clear_browser_data_confirm_title))
+            append('\n')
+            append(activity.getString(R.string.bootstrap_settings_clear_browser_data_confirm_message))
+        }
+        var positiveButton: android.widget.Button? = null
+        val dialog = MaterialAlertDialogBuilder(activity)
+            .setTitle(dialogTitle)
+            .setMultiChoiceItems(labels, checkedItems) { _, which, isChecked ->
+                checkedItems[which] = isChecked
+                positiveButton?.isEnabled = selectedMask() != 0
+            }
+            .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
+            .setPositiveButton(R.string.bootstrap_settings_clear_browser_data_confirm_action, null)
+            .create()
+
+        // 浏览器清理默认只勾 JS/CSS 缓存；确认时传递真实选择范围，主界面 WebView host 再按范围清理。
+        dialog.setOnShowListener {
+            positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            positiveButton.isEnabled = selectedMask() != 0
+            positiveButton.setOnClickListener {
+                val mask = selectedMask()
+                if (mask == 0) {
+                    showMessage(activity.getString(R.string.bootstrap_settings_clear_browser_data_select_required))
+                    positiveButton.isEnabled = false
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                onConfirm(mask)
+            }
+        }
+        dialog.show()
     }
 
     private fun setupTabs() {

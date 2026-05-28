@@ -2,6 +2,7 @@ package com.jm.sillydroid.feature.settings.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.jm.sillydroid.core.model.settings.BrowserDataClearOptions
 import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 import com.jm.sillydroid.feature.settings.model.SettingsTab
@@ -70,13 +71,16 @@ class SettingsActivityViewModel(
     fun markResultFlags(
         shouldStartBootstrap: Boolean = false,
         shouldReloadTavernUi: Boolean = false,
-        shouldForceFreshWebViewLoad: Boolean = false
+        shouldForceFreshWebViewLoad: Boolean = false,
+        browserDataClearMask: Int = 0
     ) {
         _uiState.update { current ->
+            val normalizedBrowserDataClearMask = BrowserDataClearOptions.normalize(browserDataClearMask)
             current.copy(
                 shouldStartBootstrap = current.shouldStartBootstrap || shouldStartBootstrap,
                 shouldReloadTavernUi = current.shouldReloadTavernUi || shouldReloadTavernUi,
-                shouldForceFreshWebViewLoad = current.shouldForceFreshWebViewLoad || shouldForceFreshWebViewLoad
+                shouldForceFreshWebViewLoad = current.shouldForceFreshWebViewLoad || shouldForceFreshWebViewLoad,
+                browserDataClearMask = current.browserDataClearMask or normalizedBrowserDataClearMask
             )
         }
     }

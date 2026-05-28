@@ -21,7 +21,6 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workspace_root="$(cd "$script_dir/.." && pwd)"
 workspace_android_root="$workspace_root/android-tavern"
 android_root="$(realpath -m "$default_android_build_root/android-project/android-tavern")"
-sync_server_script="$workspace_root/scripts/sync-tavern-android-bootstrap.sh"
 dependency_pack_script="$workspace_root/scripts/build-tavern-dependency-packs.sh"
 build_config_path="$workspace_root/sillydroid-build-config.json"
 rootfs_manifest_path="$workspace_android_root/app/src/main/assets/bootstrap/rootfs/rootfs-manifest.json"
@@ -463,16 +462,13 @@ generated_server_source_satisfy_request() {
     local generated_root="$1"
     local server_source_path="$generated_root/server-source.zip"
     local server_source_manifest_path="$generated_root/server-source-manifest.json"
-    local server_overlay_root="$workspace_root/android-tavern/server-overlay"
 
     [[ -f "$server_source_path" && -f "$server_source_manifest_path" ]] || return 1
     command -v python3 >/dev/null 2>&1 || return 1
 
-    if input_path_newer_than "$sync_server_script" "$server_source_manifest_path" \
-        || input_path_newer_than "$server_overlay_root" "$server_source_manifest_path"; then
-        return 1
-    fi
-
+    # Stage 3 server source is versioned upstream material. Stage 4 only verifies
+    # the requested RID/tag contract here; local overlay/script mtimes do not
+    # invalidate an already published server-source artifact.
     python3 - "$server_source_manifest_path" "$runtime_rid" "$tavern_tag" <<'PY'
 import json
 import sys

@@ -34,6 +34,7 @@ import com.jm.sillydroid.domain.logs.HostLogRepository
 import com.jm.sillydroid.domain.notification.HostNotificationService
 import com.jm.sillydroid.domain.notification.HostDownloadNotificationCoordinator
 import com.jm.sillydroid.domain.extensions.ExtensionsRepository
+import com.jm.sillydroid.domain.runtime.HostAppForegroundState
 import com.jm.sillydroid.domain.runtime.RuntimeLogManager
 import com.jm.sillydroid.domain.settings.DataArchiveRepository
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
@@ -44,6 +45,10 @@ import com.jm.sillydroid.ui.update.R as UpdateR
 
 class AppGraph(private val application: Application) : SillyDroidAppGraph {
     override val dispatchers: DispatcherProvider = AndroidDispatcherProvider
+
+    private val appForegroundStateStore = ApplicationForegroundStateStore().also { foregroundStateStore ->
+        application.registerActivityLifecycleCallbacks(foregroundStateStore)
+    }
 
     private val extensionDirectoriesProvider by lazy {
         HostExtensionDirectoriesProvider(application)
@@ -72,6 +77,9 @@ class AppGraph(private val application: Application) : SillyDroidAppGraph {
             downloadManager = application.getSystemService(DownloadManager::class.java)
         )
     }
+
+    override val appForegroundState: HostAppForegroundState
+        get() = appForegroundStateStore
 
     override val runtimeLogManager: RuntimeLogManager by lazy {
         HostRuntimeLogManager(application)

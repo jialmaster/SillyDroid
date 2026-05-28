@@ -61,6 +61,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         private const val resultShouldStartKey = SettingsNavigationContract.resultShouldStartKey
         private const val resultShouldReloadTavernUiKey = SettingsNavigationContract.resultShouldReloadTavernUiKey
         private const val resultShouldForceFreshWebViewLoadKey = SettingsNavigationContract.resultShouldForceFreshWebViewLoadKey
+        private const val resultBrowserDataClearMaskKey = SettingsNavigationContract.resultBrowserDataClearMaskKey
         private const val openExtensionsTabKey = SettingsNavigationContract.openExtensionsTabKey
         private const val openDefaultExtensionsInstallerKey = SettingsNavigationContract.openDefaultExtensionsInstallerKey
 
@@ -84,6 +85,10 @@ class BootstrapSettingsActivity : AppCompatActivity() {
 
         fun shouldForceFreshWebViewLoad(data: Intent?): Boolean {
             return data?.getBooleanExtra(resultShouldForceFreshWebViewLoadKey, false) == true
+        }
+
+        fun browserDataClearMask(data: Intent?): Int {
+            return data?.getIntExtra(resultBrowserDataClearMaskKey, 0) ?: 0
         }
     }
 
@@ -253,10 +258,13 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             }
         }
         clearBrowserDataButton.setOnClickListener {
-            screenController.confirmClearBrowserData {
+            screenController.confirmClearBrowserData { browserDataClearMask ->
                 // 设置页没有直接持有主界面 WebView；这里发一次性 fresh-load 结果，
-                // 回到主界面后由 TavernWebViewHost 统一清 IndexedDB/Cookie/Cache 等站点状态。
-                updateResultFlags(shouldForceFreshWebViewLoad = true)
+                // 回到主界面后由 TavernWebViewHost 按弹窗勾选范围统一清理浏览器数据。
+                updateResultFlags(
+                    shouldForceFreshWebViewLoad = true,
+                    browserDataClearMask = browserDataClearMask
+                )
                 screenController.showMessage(getString(R.string.bootstrap_settings_clear_browser_data_success))
                 finish()
             }
@@ -573,12 +581,14 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private fun updateResultFlags(
         shouldStartBootstrap: Boolean = false,
         shouldReloadTavernUi: Boolean = false,
-        shouldForceFreshWebViewLoad: Boolean = false
+        shouldForceFreshWebViewLoad: Boolean = false,
+        browserDataClearMask: Int = 0
     ) {
         settingsActivityViewModel.markResultFlags(
             shouldStartBootstrap = shouldStartBootstrap,
             shouldReloadTavernUi = shouldReloadTavernUi,
-            shouldForceFreshWebViewLoad = shouldForceFreshWebViewLoad
+            shouldForceFreshWebViewLoad = shouldForceFreshWebViewLoad,
+            browserDataClearMask = browserDataClearMask
         )
         renderResultFlags(settingsActivityViewModel.uiState.value)
     }
@@ -594,6 +604,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
                 .putExtra(resultShouldStartKey, state.shouldStartBootstrap)
                 .putExtra(resultShouldReloadTavernUiKey, state.shouldReloadTavernUi)
                 .putExtra(resultShouldForceFreshWebViewLoadKey, state.shouldForceFreshWebViewLoad)
+                .putExtra(resultBrowserDataClearMaskKey, state.browserDataClearMask)
         )
     }
 

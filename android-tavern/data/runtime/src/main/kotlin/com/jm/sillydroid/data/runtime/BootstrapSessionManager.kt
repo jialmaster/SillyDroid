@@ -21,6 +21,7 @@ import com.jm.sillydroid.core.model.bootstrap.shouldReportCurrentStepElapsedSeco
 import com.jm.sillydroid.core.model.bootstrap.shouldReportTavernStartupTail
 import com.jm.sillydroid.core.model.bootstrap.withDerivedUiFlags
 import com.jm.sillydroid.domain.runtime.RuntimeLogManager
+import com.jm.sillydroid.domain.runtime.HostAppForegroundState
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 import com.jm.sillydroid.domain.settings.SettingsConfigRepository
 import java.io.File
@@ -45,14 +46,15 @@ class BootstrapSessionManager(
     context: Context,
     private val scope: CoroutineScope,
     private val runtimeLogs: RuntimeLogManager,
+    private val appForegroundState: HostAppForegroundState,
     private val hostPreferences: HostPreferencesRepository,
     private val settingsConfig: SettingsConfigRepository,
     private val onSnapshotChanged: (BootstrapSessionSnapshot) -> Unit = {}
 ) {
     companion object {
         private const val logTag = "BootstrapSession"
-        private const val readyWatchdogIntervalMillis = 5_000L
-        private const val readyWatchdogFailureThreshold = 6
+        // 手机端页面初始化、GC 或 WebView 抢占 CPU 时可能短时间拖慢本地服务，watchdog 使用 10 秒周期降低误重启概率。
+        private const val readyWatchdogIntervalMillis = 10_000L
         private const val readyWatchdogSuccessLogEvery = 12
         private const val autoRestartDelayMillis = 1_500L
         private const val autoRestartWindowMillis = 5 * 60_000L
@@ -81,7 +83,9 @@ class BootstrapSessionManager(
     private val healthMonitor = BootstrapServerHealthMonitor(
         scope = scope,
         readyWatchdogIntervalMillis = readyWatchdogIntervalMillis,
-        readyWatchdogFailureThreshold = readyWatchdogFailureThreshold,
+        readyWatchdogPolicyProvider = {
+            BootstrapReadyWatchdogPolicy.resolve(appForegroundState.isInForeground)
+        },
         readyWatchdogSuccessLogEvery = readyWatchdogSuccessLogEvery,
         callback = object : BootstrapServerHealthMonitor.Callback {
             override fun appendStartupLog(line: String) {

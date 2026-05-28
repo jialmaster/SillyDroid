@@ -3,6 +3,7 @@ package com.jm.sillydroid.feature.main.ui.home
 import com.jm.sillydroid.core.model.bootstrap.BootstrapEvent
 import com.jm.sillydroid.core.model.bootstrap.BootstrapLifecycle
 import com.jm.sillydroid.core.model.bootstrap.BootstrapSessionSnapshot
+import com.jm.sillydroid.core.model.settings.BrowserDataClearTarget
 import com.jm.sillydroid.domain.bootstrap.BootstrapController
 import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.Dispatchers
@@ -78,6 +79,16 @@ class HomeViewModelTest {
         assertFalse(viewModel.isPullGestureRefreshing)
         assertFalse(viewModel.isImeVisible)
         assertFalse(viewModel.shouldForceFreshWebViewLoad)
+        assertEquals(0, viewModel.browserDataClearMask)
+    }
+
+    @Test
+    fun `browserDataClearMask ignores unknown bits`() = runTest {
+        val viewModel = HomeViewModel(fakeController)
+
+        viewModel.browserDataClearMask = BrowserDataClearTarget.RESOURCE_CACHE.mask or (1 shl 12)
+
+        assertEquals(BrowserDataClearTarget.RESOURCE_CACHE.mask, viewModel.browserDataClearMask)
     }
 
     @Test

@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 internal class BootstrapServerHealthMonitor(
     private val scope: CoroutineScope,
     private val readyWatchdogIntervalMillis: Long,
-    private val readyWatchdogFailureThreshold: Int,
+    private val readyWatchdogPolicyProvider: () -> BootstrapReadyWatchdogPolicySnapshot,
     private val readyWatchdogSuccessLogEvery: Int,
     private val callback: Callback,
     private val isReadyProbe: (String) -> Boolean = { HealthProbe.isReady(it) }
@@ -42,7 +42,7 @@ internal class BootstrapServerHealthMonitor(
         /** server 进程已退出（可能正常或异常）；manager 决定如何处理。 */
         fun onServerExit(exitCode: Int)
 
-        /** ready watchdog 连续失败到阈值；manager 通常触发 auto-restart。 */
+        /** ready watchdog 连续失败到当前策略阈值；manager 通常触发 auto-restart。 */
         fun onReadyWatchdogTriggered(localUrl: String, failureThreshold: Int)
     }
 
@@ -67,19 +67,30 @@ internal class BootstrapServerHealthMonitor(
 
     fun startReadyWatchdog(readinessUrl: String, localUrl: String) {
         readyWatchdogJob?.cancel()
+        val initialPolicy = readyWatchdogPolicyProvider().normalized()
         callback.appendStartupLog(
-            "Ready watchdog started. interval=${readyWatchdogIntervalMillis}ms threshold=$readyWatchdogFailureThreshold target=$readinessUrl"
+            "Ready watchdog started. interval=${readyWatchdogIntervalMillis}ms policy=${initialPolicy.name} threshold=${initialPolicy.failureThreshold} target=$readinessUrl"
         )
         readyWatchdogJob = scope.launch {
             var consecutiveFailures = 0
             var successfulProbeCount = 0
+            var activePolicy = initialPolicy
             while (isActive) {
                 delay(readyWatchdogIntervalMillis)
+                val policy = readyWatchdogPolicyProvider().normalized()
+                if (policy.name != activePolicy.name ||
+                    policy.failureThreshold != activePolicy.failureThreshold
+                ) {
+                    activePolicy = policy
+                    callback.appendStartupLog(
+                        "Ready watchdog policy changed. policy=${policy.name} threshold=${policy.failureThreshold}"
+                    )
+                }
                 if (isReadyProbe(readinessUrl)) {
                     successfulProbeCount += 1
                     if (consecutiveFailures > 0) {
                         callback.appendStartupLog(
-                            "Ready watchdog probe recovered after $consecutiveFailures failure(s): $readinessUrl"
+                            "Ready watchdog probe recovered after $consecutiveFailures failure(s), policy=${policy.name}: $readinessUrl"
                         )
                     } else if (successfulProbeCount == 1 ||
                         successfulProbeCount % readyWatchdogSuccessLogEvery == 0
@@ -94,14 +105,14 @@ internal class BootstrapServerHealthMonitor(
 
                 consecutiveFailures += 1
                 callback.appendStartupLog(
-                    "Ready watchdog probe failed ($consecutiveFailures/$readyWatchdogFailureThreshold): $readinessUrl"
+                    "Ready watchdog probe failed ($consecutiveFailures/${policy.failureThreshold}, policy=${policy.name}): $readinessUrl"
                 )
-                callback.onProbeFailed(readinessUrl, consecutiveFailures, readyWatchdogFailureThreshold)
-                if (consecutiveFailures < readyWatchdogFailureThreshold) {
+                callback.onProbeFailed(readinessUrl, consecutiveFailures, policy.failureThreshold)
+                if (consecutiveFailures < policy.failureThreshold) {
                     continue
                 }
 
-                callback.onReadyWatchdogTriggered(localUrl, readyWatchdogFailureThreshold)
+                callback.onReadyWatchdogTriggered(localUrl, policy.failureThreshold)
                 return@launch
             }
         }
@@ -119,5 +130,9 @@ internal class BootstrapServerHealthMonitor(
     fun stopAll(reason: String? = null) {
         stopServerMonitor()
         stopReadyWatchdog(reason)
+    }
+
+    private fun BootstrapReadyWatchdogPolicySnapshot.normalized(): BootstrapReadyWatchdogPolicySnapshot {
+        return copy(failureThreshold = failureThreshold.coerceAtLeast(1))
     }
 }

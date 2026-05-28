@@ -27,6 +27,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.webkit.WebViewCompat
 import com.jm.sillydroid.core.model.bootstrap.BootstrapSessionSnapshot
+import com.jm.sillydroid.core.model.settings.BrowserDataClearOptions
+import com.jm.sillydroid.core.model.settings.BrowserDataClearTarget
 import com.jm.sillydroid.domain.bootstrap.BootstrapController
 import com.jm.sillydroid.domain.bootstrap.RuntimeConfigRepository
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
@@ -380,21 +382,29 @@ class TavernWebViewHost(
 
     private fun forceFreshWebViewLoad(baseUrl: String) {
         val targetUrl = buildInitialTavernUrl(baseUrl)
+        val requestedClearMask = homeViewModel.browserDataClearMask
+        val clearMask = if (requestedClearMask == 0) {
+            BrowserDataClearOptions.fullMask
+        } else {
+            BrowserDataClearOptions.normalizeOrDefault(requestedClearMask)
+        }
         // 清空宿主数据并重解压后，WebView 不能继续复用旧内存页面 / history / cache / sessionStorage；
         // 否则 showWebView 会因为还是同一 local URL 而跳过 loadUrl，用户仍看到旧前端信息。
         cancelRestoredStateWatchdog()
         homeViewModel.shouldForceFreshWebViewLoad = false
+        homeViewModel.browserDataClearMask = 0
         homeViewModel.hasRestoredWebViewState = false
         homeViewModel.pendingLocalRetryAttempts = 0
         homeViewModel.loadedUrl = targetUrl
-        clearCurrentPageSessionState()
-        clearPersistedWebSiteState()
+        clearCurrentPageSessionState(clearMask)
+        clearPersistedWebSiteState(clearMask)
         recordHostDiagnostic(
             category = "webview",
             body = buildString {
                 append("event=force_fresh_webview_load")
                 append(" targetUrl=${normalizeDiagnosticValue(targetUrl)}")
-                append(" action=clear_site_state_and_load")
+                append(" action=clear_selected_site_state_and_load")
+                append(" clearMask=$clearMask")
                 append(' ')
                 append(currentWebViewDiagnosticState())
             }
@@ -817,20 +827,33 @@ class TavernWebViewHost(
         }
     }
 
-    private fun clearPersistedWebSiteState() {
+    private fun clearPersistedWebSiteState(clearMask: Int) {
+        val normalizedClearMask = BrowserDataClearOptions.normalizeOrDefault(clearMask)
         webSessionPersistenceController?.refreshScript()
-        CookieManager.getInstance().removeAllCookies(null)
-        CookieManager.getInstance().flush()
-        WebStorage.getInstance().deleteAllData()
-        webView.clearHistory()
-        webView.clearFormData()
-        webView.clearSslPreferences()
-        webView.clearMatches()
-        webView.clearCache(true)
+        if (BrowserDataClearOptions.contains(normalizedClearMask, BrowserDataClearTarget.COOKIES)) {
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+        }
+        if (BrowserDataClearOptions.contains(normalizedClearMask, BrowserDataClearTarget.SITE_STORAGE)) {
+            WebStorage.getInstance().deleteAllData()
+        }
+        if (BrowserDataClearOptions.contains(normalizedClearMask, BrowserDataClearTarget.HISTORY_AND_FORM_DATA)) {
+            webView.clearHistory()
+            webView.clearFormData()
+            webView.clearSslPreferences()
+            webView.clearMatches()
+        }
+        if (BrowserDataClearOptions.contains(normalizedClearMask, BrowserDataClearTarget.RESOURCE_CACHE)) {
+            webView.clearCache(true)
+        }
     }
 
-    private fun clearCurrentPageSessionState() {
-        // 强制全新载入前先清空当前文档站点存储，避免旧页面上的临时会话继续影响下一次本地 URL 打开。
+    private fun clearCurrentPageSessionState(clearMask: Int) {
+        if (!BrowserDataClearOptions.contains(clearMask, BrowserDataClearTarget.SITE_STORAGE)) {
+            return
+        }
+
+        // 只有用户选择网页本地存储时才清当前文档存储；默认 JS/CSS 缓存清理不能误删酒馆会话状态。
         webView.evaluateJavascript(
             """
                 (function() {

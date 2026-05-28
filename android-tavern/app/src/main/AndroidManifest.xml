@@ -46,6 +46,18 @@
                 android:resource="@xml/update_file_paths" />
         </provider>
 
+        <provider
+            android:name=".TavernDataDocumentsProvider"
+            android:authorities="${applicationId}.tavern-data.documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:label="@string/tavern_data_documents_provider_label"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+
         <receiver
             android:name=".HostDownloadCompleteReceiver"
             android:exported="false">

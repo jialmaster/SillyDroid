@@ -61,6 +61,7 @@ class StartupCoordinatorService : Service() {
             context = applicationContext,
             scope = serviceScope,
             runtimeLogs = graph.runtimeLogManager,
+            appForegroundState = graph.appForegroundState,
             hostPreferences = graph.hostConfigStore,
             settingsConfig = graph.tavernConfigRepository(),
             onSnapshotChanged = { snapshot ->

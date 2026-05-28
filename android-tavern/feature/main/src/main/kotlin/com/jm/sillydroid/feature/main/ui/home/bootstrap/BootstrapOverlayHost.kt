@@ -15,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.jm.sillydroid.core.model.bootstrap.BootstrapEvent
 import com.jm.sillydroid.core.model.bootstrap.BootstrapSessionSnapshot
+import com.jm.sillydroid.core.model.settings.BrowserDataClearOptions
 import com.jm.sillydroid.core.model.settings.SettingsNavigationContract
 import com.jm.sillydroid.domain.app.SillyDroidAppGraph
 import com.jm.sillydroid.domain.bootstrap.BootstrapController
@@ -95,12 +96,14 @@ class BootstrapOverlayHost(
         homeViewModel.isOpeningBootstrapSettings = false
         val shouldForceFreshWebViewLoad = result.resultCode == Activity.RESULT_OK &&
             shouldForceFreshWebViewLoadFromSettingsResult(result.data)
+        val browserDataClearMask = browserDataClearMaskFromSettingsResult(result.data)
         if (result.resultCode == Activity.RESULT_OK && shouldStartBootstrapFromSettingsResult(result.data)) {
             if (shouldForceFreshWebViewLoad) {
                 // “清空宿主数据并重新初始化”会重解压新的 server 资产；旧 WebView 若继续复用同一站点会话，
                 // 即使服务端已经起来，也可能还显示旧内存态页面，所以这里先记一个单次 fresh-load 请求，
                 // 等 bootstrap 真正 ready 后由 WebView host 统一清站点状态并重新 load。
                 homeViewModel.shouldForceFreshWebViewLoad = true
+                homeViewModel.browserDataClearMask = browserDataClearMask
             }
             homeViewModel.resetForBootstrapRestart()
             overlay.isVisible = true
@@ -111,8 +114,9 @@ class BootstrapOverlayHost(
 
         val currentSnapshot = processManager.currentSnapshot()
         if (shouldForceFreshWebViewLoad) {
-            // 单独“清空浏览器数据”不需要重启 Tavern 服务，但仍必须复用 WebView host 的完整站点状态清理链路。
+            // 单独“清空浏览器数据”不需要重启 Tavern 服务；设置页只传选择范围，真实清理由 WebView host 执行。
             homeViewModel.shouldForceFreshWebViewLoad = true
+            homeViewModel.browserDataClearMask = browserDataClearMask
         }
         render(currentSnapshot)
         if (result.resultCode == Activity.RESULT_OK && shouldReloadTavernUiFromSettingsResult(result.data)) {
@@ -219,5 +223,11 @@ class BootstrapOverlayHost(
 
     private fun shouldForceFreshWebViewLoadFromSettingsResult(data: Intent?): Boolean {
         return data?.getBooleanExtra(SettingsNavigationContract.resultShouldForceFreshWebViewLoadKey, false) == true
+    }
+
+    private fun browserDataClearMaskFromSettingsResult(data: Intent?): Int {
+        return BrowserDataClearOptions.normalize(
+            data?.getIntExtra(SettingsNavigationContract.resultBrowserDataClearMaskKey, 0) ?: 0
+        )
     }
 }
