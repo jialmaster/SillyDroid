@@ -42,9 +42,10 @@ on:
         options:
           - release
           - artifact-only
-  schedule:
-    - cron: '17 */6 * * *'
-
+  # GitHub Actions 的 release 事件不能跨仓库监听；上游 SillyTavern 发布后由外部 webhook 转发这个事件。
+  repository_dispatch:
+    types:
+      - sillytavern_release
 permissions:
   actions: write
   contents: write
@@ -109,10 +110,10 @@ jobs:
       - name: Resolve build plan
         id: plan
         env:
-          REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tavern_tag || 'auto' }}
-          REQUESTED_BUILD_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.build_type || 'auto' }}
-          FORCE_REBUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.force_rebuild || 'false' }}
-          REQUESTED_PUBLISH_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_target || 'release' }}
+          REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tavern_tag || github.event_name == 'repository_dispatch' && github.event.client_payload.tavern_tag || 'auto' }}
+          REQUESTED_BUILD_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.build_type || github.event_name == 'repository_dispatch' && github.event.client_payload.build_type || 'auto' }}
+          FORCE_REBUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.force_rebuild || github.event_name == 'repository_dispatch' && github.event.client_payload.force_rebuild || 'false' }}
+          REQUESTED_PUBLISH_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_target || github.event_name == 'repository_dispatch' && github.event.client_payload.publish_target || 'release' }}
           COMPARE_BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
           COMPARE_HEAD: ${{ github.sha }}
         run: |
