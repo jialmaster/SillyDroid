@@ -287,18 +287,172 @@ function bindThemeColorPanelIsolation(panel) {
     });
 }
 
-function mixHexColors(baseColor, overlayColor, overlayWeight) {
-    const base = hexToRgb(baseColor);
-    const overlay = hexToRgb(overlayColor);
-    const weight = Math.max(0, Math.min(1, overlayWeight));
-    return rgbToHex({
-        r: base.r * (1 - weight) + overlay.r * weight,
-        g: base.g * (1 - weight) + overlay.g * weight,
-        b: base.b * (1 - weight) + overlay.b * weight,
-    });
+function rgbaColor(r, g, b, a = 1) {
+    return { r, g, b, a };
 }
 
-function resolveNativeSystemBarColors(settings, resolvedMode) {
+function hexToRgba(color, alpha = 1) {
+    return {
+        ...hexToRgb(color),
+        a: alpha,
+    };
+}
+
+function mixRgbaColors(firstColor, firstWeight, secondColor, secondWeight = 1 - firstWeight) {
+    const totalWeight = firstWeight + secondWeight;
+    if (totalWeight <= 0) {
+        return rgbaColor(0, 0, 0, 0);
+    }
+
+    const firstRatio = firstWeight / totalWeight;
+    const secondRatio = secondWeight / totalWeight;
+    const alpha = firstColor.a * firstRatio + secondColor.a * secondRatio;
+    if (alpha <= 0) {
+        return rgbaColor(0, 0, 0, 0);
+    }
+
+    return {
+        r: (firstColor.r * firstColor.a * firstRatio + secondColor.r * secondColor.a * secondRatio) / alpha,
+        g: (firstColor.g * firstColor.a * firstRatio + secondColor.g * secondColor.a * secondRatio) / alpha,
+        b: (firstColor.b * firstColor.a * firstRatio + secondColor.b * secondColor.a * secondRatio) / alpha,
+        a: alpha,
+    };
+}
+
+function compositeRgbaOver(foregroundColor, backgroundColor) {
+    const alpha = foregroundColor.a + backgroundColor.a * (1 - foregroundColor.a);
+    if (alpha <= 0) {
+        return rgbaColor(0, 0, 0, 0);
+    }
+
+    return {
+        r: (foregroundColor.r * foregroundColor.a + backgroundColor.r * backgroundColor.a * (1 - foregroundColor.a)) / alpha,
+        g: (foregroundColor.g * foregroundColor.a + backgroundColor.g * backgroundColor.a * (1 - foregroundColor.a)) / alpha,
+        b: (foregroundColor.b * foregroundColor.a + backgroundColor.b * backgroundColor.a * (1 - foregroundColor.a)) / alpha,
+        a: alpha,
+    };
+}
+
+function rgbaToHex(color) {
+    return rgbToHex(color);
+}
+
+function resolveGlassTintColors(primaryColor, secondaryColor, isLightMode, isQualityMode) {
+    if (isLightMode) {
+        const baseTint = rgbaColor(255, 255, 255, 0.1);
+        return {
+            primaryTint: mixRgbaColors(primaryColor, isQualityMode ? 0.08 : 0.16, baseTint),
+            secondaryTint: mixRgbaColors(secondaryColor, isQualityMode ? 0.07 : 0.14, baseTint),
+        };
+    }
+
+    if (isQualityMode) {
+        const baseTint = rgbaColor(0, 0, 0, 0.1);
+        return {
+            primaryTint: mixRgbaColors(primaryColor, 0.07, baseTint),
+            secondaryTint: mixRgbaColors(secondaryColor, 0.06, baseTint),
+        };
+    }
+
+    return {
+        primaryTint: mixRgbaColors(primaryColor, 0.18, rgbaColor(23, 30, 33, 0.58)),
+        secondaryTint: mixRgbaColors(secondaryColor, 0.16, rgbaColor(23, 30, 33, 0.6)),
+    };
+}
+
+function resolveGlassPanelGradientColor(samplePosition, primaryColor, secondaryColor, tintColors, isLightMode, isQualityMode) {
+    const transparentColor = rgbaColor(0, 0, 0, 0);
+    if (isLightMode && isQualityMode) {
+        return samplePosition === 'top'
+            ? mixRgbaColors(tintColors.primaryTint, 0.62, transparentColor)
+            : mixRgbaColors(tintColors.secondaryTint, 0.54, transparentColor);
+    }
+
+    if (isLightMode) {
+        return samplePosition === 'top'
+            ? mixRgbaColors(primaryColor, 0.1, rgbaColor(255, 255, 255, 0.54))
+            : mixRgbaColors(secondaryColor, 0.08, rgbaColor(255, 255, 255, 0.5));
+    }
+
+    if (isQualityMode) {
+        return samplePosition === 'top'
+            ? mixRgbaColors(tintColors.primaryTint, 0.68, transparentColor)
+            : mixRgbaColors(tintColors.secondaryTint, 0.58, transparentColor);
+    }
+
+    const panelColor = mixRgbaColors(tintColors.primaryTint, 0.24, rgbaColor(2, 4, 8, 0.5));
+    const strongPanelColor = mixRgbaColors(tintColors.secondaryTint, 0.28, rgbaColor(2, 4, 8, 0.62));
+    return samplePosition === 'top'
+        ? mixRgbaColors(tintColors.primaryTint, 0.18, panelColor)
+        : mixRgbaColors(tintColors.secondaryTint, 0.14, strongPanelColor);
+}
+
+function resolveGlassSurfaceOverlayColor(samplePosition, primaryColor, secondaryColor, isLightMode, isQualityMode) {
+    const transparentColor = rgbaColor(0, 0, 0, 0);
+    if (isLightMode && isQualityMode) {
+        return transparentColor;
+    }
+
+    if (isLightMode) {
+        return samplePosition === 'top'
+            ? mixRgbaColors(primaryColor, 0.08, transparentColor)
+            : mixRgbaColors(secondaryColor, 0.05, transparentColor);
+    }
+
+    if (isQualityMode && samplePosition === 'top') {
+        return mixRgbaColors(primaryColor, 0.05, transparentColor);
+    }
+
+    return transparentColor;
+}
+
+function resolveGlassPanelMixColor(samplePosition, primaryColor, secondaryColor, isLightMode) {
+    const panelMixColor = isLightMode
+        ? rgbaColor(255, 255, 255, 0.5)
+        : rgbaColor(0, 0, 0, 0.5);
+    return samplePosition === 'top'
+        ? mixRgbaColors(primaryColor, 0.08, panelMixColor)
+        : mixRgbaColors(secondaryColor, 0.06, panelMixColor);
+}
+
+function compositeGlassPanelSample(backgroundColor, samplePosition, primaryColor, secondaryColor, isLightMode, isQualityMode) {
+    const tintColors = resolveGlassTintColors(primaryColor, secondaryColor, isLightMode, isQualityMode);
+    let resolvedColor = compositeRgbaOver(
+        resolveGlassPanelGradientColor(samplePosition, primaryColor, secondaryColor, tintColors, isLightMode, isQualityMode),
+        backgroundColor
+    );
+    resolvedColor = compositeRgbaOver(
+        resolveGlassSurfaceOverlayColor(samplePosition, primaryColor, secondaryColor, isLightMode, isQualityMode),
+        resolvedColor
+    );
+    return compositeRgbaOver(
+        resolveGlassPanelMixColor(samplePosition, primaryColor, secondaryColor, isLightMode),
+        resolvedColor
+    );
+}
+
+function resolveGlassNativeSystemBarColor(settings, resolvedMode, effectivePerformanceMode, samplePosition) {
+    const isLightMode = resolvedMode === 'light';
+    const isQualityMode = effectivePerformanceMode === 'quality';
+    const primaryColor = hexToRgba(settings.themeAccentColor);
+    const secondaryColor = hexToRgba(settings.themeSecondaryColor);
+    const backgroundColor = hexToRgba(samplePosition === 'top'
+        ? (isLightMode ? '#f6fcff' : '#050911')
+        : (isLightMode ? '#f0faff' : '#060a12'));
+
+    // 原生系统栏不能直接显示 CSS 半透明渐变；这里按 glass.css 的 panel-highlight + panel-on-shell
+    // 层级把顶部/底部各采样一次，生成和顶部菜单、底部输入栏接近的实色。
+    return rgbaToHex(compositeGlassPanelSample(
+        compositeGlassPanelSample(backgroundColor, samplePosition, primaryColor, secondaryColor, isLightMode, isQualityMode),
+        samplePosition,
+        primaryColor,
+        secondaryColor,
+        isLightMode,
+        isQualityMode
+    ));
+}
+
+function resolveNativeSystemBarColors(settings, resolvedMode, effectivePerformanceMode = 'quality') {
     if (settings.theme === 'default') {
         // 默认主题也只同步系统栏纯色，避免从毛玻璃切回默认后状态栏/手势条残留上一套主题色。
         return {
@@ -307,18 +461,15 @@ function resolveNativeSystemBarColors(settings, resolvedMode) {
         };
     }
 
-    const topBaseColor = resolvedMode === 'light' ? '#f6fcff' : '#050911';
-    const bottomBaseColor = resolvedMode === 'light' ? '#f0faff' : '#060a12';
     return {
-        // 毛玻璃背景是左上 primary、右下 secondary 的连续渐变；原生系统栏取同一套端点色，避免状态栏/手势条和 WebView 背景断层。
-        statusBarColor: mixHexColors(topBaseColor, settings.themeAccentColor, resolvedMode === 'light' ? 0.58 : 0.56),
-        navigationBarColor: mixHexColors(bottomBaseColor, settings.themeSecondaryColor, resolvedMode === 'light' ? 0.56 : 0.52),
+        statusBarColor: resolveGlassNativeSystemBarColor(settings, resolvedMode, effectivePerformanceMode, 'top'),
+        navigationBarColor: resolveGlassNativeSystemBarColor(settings, resolvedMode, effectivePerformanceMode, 'bottom'),
     };
 }
 
 function buildThemeRuntimeState(settings = getExtensionSettings(), resolvedMode = resolveThemeMode(settings.themeMode), hostInfo = getHostVersionInfo()) {
     const performanceProfile = resolveThemePerformanceProfile(settings, hostInfo);
-    const systemBarColors = resolveNativeSystemBarColors(settings, resolvedMode);
+    const systemBarColors = resolveNativeSystemBarColors(settings, resolvedMode, performanceProfile.effectiveMode);
     return {
         theme: settings.theme,
         mode: settings.themeMode,
@@ -972,37 +1123,41 @@ function setCompactChatLayoutEnabled(enabled) {
     toastr[normalizedEnabled ? 'success' : 'info'](normalizedEnabled ? '已启用聊天紧凑模式。' : '已关闭聊天紧凑模式。', popupTitle);
 }
 
-function setThemeAccentColor(color) {
+function setThemeAccentColor(color, options = {}) {
     const normalizedColor = normalizeThemeColor(color, defaultSettings.themeAccentColor);
+    const shouldPersist = options.persist !== false;
     if (getExtensionSettings().themeAccentColor === normalizedColor) {
-        syncThemeColorControls();
+        syncThemeColorControlByRole('accent', normalizedColor, options);
         return;
     }
 
-    saveExtensionSetting('themeAccentColor', normalizedColor);
-    syncThemeColorControls();
-    applyThemeState();
+    if (shouldPersist) {
+        saveExtensionSetting('themeAccentColor', normalizedColor);
+    }
+    syncThemeColorControlByRole('accent', normalizedColor, options);
 }
 
-function setThemeSecondaryColor(color) {
+function setThemeSecondaryColor(color, options = {}) {
     const normalizedColor = normalizeThemeColor(color, defaultSettings.themeSecondaryColor);
+    const shouldPersist = options.persist !== false;
     if (getExtensionSettings().themeSecondaryColor === normalizedColor) {
-        syncThemeColorControls();
+        syncThemeColorControlByRole('secondary', normalizedColor, options);
         return;
     }
 
-    saveExtensionSetting('themeSecondaryColor', normalizedColor);
-    syncThemeColorControls();
-    applyThemeState();
+    if (shouldPersist) {
+        saveExtensionSetting('themeSecondaryColor', normalizedColor);
+    }
+    syncThemeColorControlByRole('secondary', normalizedColor, options);
 }
 
-function setThemeColorByRole(colorRole, color) {
+function setThemeColorByRole(colorRole, color, options = {}) {
     if (colorRole === 'secondary') {
-        setThemeSecondaryColor(color);
+        setThemeSecondaryColor(color, options);
         return;
     }
 
-    setThemeAccentColor(color);
+    setThemeAccentColor(color, options);
 }
 
 function normalizeThemeColorRole(colorRole) {
@@ -1015,7 +1170,7 @@ function getThemeColorDefaultByRole(colorRole) {
         : defaultSettings.themeAccentColor;
 }
 
-function syncLiveThemeColorProperties(colorRole, color) {
+function syncLiveThemeColorProperties(colorRole, color, options = {}) {
     const settings = getExtensionSettings();
     if (settings.theme === 'default') {
         return;
@@ -1040,7 +1195,9 @@ function syncLiveThemeColorProperties(colorRole, color) {
 
     const resolvedMode = resolveThemeMode(nextSettings.themeMode);
     const themeState = buildThemeRuntimeState(nextSettings, resolvedMode);
-    persistStartupThemeState(themeState);
+    if (options.persistStartupState !== false) {
+        persistStartupThemeState(themeState);
+    }
     syncNativeSystemBarsFromThemeState(themeState);
 }
 
@@ -1057,7 +1214,7 @@ function createColorChannelControl(colorRole, channel, label, value) {
     input.classList.add('sillydroid-host-color-channel');
     input.type = 'range';
     input.min = '0';
-    input.max = channel === 'h' ? '360' : '100';
+    input.max = channel === 'h' ? '359' : '100';
     input.step = '1';
     input.value = String(value);
     input.dataset.sillydroidColorRole = colorRole;
@@ -1560,10 +1717,11 @@ function syncThemeColorControls() {
     syncThemeColorSwatches();
 }
 
-function syncThemeColorControlByRole(colorRole, color) {
+function syncThemeColorControlByRole(colorRole, color, options = {}) {
     const normalizedRole = normalizeThemeColorRole(colorRole);
     const normalizedColor = normalizeThemeColor(color, getThemeColorDefaultByRole(normalizedRole));
-    syncLiveThemeColorProperties(normalizedRole, normalizedColor);
+    syncLiveThemeColorProperties(normalizedRole, normalizedColor, options);
+    const shouldSyncChannels = options.syncChannels !== false;
 
     const colorControls = document.querySelectorAll(`.sillydroid-host-color-control[data-sillydroid-color-role="${normalizedRole}"]`);
     const colorPanels = document.querySelectorAll(`.sillydroid-host-color-panel[data-sillydroid-color-role="${normalizedRole}"]`);
@@ -1614,7 +1772,13 @@ function syncThemeColorControlByRole(colorRole, color) {
         }
     });
 
-    syncThemeColorChannelControls(normalizedRole, normalizedColor);
+    if (shouldSyncChannels) {
+        syncThemeColorChannelControls(normalizedRole, normalizedColor);
+    } else {
+        syncThemeColorChannelValueTexts(normalizedRole);
+    }
+
+    syncThemeColorSwatches();
 }
 
 function syncThemeColorPicker(picker, color) {
@@ -1674,6 +1838,26 @@ function syncThemeColorChannelControls(colorRole, color) {
     });
 }
 
+function syncThemeColorChannelValueTexts(colorRole) {
+    const panel = getThemeColorPanel(colorRole) || getThemeColorControl(colorRole)?.querySelector('.sillydroid-host-color-panel');
+    if (!(panel instanceof HTMLElement)) {
+        return;
+    }
+
+    panel.querySelectorAll('.sillydroid-host-color-channel').forEach(input => {
+        if (!(input instanceof HTMLInputElement)) {
+            return;
+        }
+
+        const channel = input.dataset.sillydroidColorChannel;
+        const normalizedValue = Number.parseInt(input.value, 10) || 0;
+        const valueText = input.closest('.sillydroid-host-color-channel-row')?.querySelector('.sillydroid-host-color-channel-value');
+        if (valueText instanceof HTMLElement) {
+            valueText.textContent = formatHslChannelValue(channel, normalizedValue);
+        }
+    });
+}
+
 function readThemeColorFromChannels(colorRole) {
     const panel = getThemeColorPanel(colorRole) || getThemeColorControl(colorRole)?.querySelector('.sillydroid-host-color-panel');
     if (!(panel instanceof HTMLElement)) {
@@ -1696,6 +1880,19 @@ function readThemeColorFromChannels(colorRole) {
     });
 
     return hslToHex(values);
+}
+
+function commitThemeColorChannelInput(input) {
+    if (!(input instanceof HTMLInputElement)) {
+        return;
+    }
+
+    const colorRole = input.dataset.sillydroidColorRole;
+    const color = readThemeColorFromChannels(colorRole);
+    if (color) {
+        // HSL 滑杆拖动过程中不能从 HEX 反算整组通道；白/灰色会丢失 hue/saturation，导致其它滑杆跳回 0。
+        setThemeColorByRole(colorRole, color, { syncChannels: false });
+    }
 }
 
 function closeThemeColorPanels(exceptPanel = null) {
@@ -1741,15 +1938,9 @@ function promoteThemeColorPanel(panel) {
     }
 
     panel.dataset.sillydroidOriginalParentId = originalParent.id;
-    const control = getThemeColorControl(panel.dataset.sillydroidColorRole);
-    const layer = control?.closest('#extensionsMenu, #extensions_settings, #extensions_settings2') || document.body;
-    if (layer instanceof HTMLElement && !layer.id) {
-        layer.id = `sillydroid_host_color_panel_layer_${panel.dataset.sillydroidColorRole || 'unknown'}`;
-    }
-
-    if (layer instanceof HTMLElement && panel.parentElement !== layer) {
-        // 浮层放到扩展菜单容器顶层而不是 body，既保留 viewport 定位，也不会被酒馆判定为点到扩展管理外部。
-        layer.appendChild(panel);
+    if (panel.parentElement !== document.body) {
+        // 色板按 viewport 定位，必须提升到 body；留在抽屉滚动容器内会叠加父级滚动/固定定位偏移。
+        document.body.appendChild(panel);
     }
 }
 
@@ -2075,7 +2266,26 @@ function bindSettingsPanelEvents() {
             const colorRole = input.dataset.sillydroidColorRole;
             const color = readThemeColorFromChannels(colorRole);
             if (color) {
-                setThemeColorByRole(colorRole, color);
+                // 拖动时实时更新主题变量和系统栏，但不写设置；松手 change 再持久化，避免 WebView 连续重绘/保存造成闪烁。
+                setThemeColorByRole(colorRole, color, {
+                    persist: false,
+                    persistStartupState: false,
+                    syncChannels: false,
+                });
+            }
+        });
+        input.addEventListener('change', () => {
+            commitThemeColorChannelInput(input);
+        });
+        input.addEventListener('pointerup', () => {
+            commitThemeColorChannelInput(input);
+        });
+        input.addEventListener('touchend', () => {
+            commitThemeColorChannelInput(input);
+        });
+        input.addEventListener('keyup', event => {
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'Home' || event.key === 'End') {
+                commitThemeColorChannelInput(input);
             }
         });
     });

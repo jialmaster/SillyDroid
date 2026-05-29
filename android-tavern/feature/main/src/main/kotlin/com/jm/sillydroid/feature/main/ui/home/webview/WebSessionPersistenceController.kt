@@ -261,8 +261,8 @@ class WebSessionPersistenceController(
                 const primary = sillydroidValidColor(sillydroidStartupTheme.primary, '#6f8fbf');
                 const secondary = sillydroidValidColor(sillydroidStartupTheme.secondary, '#8fb8a7');
                 const startupSystemBars = sillydroidStartupTheme.systemBarColors || {};
-                const statusBarColor = sillydroidValidColor(startupSystemBars.statusBarColor, resolvedMode === 'light' ? '#eef5ff' : '#10131c');
-                const navigationBarColor = sillydroidValidColor(startupSystemBars.navigationBarColor, resolvedMode === 'light' ? '#fff8ea' : '#10131c');
+                const statusBarColor = sillydroidValidColor(startupSystemBars.statusBarColor, resolvedMode === 'light' ? '#e9eef6' : '#141a23');
+                const navigationBarColor = sillydroidValidColor(startupSystemBars.navigationBarColor, resolvedMode === 'light' ? '#f0f6f5' : '#111616');
 
                 document.documentElement.dataset.sillydroidStartupTheme = 'glass';
                 document.documentElement.dataset.sillydroidStartupThemeResolvedMode = resolvedMode;
