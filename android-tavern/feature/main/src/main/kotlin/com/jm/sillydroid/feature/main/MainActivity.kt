@@ -1,12 +1,14 @@
 package com.jm.sillydroid.feature.main
 
 import android.app.ActivityManager
+import android.content.res.Configuration
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.webkit.WebView
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.annotation.ColorInt
 import androidx.activity.OnBackPressedCallback
@@ -18,6 +20,7 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.core.ui.window.SystemBarAppearanceController
 import com.jm.sillydroid.domain.app.SillyDroidAppGraph
 import com.jm.sillydroid.domain.app.SillyDroidAppGraphProvider
@@ -30,6 +33,7 @@ import com.jm.sillydroid.feature.main.ui.home.floatinglogs.FloatingLogsHost
 import com.jm.sillydroid.feature.main.ui.home.io.HostIoController
 import com.jm.sillydroid.feature.main.ui.home.notification.AndroidSystemNotificationBridge
 import com.jm.sillydroid.feature.main.ui.home.system.SystemBarInsetsController
+import com.jm.sillydroid.feature.main.ui.home.system.resolveMainHostDisplayMode
 import com.jm.sillydroid.feature.main.ui.home.webview.AndroidHostBridge
 import com.jm.sillydroid.feature.main.ui.home.webview.HostDiagnosticSink
 import com.jm.sillydroid.feature.main.ui.home.webview.TavernWebViewHost
@@ -79,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        allowMainContentIntoDisplayCutout()
         setContentView(R.layout.activity_main)
         contentRoot = findViewById(R.id.contentRoot)
         statusBarBackground = findViewById(R.id.statusBarBackground)
@@ -156,7 +161,7 @@ class MainActivity : AppCompatActivity() {
             statusBarBackground = statusBarBackground,
             navigationBarBackground = navigationBarBackground,
             homeViewModel = homeViewModel,
-            displayModeProvider = { hostConfigStore.hostDisplayMode },
+            displayModeProvider = { effectiveMainDisplayMode() },
             onImeChanged = { visible -> webViewHost.onImeVisibilityChanged(visible) },
             onContentBoundsChanged = { floatingLogsHost.onContentBoundsChanged() }
         )
@@ -350,7 +355,7 @@ class MainActivity : AppCompatActivity() {
         navigationBarBackground.setBackgroundColor(navigationBarColor)
         SystemBarAppearanceController.applyForColors(
             activity = this,
-            mode = hostConfigStore.hostDisplayMode,
+            mode = effectiveMainDisplayMode(),
             statusBarColor = statusBarColor,
             navigationBarColor = navigationBarColor
         )
@@ -383,6 +388,27 @@ class MainActivity : AppCompatActivity() {
         }
 
         applyWebViewSurfaceSystemBars(webViewColor)
+    }
+
+    private fun effectiveMainDisplayMode(): HostDisplayMode {
+        // 主界面横屏复用“只隐藏顶部通知栏”的既有沉浸语义，让 WebView 默认贴边显示。
+        return resolveMainHostDisplayMode(
+            configuredMode = hostConfigStore.hostDisplayMode,
+            isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        )
+    }
+
+    private fun allowMainContentIntoDisplayCutout() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            return
+        }
+
+        window.attributes = window.attributes.also { attributes ->
+            // 小米等挖孔屏横屏时，cutout 默认安全区会把 WebView 从左侧挤出一块空白；
+            // 主界面已经自行处理系统栏 inset，因此这里允许内容进入短边 cutout 区域。
+            attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
     }
 
     private fun buildAndroidHostVersionInfoJson(): String {

@@ -184,6 +184,7 @@ def build_ready_state(release, metadata, apk_asset):
             "url": assert_string(release.get("html_url"), "release.html_url"),
             "publishedAt": assert_string(release.get("published_at") or release.get("created_at"), "release.published_at"),
             "isPrerelease": release.get("prerelease") is True,
+            "notesMarkdown": assert_string(release.get("body"), "release.body"),
             "buildType": "release",
             "versionName": assert_string(metadata.get("version_name"), "metadata.version_name"),
             "hostVersion": assert_string(metadata.get("host_version"), "metadata.host_version"),

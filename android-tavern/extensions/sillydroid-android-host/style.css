@@ -24,6 +24,8 @@
     --sillydroid-host-switch-width: calc(var(--mainFontSize) * 1.9);
     --sillydroid-host-switch-height: calc(var(--mainFontSize) * 1.05);
     --sillydroid-host-switch-thumb: calc(var(--mainFontSize) * 0.75);
+    --sillydroid-host-switch-thumb-offset: calc((var(--sillydroid-host-switch-height) - var(--sillydroid-host-switch-thumb)) / 2);
+    --sillydroid-host-switch-thumb-travel: calc(var(--sillydroid-host-switch-width) - var(--sillydroid-host-switch-thumb) - (var(--sillydroid-host-switch-thumb-offset) * 2));
     --sillydroid-host-transition: 0.18s ease;
 }
 
@@ -45,8 +47,10 @@
 
 .sillydroid-host-section-title {
     padding: 0 var(--sillydroid-host-space-md);
+    margin-inline-start: var(--sillydroid-host-space-sm);
     font-size: calc(var(--mainFontSize) * 0.8);
     font-weight: 700;
+    line-height: 1.2;
     color: var(--SmartThemeBodyColor);
 }
 
@@ -107,6 +111,9 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--sillydroid-host-space-sm);
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
 }
 
 .sillydroid-host-switch input {
@@ -119,6 +126,9 @@
     width: var(--sillydroid-host-switch-width);
     height: var(--sillydroid-host-switch-height);
     flex: 0 0 auto;
+    align-self: center;
+    position: relative;
+    display: inline-block;
     border: 1px solid var(--sillydroid-host-border);
     border-radius: 999px;
     background: transparent;
@@ -128,12 +138,16 @@
 
 .sillydroid-host-switch-track::after {
     content: "";
-    display: block;
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: var(--sillydroid-host-switch-thumb-offset);
     width: var(--sillydroid-host-switch-thumb);
     height: var(--sillydroid-host-switch-thumb);
-    margin: calc(var(--mainFontSize) * 0.11);
+    margin: 0;
     border-radius: 50%;
     background: var(--sillydroid-host-switch-primary);
+    /* thumb 改为沿轨道中线绝对定位，避免边框与缩放叠加后在移动端视觉上偏下。 */
+    transform: translateY(-50%);
     transition: transform var(--sillydroid-host-transition), background-color var(--sillydroid-host-transition);
 }
 
@@ -145,7 +159,7 @@
 
 .sillydroid-host-switch input:checked + .sillydroid-host-switch-track::after {
     background: var(--sillydroid-host-switch-primary);
-    transform: translateX(calc(var(--mainFontSize) * 0.82));
+    transform: translate(var(--sillydroid-host-switch-thumb-travel), -50%);
 }
 
 .sillydroid-host-select {
@@ -293,12 +307,36 @@
 
 .sillydroid-host-color-channel-row {
     display: grid;
-    grid-template-columns: calc(var(--mainFontSize) * 0.8) minmax(0, 1fr) calc(var(--mainFontSize) * 1.8);
+    grid-template-columns: calc(var(--mainFontSize) * 2.3) minmax(0, 1fr) calc(var(--mainFontSize) * 2.2);
     align-items: center;
     gap: var(--sillydroid-host-space-sm);
     min-width: 0;
     color: color-mix(in srgb, var(--SmartThemeBodyColor) 82%, transparent);
     font-size: calc(var(--mainFontSize) * 0.72);
+}
+
+.sillydroid-host-color-channel-row[data-sillydroid-color-channel="h"] {
+    --sillydroid-host-color-channel-start: #ff3b30;
+    --sillydroid-host-color-channel-end: #ff3b30;
+    --sillydroid-host-color-channel-thumb: #ffffff;
+    --sillydroid-host-color-channel-track:
+        linear-gradient(90deg, #ff3b30 0%, #ffcc00 16.66%, #34c759 33.33%, #30d5c8 50%, #0a84ff 66.66%, #bf5af2 83.33%, #ff3b30 100%);
+}
+
+.sillydroid-host-color-channel-row[data-sillydroid-color-channel="s"] {
+    --sillydroid-host-color-channel-start: #808080;
+    --sillydroid-host-color-channel-end: #ff3b30;
+    --sillydroid-host-color-channel-thumb: #ff3b30;
+    --sillydroid-host-color-channel-track:
+        linear-gradient(90deg, var(--sillydroid-host-color-channel-start), var(--sillydroid-host-color-channel-end));
+}
+
+.sillydroid-host-color-channel-row[data-sillydroid-color-channel="l"] {
+    --sillydroid-host-color-channel-start: #000000;
+    --sillydroid-host-color-channel-end: #ffffff;
+    --sillydroid-host-color-channel-thumb: #f2f2f2;
+    --sillydroid-host-color-channel-track:
+        linear-gradient(90deg, #000000, #808080, #ffffff);
 }
 
 .sillydroid-host-color-channel-label {
@@ -309,8 +347,17 @@
 .sillydroid-host-color-channel {
     width: 100%;
     min-width: 0;
-    accent-color: var(--sillydroid-host-primary);
+    accent-color: var(--sillydroid-host-color-channel-thumb);
     cursor: pointer;
+}
+
+.sillydroid-host-color-channel::-webkit-slider-runnable-track {
+    /* 颜色通道滑杆使用固定 HSL 语义轨道，不随当前主题色或正在编辑的色值变色。 */
+    background: var(--sillydroid-host-color-channel-track) !important;
+}
+
+.sillydroid-host-color-channel::-webkit-slider-thumb {
+    background: var(--sillydroid-host-color-channel-thumb) !important;
 }
 
 .sillydroid-host-color-channel-value {

@@ -48,49 +48,9 @@ class AppUpdateRepositoryImpl(
     }
 
     override suspend fun fetchLatestAvailableRelease(config: AppUpdateRequestConfig): AvailableAppRelease? {
-        // The public site JSON is the only repo-owned latest pointer.
-        // Device-side update checks must consume it directly so release delete /
-        // edit events stop depending on GitHub `latest` redirects or API scans.
-        val latestReleaseState = fetchJsonObject(config.latestReleaseMetadataUrl)
-        val statusCode = latestReleaseState.optJSONObject("status")?.optString("code")?.trim().orEmpty()
-        if (!statusCode.equals("ready", ignoreCase = true)) {
-            return null
-        }
-
-        val release = latestReleaseState.optJSONObject("release") ?: return null
-        if (!release.optString("buildType").trim().equals(config.buildType, ignoreCase = true)) {
-            return null
-        }
-
-        val releaseTag = release.optString("tag").trim()
-        val releaseTitle = release.optString("title").trim().ifBlank { releaseTag }
-        val versionName = release.optString("versionName").trim()
-        val hostVersion = release.optString("hostVersion").trim()
-        val apk = release.optJSONObject("apk") ?: return null
-        val apkAssetName = apk.optString("assetName").trim()
-        val apkDownloadUrl = apk.optString("downloadUrl").trim()
-        val apkSha256 = apk.optString("sha256").trim().lowercase(Locale.US)
-        if (
-            releaseTag.isBlank() ||
-            releaseTitle.isBlank() ||
-            versionName.isBlank() ||
-            hostVersion.isBlank() ||
-            apkAssetName.isBlank() ||
-            apkDownloadUrl.isBlank() ||
-            apkSha256.length != 64 ||
-            compareVersionNames(versionName, config.currentVersionName) <= 0
-        ) {
-            return null
-        }
-
-        return AvailableAppRelease(
-            releaseTag = releaseTag,
-            releaseTitle = releaseTitle,
-            versionName = versionName,
-            hostVersion = hostVersion,
-            apkAssetName = apkAssetName,
-            apkDownloadUrl = apkDownloadUrl,
-            apkSha256 = apkSha256
+        return SiteLatestReleaseParser.parseLatestAvailableRelease(
+            latestReleaseState = fetchJsonObject(config.latestReleaseMetadataUrl),
+            config = config
         )
     }
 
@@ -118,6 +78,7 @@ class AppUpdateRepositoryImpl(
             releaseTitle = release.releaseTitle,
             versionName = release.versionName,
             hostVersion = release.hostVersion,
+            releaseNotesMarkdown = release.releaseNotesMarkdown,
             apkAssetName = release.apkAssetName,
             apkDownloadUrl = release.apkDownloadUrl,
             apkSha256 = release.apkSha256,
@@ -245,30 +206,6 @@ class AppUpdateRepositoryImpl(
         } finally {
             connection.disconnect()
         }
-    }
-
-    private fun compareVersionNames(left: String, right: String): Int {
-        val leftTokens = left.split(Regex("[^0-9A-Za-z]+"))
-            .filter { token -> token.isNotBlank() }
-        val rightTokens = right.split(Regex("[^0-9A-Za-z]+"))
-            .filter { token -> token.isNotBlank() }
-        val maxSize = maxOf(leftTokens.size, rightTokens.size)
-        for (index in 0 until maxSize) {
-            val leftToken = leftTokens.getOrElse(index) { "0" }
-            val rightToken = rightTokens.getOrElse(index) { "0" }
-            val leftNumber = leftToken.toIntOrNull()
-            val rightNumber = rightToken.toIntOrNull()
-            val comparison = when {
-                leftNumber != null && rightNumber != null -> leftNumber.compareTo(rightNumber)
-                leftNumber != null -> 1
-                rightNumber != null -> -1
-                else -> leftToken.compareTo(rightToken, ignoreCase = true)
-            }
-            if (comparison != 0) {
-                return comparison
-            }
-        }
-        return 0
     }
 
     private companion object {

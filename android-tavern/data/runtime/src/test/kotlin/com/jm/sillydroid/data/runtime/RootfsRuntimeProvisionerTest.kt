@@ -12,52 +12,38 @@ import org.junit.Test
 class RootfsRuntimeProvisionerTest {
 
     @Test
-    fun `ensure retries with no-seccomp when default proot attempt crashes with signal 11`() {
-        val rootDirectory = createTempTestDirectory(prefix = "rootfs-runtime-retry")
+    fun `ensure runs termux host runtime precheck once`() {
+        val rootDirectory = createTempTestDirectory(prefix = "rootfs-runtime-termux-host")
         try {
             val paths = createRootfsTestHostPaths(rootDirectory)
-            val logFileName = "rootfs-runtime.log"
-            val launcher = RecordingLinuxRuntimeLauncher(paths) { request, index ->
-                val logFile = File(paths.logsDir, request.logFileName)
-                if (index == 0) {
-                    logFile.appendText("proot info: vpid 1: terminated with signal 11\n")
-                    FakeProcess(exitCode = 1)
-                } else {
-                    logFile.appendText("Linux runtime already preloaded.\n")
-                    FakeProcess(exitCode = 0)
-                }
+            File(paths.rootfsDir, "rootfs-manifest.json").writeText("""{"runtimeMode":"termux-host"}""")
+            val launcher = RecordingLinuxRuntimeLauncher(paths) { request, _ ->
+                File(paths.logsDir, request.logFileName).appendText("Termux host runtime already preloaded.\n")
+                FakeProcess(exitCode = 0)
             }
             val startupLines = mutableListOf<String>()
 
             val result = RootfsRuntimeProvisioner(launcher, paths).ensure(
-                logFileName = logFileName,
+                logFileName = "rootfs-runtime.log",
                 onAttemptLog = startupLines::add
             )
 
-            assertEquals(ProotLaunchMode.NoSeccomp, result.mode)
-            assertEquals(2, launcher.requests.size)
-            assertTrue(launcher.requests[0].environment.isEmpty())
-            assertEquals("1", launcher.requests[1].environment["PROOT_NO_SECCOMP"])
-            assertTrue(startupLines.any { line -> line.contains("prootMode=default") && line.contains("signal 11") })
-            assertTrue(startupLines.any { line -> line.contains("retrying with PROOT_NO_SECCOMP=1") })
-            assertTrue(startupLines.any { line -> line.contains("prootMode=no-seccomp") && line.contains("exitCode=0") })
+            assertEquals("termux-host", result.runtimeMode)
+            assertEquals(1, launcher.requests.size)
+            assertTrue(launcher.requests.single().environment.isEmpty())
+            assertTrue(startupLines.any { line -> line.contains("runtimeMode=termux-host") && line.contains("exitCode=0") })
         } finally {
             rootDirectory.deleteRecursively()
         }
     }
 
     @Test
-    fun `ensure reports both attempts when no-seccomp retry also fails`() {
+    fun `ensure reports termux host precheck failure without compatibility retry`() {
         val rootDirectory = createTempTestDirectory(prefix = "rootfs-runtime-failure")
         try {
             val paths = createRootfsTestHostPaths(rootDirectory)
-            val launcher = RecordingLinuxRuntimeLauncher(paths) { request, index ->
-                val logFile = File(paths.logsDir, request.logFileName)
-                if (index == 0) {
-                    logFile.appendText("proot info: vpid 1: terminated with signal 11\n")
-                } else {
-                    logFile.appendText("ptrace(TRACEME): Operation not permitted\n")
-                }
+            val launcher = RecordingLinuxRuntimeLauncher(paths) { request, _ ->
+                File(paths.logsDir, request.logFileName).appendText("CANNOT LINK EXECUTABLE libtermux-node.so\n")
                 FakeProcess(exitCode = 1)
             }
 
@@ -66,10 +52,9 @@ class RootfsRuntimeProvisionerTest {
             }.exceptionOrNull()
 
             val message = requireNotNull(exception).message.orEmpty()
-            assertTrue(message.contains("prootMode=default"))
-            assertTrue(message.contains("signal 11"))
-            assertTrue(message.contains("prootMode=no-seccomp"))
-            assertTrue(message.contains("Operation not permitted"))
+            assertEquals(1, launcher.requests.size)
+            assertTrue(message.contains("runtimeMode=termux-host"))
+            assertTrue(message.contains("CANNOT LINK EXECUTABLE"))
         } finally {
             rootDirectory.deleteRecursively()
         }
@@ -122,9 +107,13 @@ private fun createRootfsTestHostPaths(rootDirectory: File): HostPaths {
     val dataRoot = File(rootDirectory, "data").apply { mkdirs() }
     val serverDataDir = File(dataRoot, "server").apply { mkdirs() }
     val logsDir = File(rootDirectory, "logs").apply { mkdirs() }
-    val hostProotBinary = File(hostLibDir, "libproot.so").apply { writeText("proot") }
-    val hostProotLoader = File(hostLibDir, "libproot-loader.so").apply { writeText("loader") }
-    val hostProotLoader32 = File(hostLibDir, "libproot-loader32.so")
+    val hostTermuxNodeBinary = File(hostLibDir, "libtermux-node.so").apply { writeText("node") }
+    val hostTermuxGitBinary = File(hostLibDir, "libtermux-git.so").apply { writeText("git") }
+    val hostTermuxGitRemoteHttpBinary = File(hostLibDir, "libtermux-git-remote-http.so").apply {
+        writeText("git-remote-http")
+    }
+    val hostTermuxShellBinary = File(hostLibDir, "libtermux-sh.so").apply { writeText("shell") }
+    val hostTermuxBashBinary = File(hostLibDir, "libtermux-bash.so").apply { writeText("bash") }
 
     return HostPaths(
         bootstrapRoot = bootstrapRoot,
@@ -134,9 +123,11 @@ private fun createRootfsTestHostPaths(rootDirectory: File): HostPaths {
         hostPrefixDir = hostPrefixDir,
         hostLibDir = hostLibDir,
         hostTmpDir = hostTmpDir,
-        hostProotBinary = hostProotBinary,
-        hostProotLoader = hostProotLoader,
-        hostProotLoader32 = hostProotLoader32,
+        hostTermuxNodeBinary = hostTermuxNodeBinary,
+        hostTermuxGitBinary = hostTermuxGitBinary,
+        hostTermuxGitRemoteHttpBinary = hostTermuxGitRemoteHttpBinary,
+        hostTermuxShellBinary = hostTermuxShellBinary,
+        hostTermuxBashBinary = hostTermuxBashBinary,
         dataRoot = dataRoot,
         serverDataDir = serverDataDir,
         logsDir = logsDir

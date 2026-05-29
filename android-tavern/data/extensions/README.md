@@ -11,7 +11,7 @@
 - `ExtensionsLocalDataSource`
 - `RemoteManifestDataSource`
 - `ExtensionCommandExecutor`
-- `ProotExtensionCommandRunner`
+- `HostExtensionCommandRunner`
 
 ## 上游依赖与下游被谁使用
 
@@ -22,7 +22,7 @@
 
 - 本地扩展目录扫描与库存构建。
 - 默认仓库地址、仓库规范化、GitHub 可达性检查。
-- 扩展安装、重装、删除、坏目录清理。
+- 扩展安装、重装、删除、坏目录清理；具体运行时启动方式由 `data/runtime` 的 host runner 负责。
 
 ## 不该放进来的内容
 

@@ -153,34 +153,58 @@
             android:orientation="horizontal"
             android:padding="@dimen/sillydroid_space_3xl">
 
-            <FrameLayout
+            <LinearLayout
                 android:id="@+id/bootstrapUpdateButtonContainer"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="@dimen/sillydroid_space_lg"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
                 android:visibility="gone">
 
-                <ImageButton
-                    android:id="@+id/bootstrapUpdateButton"
-                    android:layout_width="@dimen/sillydroid_overlay_icon_button_size"
-                    android:layout_height="@dimen/sillydroid_overlay_icon_button_size"
+                <!-- 启动页发现可用 App 更新时，在设置入口左侧直接露出提示文案和更新按钮。 -->
+                <TextView
+                    android:id="@+id/bootstrapUpdateHint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/sillydroid_space_sm"
                     android:background="@drawable/bg_bootstrap_overlay_icon_button"
-                    android:contentDescription="@string/bootstrap_update_open"
-                    android:padding="@dimen/sillydroid_overlay_icon_button_padding"
-                    android:src="@android:drawable/stat_sys_download_done"
-                    android:tint="@color/bootstrap_overlay_icon_tint" />
+                    android:includeFontPadding="false"
+                    android:paddingStart="@dimen/sillydroid_space_lg"
+                    android:paddingTop="@dimen/sillydroid_space_sm"
+                    android:paddingEnd="@dimen/sillydroid_space_lg"
+                    android:paddingBottom="@dimen/sillydroid_space_sm"
+                    android:text="@string/bootstrap_update_available_hint"
+                    android:textColor="@color/bootstrap_overlay_body"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
 
-                <View
-                    android:id="@+id/bootstrapUpdateBadge"
-                    android:layout_width="@dimen/sillydroid_bootstrap_badge_size"
-                    android:layout_height="@dimen/sillydroid_bootstrap_badge_size"
-                    android:layout_gravity="top|end"
-                    android:layout_marginTop="@dimen/sillydroid_space_lg"
-                    android:layout_marginEnd="@dimen/sillydroid_space_lg"
-                    android:background="@drawable/bg_bootstrap_update_badge"
-                    android:contentDescription="@string/bootstrap_update_available_badge"
-                    android:visibility="gone" />
-            </FrameLayout>
+                <FrameLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content">
+
+                    <ImageButton
+                        android:id="@+id/bootstrapUpdateButton"
+                        android:layout_width="@dimen/sillydroid_overlay_icon_button_size"
+                        android:layout_height="@dimen/sillydroid_overlay_icon_button_size"
+                        android:background="@drawable/bg_bootstrap_overlay_icon_button"
+                        android:contentDescription="@string/bootstrap_update_open"
+                        android:padding="@dimen/sillydroid_overlay_icon_button_padding"
+                        android:src="@android:drawable/stat_sys_download_done"
+                        android:tint="@color/bootstrap_overlay_icon_tint" />
+
+                    <View
+                        android:id="@+id/bootstrapUpdateBadge"
+                        android:layout_width="@dimen/sillydroid_bootstrap_badge_size"
+                        android:layout_height="@dimen/sillydroid_bootstrap_badge_size"
+                        android:layout_gravity="top|end"
+                        android:layout_marginTop="@dimen/sillydroid_space_lg"
+                        android:layout_marginEnd="@dimen/sillydroid_space_lg"
+                        android:background="@drawable/bg_bootstrap_update_badge"
+                        android:contentDescription="@string/bootstrap_update_available_badge"
+                        android:visibility="gone" />
+                </FrameLayout>
+            </LinearLayout>
 
             <ImageButton
                 android:id="@+id/bootstrapSettingsButton"

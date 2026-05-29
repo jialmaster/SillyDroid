@@ -247,7 +247,7 @@ android {
         buildConfigField(
             "String",
             "SILLYDROID_LATEST_RELEASE_METADATA_URL",
-            quoteBuildConfigString("https://jialmaster.github.io/SillyDroid/api/releases/latest.json")
+            quoteBuildConfigString("https://sd.jlmaster.online/api/releases/latest.json")
         )
     }
 

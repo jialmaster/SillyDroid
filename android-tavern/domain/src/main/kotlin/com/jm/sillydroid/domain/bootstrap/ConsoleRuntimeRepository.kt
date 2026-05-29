@@ -14,7 +14,7 @@ interface ConsoleRuntimeRepository {
 
 /**
  * 终端库只关心“起哪个进程、带哪些参数和环境变量”，因此把 console 启动规格收敛成纯数据，
- * 避免设置页直接拼接 rootfs/proot 细节并在多个位置散落。
+ * 避免设置页直接拼接 Termux host runtime 细节并在多个位置散落。
  */
 data class ConsoleShellLaunchSpec(
     val shellPath: String,

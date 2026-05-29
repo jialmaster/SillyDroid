@@ -13,6 +13,7 @@
     <string name="bootstrap_settings_about_update_status_downloading">正在下载更新：%1$s</string>
     <string name="bootstrap_settings_about_update_status_ready">更新已下载完成：%1$s</string>
     <string name="bootstrap_settings_about_update_status_failed">检查更新失败：%1$s</string>
+    <string name="bootstrap_settings_about_update_notes">更新说明：\n%1$s</string>
     <string name="bootstrap_settings_about_update_action_check">检查更新</string>
     <string name="bootstrap_settings_about_update_action_download">下载更新</string>
     <string name="bootstrap_settings_about_update_action_install">安装更新</string>

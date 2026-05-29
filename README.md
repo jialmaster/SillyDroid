@@ -95,7 +95,7 @@ curl -fsSL https://raw.githubusercontent.com/jialmaster/SillyDroid/master/script
 4. `scripts/build-tavern-android-runtime-image.sh`
    生成 Tavern 专用 runtime image 及 metadata。
 5. `scripts/sync-android-rootfs.sh`
-   生成离线 Linux rootfs、proot 及相关运行时资产。
+   生成离线 Linux rootfs、Termux host native 入口及相关运行时资产。
 6. `scripts/build-tavern-dependency-packs.sh`
    单独构建 `node`、`git` 等 dependency pack zip。
 7. `scripts/sync-tavern-android-bootstrap.sh`

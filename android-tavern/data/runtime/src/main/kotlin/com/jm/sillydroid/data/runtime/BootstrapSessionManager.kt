@@ -500,14 +500,13 @@ class BootstrapSessionManager(
                 statusMessage = "正在启动 Tavern 进程。",
                 statusDetails = "正在启动本地 Node 服务进程。"
             )
-            appendStartupLog("Starting Tavern server with prootMode=${rootfsRuntime.mode.displayName}.")
+            appendStartupLog("Starting Tavern server with runtimeMode=${rootfsRuntime.runtimeMode}.")
             stopManagedProcesses()
             serverProcess = ServerController(
                 launcher = launcher,
                 paths = paths,
                 servicePort = servicePort,
-                logFileName = runtimeLogs.currentServerLogFileName(),
-                prootMode = rootfsRuntime.mode
+                logFileName = runtimeLogs.currentServerLogFileName()
             ).start()
             completeStep(
                 stepId = BootstrapStepId.START_SERVER_PROCESS,

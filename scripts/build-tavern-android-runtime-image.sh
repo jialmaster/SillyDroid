@@ -148,13 +148,15 @@ stage_runtime_image() {
     sillydroid_assert_path_exists "$tavern_bootstrap_root/scripts" "缺少 Tavern bootstrap scripts：$tavern_bootstrap_root/scripts"
     sillydroid_assert_path_exists "$tavern_rootfs_root/rootfs-fs.zip" "缺少 Tavern rootfs 归档：$tavern_rootfs_root/rootfs-fs.zip"
     sillydroid_assert_path_exists "$tavern_rootfs_root/rootfs-manifest.json" "缺少 Tavern rootfs manifest：$tavern_rootfs_root/rootfs-manifest.json"
-    sillydroid_assert_path_exists "$tavern_jni_lib_root/libproot.so" "缺少 Tavern libproot.so：$tavern_jni_lib_root/libproot.so"
-    sillydroid_assert_path_exists "$tavern_jni_lib_root/libtalloc_2.so" "缺少 Tavern libtalloc_2.so：$tavern_jni_lib_root/libtalloc_2.so"
+    sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-node.so" "缺少 Tavern Termux node 入口：$tavern_jni_lib_root/libtermux-node.so"
+    sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-git.so" "缺少 Tavern Termux git 入口：$tavern_jni_lib_root/libtermux-git.so"
+    sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-git-remote-http.so" "缺少 Tavern Termux git HTTPS helper 入口：$tavern_jni_lib_root/libtermux-git-remote-http.so"
+    sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-sh.so" "缺少 Tavern Termux shell 入口：$tavern_jni_lib_root/libtermux-sh.so"
 
     cp -R "$tavern_bootstrap_root/scripts" "$stage_root/assets/bootstrap/"
     cp -R "$tavern_rootfs_root" "$stage_root/assets/bootstrap/rootfs"
     shopt -s nullglob
-    for native_library_path in "$tavern_jni_lib_root"/libproot*.so "$tavern_jni_lib_root/libtalloc_2.so"; do
+    for native_library_path in "$tavern_jni_lib_root"/lib*.so*; do
         cp -f "$native_library_path" "$stage_root/jniLibs/arm64-v8a/"
     done
     shopt -u nullglob

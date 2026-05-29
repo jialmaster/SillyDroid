@@ -261,21 +261,41 @@ set -eu
 
 TAVERN_PORT="${TAVERN_PORT:?TAVERN_PORT is required}"
 TAVERN_DATA_ROOT="${TAVERN_DATA_ROOT:?TAVERN_DATA_ROOT is required}"
+ANDROID_SYSTEM_PATH="/system/bin:/system/xbin"
+SILLYDROID_HOST_COMMAND_PATH="${SILLYDROID_HOST_COMMAND_PATH:-}"
 
-cd /tavern/server
+# no-proot 启动时入口由 Android /system/bin/sh 执行，基础工具必须优先走系统目录；
+# Termux prefix 中的 ELF 只能通过外层注入的 native lib 入口执行，不能让 PATH 隐式命中。
+# termux-host 会传入只包含 nativeLibraryDir symlink 的命令目录，让 simple-git 等库继续按命令名调用 git。
+if [ -n "$SILLYDROID_HOST_COMMAND_PATH" ]; then
+    PATH="$SILLYDROID_HOST_COMMAND_PATH:$ANDROID_SYSTEM_PATH"
+else
+    PATH="$ANDROID_SYSTEM_PATH"
+fi
+export PATH
+
+if [ -d /tavern/server ]; then
+    cd /tavern/server
+else
+    cd "$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+fi
 
 # 用户数据必须落到宿主持久目录，避免 APK 覆盖安装后把角色、聊天和配置一起替换掉。
 mkdir -p "$TAVERN_DATA_ROOT/config" "$TAVERN_DATA_ROOT/data" "$TAVERN_DATA_ROOT/plugins" "$TAVERN_DATA_ROOT/extensions"
 
+directory_has_child() {
+    find "$1" -mindepth 1 -maxdepth 1 -print 2>/dev/null | read first_child
+}
+
 # 如果上游底包自带默认插件，首次启动先复制到持久目录，再切到外置目录，避免更新后覆盖用户改动。
-if [ -d plugins ] && [ ! -L plugins ] && [ -z "$(find "$TAVERN_DATA_ROOT/plugins" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+if [ -d plugins ] && [ ! -L plugins ] && ! directory_has_child "$TAVERN_DATA_ROOT/plugins"; then
     cp -R plugins/. "$TAVERN_DATA_ROOT/plugins/"
 fi
 rm -rf plugins
 ln -sfn "$TAVERN_DATA_ROOT/plugins" plugins
 
 mkdir -p public/scripts/extensions
-if [ -d public/scripts/extensions/third-party ] && [ ! -L public/scripts/extensions/third-party ] && [ -z "$(find "$TAVERN_DATA_ROOT/extensions" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+if [ -d public/scripts/extensions/third-party ] && [ ! -L public/scripts/extensions/third-party ] && ! directory_has_child "$TAVERN_DATA_ROOT/extensions"; then
     cp -R public/scripts/extensions/third-party/. "$TAVERN_DATA_ROOT/extensions/"
 fi
 rm -rf public/scripts/extensions/third-party

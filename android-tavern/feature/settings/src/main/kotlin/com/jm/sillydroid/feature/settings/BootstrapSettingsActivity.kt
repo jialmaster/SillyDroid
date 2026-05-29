@@ -3,6 +3,7 @@ package com.jm.sillydroid.feature.settings
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.view.MenuItem
 import android.view.View
 import android.widget.ImageButton
@@ -64,6 +65,9 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         private const val resultBrowserDataClearMaskKey = SettingsNavigationContract.resultBrowserDataClearMaskKey
         private const val openExtensionsTabKey = SettingsNavigationContract.openExtensionsTabKey
         private const val openDefaultExtensionsInstallerKey = SettingsNavigationContract.openDefaultExtensionsInstallerKey
+        private const val tavernDocumentsRootDocumentId = "root"
+        private const val mtManagerPackageName = "bin.mt.plus"
+        private const val showAdvancedDocumentsExtra = "android.content.extra.SHOW_ADVANCED"
 
         fun createIntent(
             activity: Activity,
@@ -153,6 +157,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var restoreDefaultsButton: ImageButton
     private lateinit var importButton: MaterialButton
     private lateinit var exportButton: MaterialButton
+    private lateinit var openTavernDirectoryButton: MaterialButton
+    private lateinit var openTavernDirectoryMtButton: MaterialButton
     private lateinit var clearDataButton: MaterialButton
     private lateinit var clearBrowserDataButton: MaterialButton
     private lateinit var saveStartButton: MaterialButton
@@ -245,6 +251,12 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         exportButton.setOnClickListener {
             val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
             exportArchiveLauncher.launch(getString(R.string.bootstrap_settings_export_name, timestamp))
+        }
+        openTavernDirectoryButton.setOnClickListener {
+            openTavernDirectory(preferMtManager = false)
+        }
+        openTavernDirectoryMtButton.setOnClickListener {
+            openTavernDirectory(preferMtManager = true)
         }
         clearDataButton.setOnClickListener {
             screenController.confirmClearData {
@@ -373,6 +385,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         restoreDefaultsButton = findViewById(R.id.bootstrapSettingsRestoreDefaultsButton)
         importButton = findViewById(R.id.bootstrapSettingsImportButton)
         exportButton = findViewById(R.id.bootstrapSettingsExportButton)
+        openTavernDirectoryButton = findViewById(R.id.bootstrapSettingsOpenTavernDirectoryButton)
+        openTavernDirectoryMtButton = findViewById(R.id.bootstrapSettingsOpenTavernDirectoryMtButton)
         clearDataButton = findViewById(R.id.bootstrapSettingsClearDataButton)
         clearBrowserDataButton = findViewById(R.id.bootstrapSettingsClearBrowserDataButton)
         saveStartButton = findViewById(R.id.bootstrapSettingsSaveButton)
@@ -406,6 +420,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             restoreDefaultsButton = restoreDefaultsButton,
             importButton = importButton,
             exportButton = exportButton,
+            openTavernDirectoryButton = openTavernDirectoryButton,
+            openTavernDirectoryMtButton = openTavernDirectoryMtButton,
             clearDataButton = clearDataButton,
             clearBrowserDataButton = clearBrowserDataButton,
             saveStartButton = saveStartButton,
@@ -608,6 +624,44 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         )
     }
 
+    private fun openTavernDirectory(preferMtManager: Boolean) {
+        val fallbackIntent = createTavernDirectoryIntent()
+
+        if (preferMtManager && startTavernDirectoryIntent(createTavernDirectoryIntent().setPackage(mtManagerPackageName))) {
+            return
+        }
+        if (preferMtManager) {
+            screenController.showMessage(getString(R.string.bootstrap_settings_open_tavern_directory_mt_missing))
+        }
+
+        if (!startTavernDirectoryIntent(fallbackIntent)) {
+            screenController.showMessage(getString(R.string.bootstrap_settings_open_tavern_directory_failed))
+        }
+    }
+
+    private fun createTavernDirectoryIntent(): Intent {
+        val treeUri = DocumentsContract.buildTreeDocumentUri(tavernDocumentsAuthority(), tavernDocumentsRootDocumentId)
+        return Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            // ACTION_OPEN_DOCUMENT_TREE 只能通过 EXTRA_INITIAL_URI 传目标；
+            // 把 provider uri 放进 data 会导致部分系统 DocumentsUI 无法解析该 Intent。
+            putExtra(DocumentsContract.EXTRA_INITIAL_URI, treeUri)
+            putExtra(showAdvancedDocumentsExtra, true)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
+        }
+    }
+
+    private fun startTavernDirectoryIntent(intent: Intent): Boolean {
+        return runCatching {
+            startActivity(intent)
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun tavernDocumentsAuthority(): String {
+        return "$packageName.tavern-data.documents"
+    }
+
     private fun applySettingsSurfaceSystemBars(mode: HostDisplayMode = hostConfigStore.hostDisplayMode) {
         // 设置页本身也属于宿主界面；这里按用户选择的显示模式统一处理系统栏显示状态，
         // 但背景继续跟随设置页 surface，避免切到设置页后出现和主界面无关的系统底色。
@@ -617,4 +671,5 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             surfaceColorAttr = MaterialR.attr.colorSurfaceContainerLowest
         )
     }
+
 }

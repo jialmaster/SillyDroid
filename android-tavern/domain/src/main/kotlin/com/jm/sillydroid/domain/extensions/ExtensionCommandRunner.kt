@@ -4,7 +4,6 @@ data class ExtensionCommandRequest(
     val requestName: String,
     val commandFileName: String,
     val commandContent: String,
-    val launchScriptContent: String,
     val environment: Map<String, String>
 )
 

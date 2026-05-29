@@ -32,7 +32,7 @@ class HostLogBundleInfoFormatterTest {
             rootfsManifestRawJson = """{"runtimeVersion":"1.0.0","baseFlavor":"termux","baseVersion":"stable-dash.0.5.12-2"}""",
             serverManifestRawJson = """{"tag":"1.18.0","nodeVersion":"22.14.0"}""",
             hostConfigSnapshot = sampleHostConfigSnapshot(),
-            rootfsVersion = "24.04+proot.5.4.0",
+            rootfsVersion = "1.0.0",
             serverPayloadVersion = "1.18.0+node.22.14.0"
         )
         val summary = HostLogBundleLogSummary(
@@ -49,7 +49,7 @@ class HostLogBundleInfoFormatterTest {
         assertTrue(bundleInfo.contains("deviceModel=Pixel 9"))
         assertTrue(bundleInfo.contains("webViewPackageName=com.google.android.webview"))
         assertTrue(bundleInfo.contains("webViewVersionName=136.0.7103.125"))
-        assertTrue(bundleInfo.contains("rootfsVersion=24.04+proot.5.4.0"))
+        assertTrue(bundleInfo.contains("rootfsVersion=1.0.0"))
         assertTrue(bundleInfo.contains("serverPayloadVersion=1.18.0+node.22.14.0"))
         assertTrue(bundleInfo.contains("rootfsManifestIncluded=true"))
         assertTrue(bundleInfo.contains("serverManifestIncluded=true"))
@@ -84,7 +84,7 @@ class HostLogBundleInfoFormatterTest {
             rootfsManifestRawJson = null,
             serverManifestRawJson = null,
             hostConfigSnapshot = sampleHostConfigSnapshot(),
-            rootfsVersion = "24.04+proot.5.4.0",
+            rootfsVersion = "1.0.0",
             serverPayloadVersion = "1.18.0+node.22.14.0"
         )
         val summary = HostLogBundleLogSummary(
@@ -126,7 +126,7 @@ class HostLogBundleInfoFormatterTest {
             rootfsManifestRawJson = """{"runtimeVersion":"1.0.0","baseFlavor":"termux","baseVersion":"stable-dash.0.5.12-2"}""",
             serverManifestRawJson = """{"tag":"1.18.0","nodeVersion":"22.14.0"}""",
             hostConfigSnapshot = sampleHostConfigSnapshot(),
-            rootfsVersion = "24.04+proot.5.4.0",
+            rootfsVersion = "1.0.0",
             serverPayloadVersion = "1.18.0+node.22.14.0"
         )
         val summary = HostLogBundleLogSummary(
@@ -141,7 +141,7 @@ class HostLogBundleInfoFormatterTest {
         assertTrue(bundleInfoJson.contains("\"versionName\": \"2.3.4+tavern.1.18.0\""))
         assertTrue(bundleInfoJson.contains("\"webView\": {"))
         assertTrue(bundleInfoJson.contains("\"versionName\": \"136.0.7103.125\""))
-        assertTrue(bundleInfoJson.contains("\"rootfsVersion\": \"24.04+proot.5.4.0\""))
+        assertTrue(bundleInfoJson.contains("\"rootfsVersion\": \"1.0.0\""))
         assertTrue(bundleInfoJson.contains("\"rootfsManifest\": {\"runtimeVersion\":\"1.0.0\",\"baseFlavor\":\"termux\",\"baseVersion\":\"stable-dash.0.5.12-2\"}"))
         assertTrue(bundleInfoJson.contains("\"serverManifest\": {\"tag\":\"1.18.0\",\"nodeVersion\":\"22.14.0\"}"))
         assertTrue(bundleInfoJson.contains("\"hostConfig\": {"))

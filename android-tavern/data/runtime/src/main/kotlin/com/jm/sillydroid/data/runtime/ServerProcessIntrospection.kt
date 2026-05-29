@@ -11,8 +11,8 @@ internal data class OwnedProcessInfo(
 )
 
 internal fun OwnedProcessInfo.isBootstrapServerProcess(): Boolean {
-    return name == "libproot.so" ||
-        cmdline.contains("libproot.so") ||
+    return name == "libtermux-node.so" ||
+        cmdline.contains("libtermux-node.so") ||
         cmdline.contains("server.js") ||
         cmdline.contains("start-server.sh") ||
         cmdline.contains("tavern-entrypoint.sh") ||

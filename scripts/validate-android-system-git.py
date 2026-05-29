@@ -12,9 +12,6 @@ import time
 from dataclasses import dataclass
 
 
-TERMUX_GUEST_PREFIX = "/data/data/com.termux/files/usr"
-
-
 @dataclass(frozen=True)
 class AdbContext:
     package_name: str
@@ -55,16 +52,20 @@ class AdbContext:
         return f"{self.server_dir}/tavern-entrypoint.sh"
 
     @property
-    def host_proot_bin(self) -> str:
-        return f"{self.native_lib_dir}/libproot.so"
+    def termux_node_bin(self) -> str:
+        return f"{self.native_lib_dir}/libtermux-node.so"
 
     @property
-    def host_proot_loader(self) -> str:
-        return f"{self.native_lib_dir}/libproot-loader.so"
+    def termux_git_bin(self) -> str:
+        return f"{self.native_lib_dir}/libtermux-git.so"
 
     @property
-    def host_proot_loader_32(self) -> str:
-        return f"{self.native_lib_dir}/libproot-loader32.so"
+    def termux_git_remote_http_bin(self) -> str:
+        return f"{self.native_lib_dir}/libtermux-git-remote-http.so"
+
+    @property
+    def termux_sh_bin(self) -> str:
+        return f"{self.native_lib_dir}/libtermux-sh.so"
 
     @property
     def rootfs_manifest(self) -> str:
@@ -180,8 +181,8 @@ def build_probe_script(context: AdbContext, repo_url: str, branch: str | None, p
         "#!/bin/sh",
         "set -eu",
         "cd /tavern/server",
-        'if [ -n "${HOST_RUNTIME_PREFIX:-}" ]; then',
-        '    PATH="$HOST_RUNTIME_PREFIX/bin:$PATH"',
+        'if [ -n "${SILLYDROID_HOST_COMMAND_PATH:-}" ]; then',
+        '    PATH="$SILLYDROID_HOST_COMMAND_PATH:$PATH"',
         "fi",
         'NODE_BIN="$(command -v node || true)"',
         'if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then',
@@ -210,13 +211,13 @@ def build_probe_script(context: AdbContext, repo_url: str, branch: str | None, p
         export APP_DATA_ROOT={quoted(context.app_data_root)}
         export LOGS_DIR={quoted(context.logs_dir)}
         export HOST_PREFIX_DIR={quoted(context.host_prefix_dir)}
-        export HOST_RUNTIME_PREFIX={quoted(TERMUX_GUEST_PREFIX)}
         export TAVERN_PORT={port}
-        export HOST_PROOT_BIN={quoted(context.host_proot_bin)}
-        export HOST_PROOT_LIB_DIR={quoted(context.native_lib_dir)}
-        export HOST_PROOT_LOADER={quoted(context.host_proot_loader)}
-        export HOST_PROOT_LOADER_32={quoted(context.host_proot_loader_32)}
+        export HOST_NATIVE_LIB_DIR={quoted(context.native_lib_dir)}
         export HOST_TMP_DIR={quoted(context.host_tmp_dir)}
+        export TERMUX_NODE_BIN={quoted(context.termux_node_bin)}
+        export TERMUX_GIT_BIN={quoted(context.termux_git_bin)}
+        export TERMUX_GIT_REMOTE_HTTP_BIN={quoted(context.termux_git_remote_http_bin)}
+        export TERMUX_SH_BIN={quoted(context.termux_sh_bin)}
         /system/bin/sh {quoted(context.start_server_script)}
         """
     ).strip() + "\n"

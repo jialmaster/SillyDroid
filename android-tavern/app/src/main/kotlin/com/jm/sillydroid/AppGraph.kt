@@ -19,7 +19,7 @@ import com.jm.sillydroid.data.runtime.AssetRuntimeMetadataRepository
 import com.jm.sillydroid.data.runtime.BootRuntimeConfigRepository
 import com.jm.sillydroid.data.runtime.DefaultHostProcessManager
 import com.jm.sillydroid.data.runtime.HostExtensionDirectoriesProvider
-import com.jm.sillydroid.data.runtime.ProotExtensionCommandRunner
+import com.jm.sillydroid.data.runtime.HostExtensionCommandRunner
 import com.jm.sillydroid.data.settings.BootstrapHostConfigStore
 import com.jm.sillydroid.data.settings.TavernConfigRepository
 import com.jm.sillydroid.data.settings.TavernDataArchiveManager
@@ -134,7 +134,7 @@ class AppGraph(private val application: Application) : SillyDroidAppGraph {
 
     private val extensionCommandExecutor: ExtensionCommandExecutor by lazy {
         ExtensionCommandExecutor(
-            commandRunner = ProotExtensionCommandRunner(application, runtimeLogManager),
+            commandRunner = HostExtensionCommandRunner(application, runtimeLogManager),
             remoteManifestDataSource = remoteManifestDataSource
         )
     }

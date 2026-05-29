@@ -100,7 +100,18 @@ internal object BootstrapFailureDiagnoser {
         }
 
         // 布局校验和 launcher 的缺文件错误都说明本地 runtime/server 资产不完整。
-        if (containsAny(evidence, "bootstrap 资产缺少关键文件", "启动脚本不存在", "缺少 host proot", "缺少 host proot loader", "缺少 host proot 依赖目录")) {
+        if (
+            containsAny(
+                evidence,
+                "bootstrap 资产缺少关键文件",
+                "启动脚本不存在",
+                "缺少 Termux Node 入口",
+                "缺少 Termux Git 入口",
+                "缺少 Termux Git HTTPS helper 入口",
+                "缺少 Termux shell 入口",
+                "缺少 host runtime 依赖目录"
+            )
+        ) {
             return DiagnosisReason(
                 title = "当前启动阶段缺少必要的 runtime/server 关键文件。",
                 solutions = listOf(
@@ -110,16 +121,25 @@ internal object BootstrapFailureDiagnoser {
             )
         }
 
-        // rootfs 阶段的 ptrace/seccomp 崩溃必须指向 proot 兼容模式，而不是泛化成 Tavern 配置问题。
+        // no-proot 链路直接执行 APK nativeLibraryDir 中的 Termux ELF；
+        // linker/权限类错误应指向 native runtime 资产，而不是 Tavern 配置。
         if (
             stepId == BootstrapStepId.ENSURE_ROOTFS_RUNTIME &&
-            containsAny(evidence, "proot", "ptrace", "seccomp", "signal 11", "sigsegv", "operation not permitted")
+            containsAny(
+                evidence,
+                "cannot link executable",
+                "library",
+                "permission denied",
+                "eacces",
+                "operation not permitted",
+                "exec format error"
+            )
         ) {
             return DiagnosisReason(
-                title = "离线 Linux 运行时的 proot 在当前设备上触发 seccomp/ptrace 兼容问题。",
+                title = "离线 Termux host runtime 在当前设备上无法执行或缺少 native 依赖。",
                 solutions = listOf(
-                    "保留本次日志，宿主会优先尝试 PROOT_NO_SECCOMP 兼容模式；失败后请导出 rootfs-runtime 日志继续定位。",
-                    "如果兼容模式仍失败，重新同步 runtime 资产，确认 libproot 和 loader 没有缺失或损坏。"
+                    "重新同步 Android runtime image，确认 APK nativeLibraryDir 内包含 node、git、git-remote-http 和 shell 入口。",
+                    "导出 rootfs-runtime 日志，优先检查 CANNOT LINK EXECUTABLE、Permission denied 或缺失 so 名称。"
                 )
             )
         }

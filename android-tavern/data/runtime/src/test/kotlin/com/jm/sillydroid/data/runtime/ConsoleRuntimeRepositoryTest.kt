@@ -51,11 +51,13 @@ class ConsoleRuntimeRepositoryTest {
             assertEquals(paths.logsDir.absolutePath, spec.environment["LOGS_DIR"])
             assertEquals(paths.hostPrefixDir.absolutePath, spec.environment["HOST_PREFIX_DIR"])
             assertEquals(BootConfig.guestRuntimePrefix, spec.environment["HOST_RUNTIME_PREFIX"])
-            assertEquals(paths.hostProotBinary.absolutePath, spec.environment["HOST_PROOT_BIN"])
-            assertEquals(paths.hostLibDir.absolutePath, spec.environment["HOST_PROOT_LIB_DIR"])
-            assertEquals(paths.hostProotLoader.absolutePath, spec.environment["HOST_PROOT_LOADER"])
+            assertEquals(paths.hostLibDir.absolutePath, spec.environment["HOST_NATIVE_LIB_DIR"])
             assertEquals(paths.hostTmpDir.absolutePath, spec.environment["HOST_TMP_DIR"])
-            assertFalse(spec.environment.containsKey("HOST_PROOT_LOADER_32"))
+            assertEquals(paths.hostTermuxNodeBinary.absolutePath, spec.environment["TERMUX_NODE_BIN"])
+            assertEquals(paths.hostTermuxGitBinary.absolutePath, spec.environment["TERMUX_GIT_BIN"])
+            assertEquals(paths.hostTermuxGitRemoteHttpBinary.absolutePath, spec.environment["TERMUX_GIT_REMOTE_HTTP_BIN"])
+            assertEquals(paths.hostTermuxShellBinary.absolutePath, spec.environment["TERMUX_SH_BIN"])
+            assertFalse(spec.environment.containsKey("HOST_PROOT_BIN"))
         } finally {
             rootDirectory.deleteRecursively()
         }
@@ -111,15 +113,20 @@ class ConsoleRuntimeRepositoryTest {
     }
 
     @Test
-    fun `buildHostRuntimeEnvironment includes loader32 when present`() {
-        val rootDirectory = createTempTestDirectory(prefix = "host-runtime-env")
+    fun `buildHostRuntimeEnvironment reports termux host runtime mode from manifest`() {
+        val rootDirectory = createTempTestDirectory(prefix = "host-runtime-mode")
         try {
-            val paths = createHostPaths(rootDirectory, includeLoader32 = true)
+            val paths = createHostPaths(rootDirectory)
+            File(paths.rootfsDir, "rootfs-manifest.json").writeText("""{"runtimeMode":"termux-host"}""")
 
             val environment = buildHostRuntimeEnvironment(paths)
 
-            assertTrue(environment.containsKey("HOST_PROOT_LOADER_32"))
-            assertEquals(paths.hostProotLoader32.absolutePath, environment["HOST_PROOT_LOADER_32"])
+            assertEquals("termux-host", environment["SILLYDROID_RUNTIME_MODE"])
+            assertEquals(paths.hostTermuxNodeBinary.absolutePath, environment["TERMUX_NODE_BIN"])
+            assertEquals(paths.hostTermuxGitBinary.absolutePath, environment["TERMUX_GIT_BIN"])
+            assertEquals(paths.hostTermuxGitRemoteHttpBinary.absolutePath, environment["TERMUX_GIT_REMOTE_HTTP_BIN"])
+            assertEquals(paths.hostTermuxShellBinary.absolutePath, environment["TERMUX_SH_BIN"])
+            assertEquals(paths.hostTermuxBashBinary.absolutePath, environment["TERMUX_BASH_BIN"])
         } finally {
             rootDirectory.deleteRecursively()
         }
@@ -154,7 +161,7 @@ class ConsoleRuntimeRepositoryTest {
         try {
             val nativeHostLibDir = File(rootDirectory, "native").apply {
                 mkdirs()
-                File(this, "libproot.so").writeText("missing loader and talloc")
+                File(this, "libtermux-node.so").writeText("missing git and shell")
             }
             val packageHostLibDir = File(rootDirectory, "package/lib/arm64").apply {
                 mkdirs()
@@ -243,18 +250,25 @@ private fun createTempTestDirectory(prefix: String): File {
 }
 
 private fun File.writeHostRuntimeFiles() {
-    File(this, "libtalloc_2.so").writeText("talloc")
-    File(this, "libproot.so").apply {
-        writeText("proot")
+    File(this, "libtermux-node.so").apply {
+        writeText("node")
         setExecutable(true)
     }
-    File(this, "libproot-loader.so").apply {
-        writeText("loader")
+    File(this, "libtermux-git.so").apply {
+        writeText("git")
+        setExecutable(true)
+    }
+    File(this, "libtermux-git-remote-http.so").apply {
+        writeText("git-remote-http")
+        setExecutable(true)
+    }
+    File(this, "libtermux-sh.so").apply {
+        writeText("shell")
         setExecutable(true)
     }
 }
 
-private fun createHostPaths(rootDirectory: File, includeLoader32: Boolean = false): HostPaths {
+private fun createHostPaths(rootDirectory: File): HostPaths {
     val bootstrapRoot = File(rootDirectory, "bootstrap").apply { mkdirs() }
     val scriptsDir = File(bootstrapRoot, "scripts").apply { mkdirs() }
     val rootfsDir = File(bootstrapRoot, "rootfs").apply { mkdirs() }
@@ -265,12 +279,13 @@ private fun createHostPaths(rootDirectory: File, includeLoader32: Boolean = fals
     val dataRoot = File(rootDirectory, "data").apply { mkdirs() }
     val serverDataDir = File(dataRoot, "server").apply { mkdirs() }
     val logsDir = File(rootDirectory, "logs").apply { mkdirs() }
-    val hostProotBinary = File(hostLibDir, "libproot.so").apply { writeText("proot") }
-    val hostProotLoader = File(hostLibDir, "libproot-loader.so").apply { writeText("loader") }
-    val hostProotLoader32 = File(hostLibDir, "libproot-loader32.so")
-    if (includeLoader32) {
-        hostProotLoader32.writeText("loader32")
+    val hostTermuxNodeBinary = File(hostLibDir, "libtermux-node.so").apply { writeText("node") }
+    val hostTermuxGitBinary = File(hostLibDir, "libtermux-git.so").apply { writeText("git") }
+    val hostTermuxGitRemoteHttpBinary = File(hostLibDir, "libtermux-git-remote-http.so").apply {
+        writeText("git-remote-http")
     }
+    val hostTermuxShellBinary = File(hostLibDir, "libtermux-sh.so").apply { writeText("shell") }
+    val hostTermuxBashBinary = File(hostLibDir, "libtermux-bash.so").apply { writeText("bash") }
     File(scriptsDir, "start-console-shell.sh").writeText("#!/system/bin/sh")
 
     return HostPaths(
@@ -281,9 +296,11 @@ private fun createHostPaths(rootDirectory: File, includeLoader32: Boolean = fals
         hostPrefixDir = hostPrefixDir,
         hostLibDir = hostLibDir,
         hostTmpDir = hostTmpDir,
-        hostProotBinary = hostProotBinary,
-        hostProotLoader = hostProotLoader,
-        hostProotLoader32 = hostProotLoader32,
+        hostTermuxNodeBinary = hostTermuxNodeBinary,
+        hostTermuxGitBinary = hostTermuxGitBinary,
+        hostTermuxGitRemoteHttpBinary = hostTermuxGitRemoteHttpBinary,
+        hostTermuxShellBinary = hostTermuxShellBinary,
+        hostTermuxBashBinary = hostTermuxBashBinary,
         dataRoot = dataRoot,
         serverDataDir = serverDataDir,
         logsDir = logsDir

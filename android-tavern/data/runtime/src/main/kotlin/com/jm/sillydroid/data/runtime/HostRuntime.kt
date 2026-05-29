@@ -29,16 +29,20 @@ object BootConfig {
     const val notificationId = 1101
 }
 
+private const val runtimeModeTermuxHost = "termux-host"
 private val requiredHostRuntimeFileNames = listOf(
-    "libtalloc_2.so",
-    "libproot.so",
-    "libproot-loader.so"
+    "libtermux-node.so",
+    "libtermux-git.so",
+    "libtermux-git-remote-http.so",
+    "libtermux-sh.so"
 )
-private val optionalHostRuntimeFileNames = listOf("libproot-loader32.so")
+private val optionalHostRuntimeFileNames = listOf("libtermux-bash.so")
 private val executableHostRuntimeFileNames = listOf(
-    "libproot.so",
-    "libproot-loader.so",
-    "libproot-loader32.so"
+    "libtermux-node.so",
+    "libtermux-git.so",
+    "libtermux-git-remote-http.so",
+    "libtermux-sh.so",
+    "libtermux-bash.so"
 )
 private const val forcePackageHostRuntimeMarkerFileName = ".force-package-host-runtime"
 
@@ -118,9 +122,11 @@ data class HostPaths(
     val hostPrefixDir: File,
     val hostLibDir: File,
     val hostTmpDir: File,
-    val hostProotBinary: File,
-    val hostProotLoader: File,
-    val hostProotLoader32: File,
+    val hostTermuxNodeBinary: File,
+    val hostTermuxGitBinary: File,
+    val hostTermuxGitRemoteHttpBinary: File,
+    val hostTermuxShellBinary: File,
+    val hostTermuxBashBinary: File,
     val dataRoot: File,
     val serverDataDir: File,
     val logsDir: File
@@ -154,9 +160,11 @@ data class HostPaths(
                 hostPrefixDir = hostPrefixDir,
                 hostLibDir = selectedHostLibDir,
                 hostTmpDir = File(hostPrefixDir, "tmp"),
-                hostProotBinary = File(selectedHostLibDir, "libproot.so"),
-                hostProotLoader = File(selectedHostLibDir, "libproot-loader.so"),
-                hostProotLoader32 = File(selectedHostLibDir, "libproot-loader32.so"),
+                hostTermuxNodeBinary = File(selectedHostLibDir, "libtermux-node.so"),
+                hostTermuxGitBinary = File(selectedHostLibDir, "libtermux-git.so"),
+                hostTermuxGitRemoteHttpBinary = File(selectedHostLibDir, "libtermux-git-remote-http.so"),
+                hostTermuxShellBinary = File(selectedHostLibDir, "libtermux-sh.so"),
+                hostTermuxBashBinary = File(selectedHostLibDir, "libtermux-bash.so"),
                 dataRoot = dataRoot,
                 serverDataDir = File(dataRoot, "server"),
                 logsDir = resolveHostLogsDir(context)
@@ -188,7 +196,7 @@ fun describeHostRuntimeSelection(context: Context, paths: HostPaths): String {
         describeRuntimeDirectory(candidate, selectedPath)
     }.ifBlank { "none" }
 
-    // 三星/Android 14 这类 ROM 差异通常只在真实 exec/proot 阶段暴露；
+    // 三星/Android 14 这类 ROM 差异通常只在真实 native exec 阶段暴露；
     // 启动日志必须保留安装目录、ABI、SELinux 与可执行位，方便用户截图时直接定位失败层。
     return buildString {
         append("host_runtime ")
@@ -286,6 +294,23 @@ fun readInstalledRootfsGuestShellPath(paths: HostPaths): String {
     }.getOrDefault("/bin/sh")
 }
 
+fun readInstalledRuntimeMode(paths: HostPaths): String {
+    val manifestFile = File(paths.rootfsDir, "rootfs-manifest.json")
+    if (!manifestFile.isFile) {
+        return runtimeModeTermuxHost
+    }
+
+    // rootfs manifest 由本仓库脚本生成，runtimeMode 只用于选择启动链路；
+    // 用文本读取避免 JVM 单测和 Android 端 JSONObject 行为差异导致误判运行时入口。
+    return Regex(""""runtimeMode"\s*:\s*"([^"]*)"""")
+        .find(runCatching { manifestFile.readText() }.getOrDefault(""))
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.trim()
+        ?.takeIf { mode -> mode == runtimeModeTermuxHost }
+        ?: runtimeModeTermuxHost
+}
+
 /**
  * rootfs/server manifest 是项目脚本固定生成的 JSON 文本；
  * 这里仅去掉会随每次打包变化的字段，保留其他内容参与比较，避免“同内容重打包”触发整目录重解压。
@@ -302,23 +327,26 @@ internal fun normalizeBootstrapManifestForComparison(content: String): String {
 }
 
 /**
- * 所有进入 rootfs/proot 的入口都必须共享同一套 host 侧环境变量，
- * 避免设置页终端、扩展命令和正式服务各自拼环境后出现 loader、挂载目录或 prefix 契约分叉。
+ * 所有进入 Termux host runtime 的入口都必须共享同一套 host 侧环境变量，
+ * 避免设置页终端、扩展命令和正式服务各自拼环境后出现 loader、native lib 或 prefix 契约分叉。
  */
 internal fun buildHostRuntimeEnvironment(paths: HostPaths): Map<String, String> {
     return buildMap {
+        put("SILLYDROID_RUNTIME_MODE", readInstalledRuntimeMode(paths))
         put("BOOTSTRAP_ROOT", paths.bootstrapRoot.absolutePath)
         put("ROOTFS_DIR", paths.rootfsDir.absolutePath)
         put("SERVER_DIR", paths.serverDir.absolutePath)
         put("LOGS_DIR", paths.logsDir.absolutePath)
-        put("HOST_PROOT_BIN", paths.hostProotBinary.absolutePath)
-        put("HOST_PROOT_LIB_DIR", paths.hostLibDir.absolutePath)
-        put("HOST_PROOT_LOADER", paths.hostProotLoader.absolutePath)
+        put("HOST_NATIVE_LIB_DIR", paths.hostLibDir.absolutePath)
         put("HOST_PREFIX_DIR", paths.hostPrefixDir.absolutePath)
         put("HOST_RUNTIME_PREFIX", BootConfig.guestRuntimePrefix)
         put("HOST_TMP_DIR", paths.hostTmpDir.absolutePath)
-        if (paths.hostProotLoader32.exists()) {
-            put("HOST_PROOT_LOADER_32", paths.hostProotLoader32.absolutePath)
+        put("TERMUX_NODE_BIN", paths.hostTermuxNodeBinary.absolutePath)
+        put("TERMUX_GIT_BIN", paths.hostTermuxGitBinary.absolutePath)
+        put("TERMUX_GIT_REMOTE_HTTP_BIN", paths.hostTermuxGitRemoteHttpBinary.absolutePath)
+        put("TERMUX_SH_BIN", paths.hostTermuxShellBinary.absolutePath)
+        if (paths.hostTermuxBashBinary.exists()) {
+            put("TERMUX_BASH_BIN", paths.hostTermuxBashBinary.absolutePath)
         }
     }
 }
@@ -504,7 +532,7 @@ class AssetExtractor(private val context: Context) {
     }
 
     /**
-     * 设置页终端只需要进入现有 rootfs/proot 环境并附着一个交互 shell，
+     * 设置页终端只需要进入现有 Termux host 环境并附着一个交互 shell，
      * 不能为了懒初始化 console 而复用 bootstrap service 的启动/重启语义。
      */
     fun prepareConsoleAssets(
@@ -1170,15 +1198,13 @@ class AssetExtractor(private val context: Context) {
 
     private fun refreshHostPrefixDirectory(paths: HostPaths, rootfsDirectoryRefreshed: Boolean) {
         val hostPrefixRequiredFiles = listOf(
-            "bin/proot",
-            "bin/sh",
             "etc/tls/cert.pem",
-            "libexec/proot/loader"
+            "lib/node_modules/corepack/dist/npm.js",
+            "libexec/git-core/git",
+            "libexec/git-core/git-remote-http"
         )
         val hostPrefixExecutableFiles = listOf(
-            "bin/proot",
-            "bin/sh",
-            "libexec/proot/loader"
+            "libexec/git-core/git"
         )
         val shouldRefreshHostPrefix = rootfsDirectoryRefreshed ||
             !paths.hostPrefixDir.containsRequiredFiles(hostPrefixRequiredFiles) ||
@@ -1224,9 +1250,6 @@ data class AssetCopySpec(
     fun shouldSetExecutable(): Boolean {
         return shouldPreserveExistingRootfsFile() ||
             targetPath.extension.equals("sh", ignoreCase = true) ||
-            targetPath.name == "proot" ||
-            targetPath.name == "loader" ||
-            targetPath.name == "loader32" ||
             targetPath.name == "tavern-entrypoint.sh"
     }
 }
@@ -1248,11 +1271,13 @@ class BootstrapLayoutVerifier(private val paths: HostPaths) {
         return listOf(
             "scripts/ensure-rootfs-runtime.sh" to File(paths.scriptsDir, "ensure-rootfs-runtime.sh"),
             "scripts/start-server.sh" to File(paths.scriptsDir, "start-server.sh"),
+            "scripts/termux-host-runtime.sh" to File(paths.scriptsDir, "termux-host-runtime.sh"),
             "rootfs/fs/bin/sh" to File(paths.rootfsDir, "fs/bin/sh"),
             "rootfs/rootfs-manifest.json" to File(paths.rootfsDir, "rootfs-manifest.json"),
-            "hostRuntimeDir/libtalloc_2.so" to File(paths.hostLibDir, "libtalloc_2.so"),
-            "hostRuntimeDir/libproot.so" to paths.hostProotBinary,
-            "hostRuntimeDir/libproot-loader.so" to paths.hostProotLoader,
+            "hostRuntimeDir/libtermux-node.so" to paths.hostTermuxNodeBinary,
+            "hostRuntimeDir/libtermux-git.so" to paths.hostTermuxGitBinary,
+            "hostRuntimeDir/libtermux-git-remote-http.so" to paths.hostTermuxGitRemoteHttpBinary,
+            "hostRuntimeDir/libtermux-sh.so" to paths.hostTermuxShellBinary,
             "server/bootstrap-manifest.json" to File(paths.serverDir, "bootstrap-manifest.json"),
             "server/tavern-entrypoint.sh" to File(paths.serverDir, "tavern-entrypoint.sh")
         )
@@ -1298,20 +1323,6 @@ data class LaunchRequest(
     val environment: Map<String, String>,
     val logFileName: String = "$name.log"
 )
-
-enum class ProotLaunchMode(
-    val displayName: String,
-    val environment: Map<String, String>
-) {
-    Default(
-        displayName = "default",
-        environment = emptyMap()
-    ),
-    NoSeccomp(
-        displayName = "no-seccomp",
-        environment = mapOf("PROOT_NO_SECCOMP" to "1")
-    )
-}
 
 class ManagedProcess(
     val name: String,
@@ -1397,16 +1408,24 @@ open class LinuxRuntimeLauncher(private val paths: HostPaths) {
             throw BootstrapException("启动脚本不存在：${request.scriptFile.absolutePath}")
         }
 
-        if (!paths.hostProotBinary.exists()) {
-            throw BootstrapException("缺少 host proot：${paths.hostProotBinary.absolutePath}")
+        if (!paths.hostTermuxNodeBinary.exists()) {
+            throw BootstrapException("缺少 Termux Node 入口：${paths.hostTermuxNodeBinary.absolutePath}")
         }
 
-        if (!paths.hostProotLoader.exists()) {
-            throw BootstrapException("缺少 host proot loader：${paths.hostProotLoader.absolutePath}")
+        if (!paths.hostTermuxGitBinary.exists()) {
+            throw BootstrapException("缺少 Termux Git 入口：${paths.hostTermuxGitBinary.absolutePath}")
+        }
+
+        if (!paths.hostTermuxGitRemoteHttpBinary.exists()) {
+            throw BootstrapException("缺少 Termux Git HTTPS helper 入口：${paths.hostTermuxGitRemoteHttpBinary.absolutePath}")
+        }
+
+        if (!paths.hostTermuxShellBinary.exists()) {
+            throw BootstrapException("缺少 Termux shell 入口：${paths.hostTermuxShellBinary.absolutePath}")
         }
 
         if (!paths.hostLibDir.exists()) {
-            throw BootstrapException("缺少 host proot 依赖目录：${paths.hostLibDir.absolutePath}")
+            throw BootstrapException("缺少 host runtime 依赖目录：${paths.hostLibDir.absolutePath}")
         }
 
         request.scriptFile.setExecutable(true)
@@ -1436,38 +1455,23 @@ class RootfsRuntimeProvisioner(
         onAttemptLog: (String) -> Unit = {},
         onHeartbeat: (elapsedSeconds: Int) -> Unit = {}
     ): RootfsRuntimeEnsureResult {
-        val defaultAttempt = runAttempt(
-            mode = ProotLaunchMode.Default,
+        val runtimeMode = readInstalledRuntimeMode(paths)
+        val attempt = runAttempt(
             logFileName = logFileName,
             onHeartbeat = onHeartbeat
         )
-        if (defaultAttempt.succeeded) {
-            onAttemptLog(defaultAttempt.toStartupLogLine())
-            onAttemptLog("rootfs-runtime selected prootMode=${ProotLaunchMode.Default.displayName} for this bootstrap session.")
-            return RootfsRuntimeEnsureResult(mode = defaultAttempt.mode)
-        }
-
-        onAttemptLog(defaultAttempt.toStartupLogLine())
-        if (defaultAttempt.shouldRetryWithoutSeccomp()) {
-            onAttemptLog("rootfs-runtime retrying with PROOT_NO_SECCOMP=1 because default proot attempt matched seccomp/ptrace crash diagnostics.")
-            val noSeccompAttempt = runAttempt(
-                mode = ProotLaunchMode.NoSeccomp,
-                logFileName = logFileName,
-                onHeartbeat = onHeartbeat
+        onAttemptLog(attempt.toStartupLogLine(runtimeMode))
+        if (attempt.succeeded) {
+            onAttemptLog("rootfs-runtime selected runtimeMode=$runtimeMode for this bootstrap session.")
+            return RootfsRuntimeEnsureResult(
+                runtimeMode = runtimeMode
             )
-            onAttemptLog(noSeccompAttempt.toStartupLogLine())
-            if (noSeccompAttempt.succeeded) {
-                onAttemptLog("rootfs-runtime selected prootMode=${ProotLaunchMode.NoSeccomp.displayName} for this bootstrap session.")
-                return RootfsRuntimeEnsureResult(mode = noSeccompAttempt.mode)
-            }
-            throw IllegalStateException(buildRootfsRuntimeFailureMessage(listOf(defaultAttempt, noSeccompAttempt)))
         }
 
-        throw IllegalStateException(buildRootfsRuntimeFailureMessage(listOf(defaultAttempt)))
+        throw IllegalStateException(buildRootfsRuntimeFailureMessage(attempt, runtimeMode))
     }
 
     private fun runAttempt(
-        mode: ProotLaunchMode,
         logFileName: String,
         onHeartbeat: (elapsedSeconds: Int) -> Unit
     ): RootfsRuntimeAttemptResult {
@@ -1475,8 +1479,7 @@ class RootfsRuntimeProvisioner(
             name = "rootfs-runtime",
             scriptFile = File(paths.scriptsDir, "ensure-rootfs-runtime.sh"),
             workingDirectory = paths.bootstrapRoot,
-            // PROOT_NO_SECCOMP 这类开关必须在 proot 启动前注入；子进程崩溃后再 catch 已经无法改变运行模式。
-            environment = mode.environment,
+            environment = emptyMap(),
             logFileName = logFileName
         )
         val logFile = File(paths.logsDir, logFileName)
@@ -1489,19 +1492,16 @@ class RootfsRuntimeProvisioner(
         }
         val exitCode = process.waitFor()
         return RootfsRuntimeAttemptResult(
-            mode = mode,
             exitCode = exitCode,
             logExcerpt = readLogExcerpt(logFile, startOffset = logStartOffset)
         )
     }
 
-    private fun buildRootfsRuntimeFailureMessage(attempts: List<RootfsRuntimeAttemptResult>): String {
+    private fun buildRootfsRuntimeFailureMessage(attempt: RootfsRuntimeAttemptResult, runtimeMode: String): String {
         return buildString {
             append("Linux 离线运行时校验失败。")
-            attempts.forEach { attempt ->
-                append("\n\n")
-                append(attempt.toFailureMessageSection())
-            }
+            append("\n\n")
+            append(attempt.toFailureMessageSection(runtimeMode))
         }
     }
 
@@ -1534,33 +1534,20 @@ class RootfsRuntimeProvisioner(
 }
 
 data class RootfsRuntimeEnsureResult(
-    val mode: ProotLaunchMode
+    val runtimeMode: String = runtimeModeTermuxHost
 )
 
 data class RootfsRuntimeAttemptResult(
-    val mode: ProotLaunchMode,
     val exitCode: Int,
     val logExcerpt: String
 ) {
     val succeeded: Boolean
         get() = exitCode == 0
 
-    fun shouldRetryWithoutSeccomp(): Boolean {
-        if (succeeded || mode == ProotLaunchMode.NoSeccomp) {
-            return false
-        }
-        val normalized = logExcerpt.lowercase()
-        return normalized.contains("signal 11") ||
-            normalized.contains("sigsegv") ||
-            normalized.contains("ptrace") ||
-            normalized.contains("seccomp") ||
-            normalized.contains("operation not permitted")
-    }
-
-    fun toStartupLogLine(): String {
+    fun toStartupLogLine(runtimeMode: String = runtimeModeTermuxHost): String {
         return buildString {
-            append("rootfs-runtime attempt prootMode=")
-            append(mode.displayName)
+            append("rootfs-runtime attempt runtimeMode=")
+            append(runtimeMode)
             append(" exitCode=")
             append(exitCode)
             if (logExcerpt.isBlank()) {
@@ -1572,10 +1559,10 @@ data class RootfsRuntimeAttemptResult(
         }
     }
 
-    fun toFailureMessageSection(): String {
+    fun toFailureMessageSection(runtimeMode: String = runtimeModeTermuxHost): String {
         return buildString {
-            append("prootMode=")
-            append(mode.displayName)
+            append("runtimeMode=")
+            append(runtimeMode)
             append("，退出码：")
             append(exitCode)
             if (logExcerpt.isBlank()) {
@@ -1592,15 +1579,14 @@ class ServerController(
     private val launcher: LinuxRuntimeLauncher,
     private val paths: HostPaths,
     private val servicePort: Int,
-    private val logFileName: String,
-    private val prootMode: ProotLaunchMode = ProotLaunchMode.Default
+    private val logFileName: String
 ) {
     fun start(): ManagedProcess {
         val request = LaunchRequest(
             name = "sillydroid-server",
             scriptFile = File(paths.scriptsDir, "start-server.sh"),
             workingDirectory = paths.serverDir,
-            environment = prootMode.environment + mapOf(
+            environment = mapOf(
                 "APP_DATA_ROOT" to paths.serverDataDir.absolutePath,
                 "TAVERN_PORT" to servicePort.toString()
             ),
