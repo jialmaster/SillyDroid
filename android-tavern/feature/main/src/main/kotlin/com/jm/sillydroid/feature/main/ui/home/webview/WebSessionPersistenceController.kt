@@ -307,17 +307,8 @@ class WebSessionPersistenceController(
                             --sillydroid-startup-muted: rgb(86 101 124);
                         }
 
-                        html[data-sillydroid-startup-theme="glass"],
-                        html[data-sillydroid-startup-theme="glass"] body {
-                            background: var(--sillydroid-startup-bg) !important;
-                            color: var(--sillydroid-startup-text) !important;
-                        }
-
-                        html[data-sillydroid-startup-theme="glass"] #bg1 {
-                            background: var(--sillydroid-startup-bg) !important;
-                        }
-
                         html[data-sillydroid-startup-theme="glass"] #loader.splash-screen :is(.splash-message, .loader-text, .loader-message, p, span) {
+                            /* 启动期主题只作用于开屏 loader 区域；长期背景层 #bg1 必须交给酒馆和正式扩展主题维护。 */
                             color: var(--sillydroid-startup-muted) !important;
                             text-shadow: none !important;
                         }

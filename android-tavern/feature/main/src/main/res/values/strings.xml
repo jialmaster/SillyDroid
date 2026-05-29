@@ -12,6 +12,7 @@
     <string name="bootstrap_resume">继续启动</string>
     <string name="bootstrap_settings_open">打开启动设置</string>
     <string name="bootstrap_update_open">下载并安装更新</string>
+    <string name="bootstrap_update_available_hint">有新版本喽！</string>
     <string name="bootstrap_update_available_badge">发现可用更新</string>
     <string name="system_notification_channel_title">SillyDroid 系统通知</string>
     <string name="system_notification_channel_description">用于展示 WebView 页面发起的业务系统通知。</string>

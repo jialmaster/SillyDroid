@@ -1,20 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-proot_package_url='https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107-70_aarch64.deb'
-proot_source_url='https://github.com/termux/proot/archive/4dba3afbf3a63af89b4d9c1a59bf2bda10f4d10f.zip'
 termux_packages_index_url='https://packages.termux.dev/apt/termux-main/dists/stable/main/binary-aarch64/Packages'
-android_ndk_linux_url='https://dl.google.com/android/repository/android-ndk-r27-linux.zip'
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workspace_root="$(cd "$script_dir/.." && pwd)"
 build_config_path="$workspace_root/sillydroid-build-config.json"
-proot_patch_signature="$(sha256sum "$script_dir/sync-android-rootfs.sh" | awk '{print $1}')"
+termux_host_runtime_signature="$(sha256sum "$script_dir/sync-android-rootfs.sh" | awk '{print $1}')"
 # 默认把 rootfs/jni 临时资产写入本地缓存目录，避免独立执行脚本时污染 android-tavern 工程目录。
 target_root="${SILLYDROID_ANDROID_ROOTFS_TARGET_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/sillydroid-android-rootfs-assets/rootfs}"
 jni_libs_root="${SILLYDROID_ANDROID_ROOTFS_JNI_LIBS_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/sillydroid-android-rootfs-assets/jniLibs/arm64-v8a}"
 runtime_prefix='/data/data/com.jm.sillydroid/files/usr'
-runtime_loader_dir="$runtime_prefix/libexec/proot"
 termux_guest_runtime_prefix='/data/data/com.termux/files/usr'
 termux_prefix_shell_relative_path='bin/sh'
 termux_prefix_bash_relative_path='bin/bash'
@@ -442,6 +438,185 @@ EOF
     fi
 }
 
+prune_termux_host_prefix_for_native_entrypoints() {
+    local prefix_root="$1"
+
+    # no-proot 运行时不能从 files/usr 直接 exec ELF；这些入口已经复制到 APK nativeLibraryDir。
+    # 这里保留 npm/corepack、Git helper、证书、模板等资源，避免酒馆 simple-git/npm 相关能力退化。
+    rm -f \
+        "$prefix_root/bin/node" \
+        "$prefix_root/bin/bash" \
+        "$prefix_root/bin/dash" \
+        "$prefix_root/bin/git" \
+        "$prefix_root/bin/git-shell"
+
+    find "$prefix_root/lib" -maxdepth 1 \( -type f -o -type l \) -name 'lib*.so*' -delete
+}
+
+copy_termux_host_executable() {
+    local source_path="$1"
+    local destination_path="$2"
+    local label="$3"
+
+    assert_path_exists "$source_path" "缺少 Termux host runtime 入口：$label ($source_path)"
+    cp -L "$source_path" "$destination_path"
+    chmod 0755 "$destination_path"
+}
+
+copy_termux_host_library_for_jni() {
+    local source_root="$1"
+    local destination_root="$2"
+    local needed_name="$3"
+    local source_path=''
+    local destination_name=''
+
+    source_path="$source_root/lib/$needed_name"
+    assert_path_exists "$source_path" "缺少 Termux host runtime 依赖库：$needed_name"
+    destination_name="$needed_name"
+
+    if [[ "$needed_name" =~ ^lib.+\.so\.[0-9] ]]; then
+        destination_name="$(printf '%s' "$needed_name" | sed -E 's/\.so\..*$/.so/')"
+    fi
+
+    if [[ -f "$destination_root/$destination_name" ]]; then
+        return
+    fi
+
+    cp -L "$source_path" "$destination_root/$destination_name"
+    chmod 0644 "$destination_root/$destination_name"
+}
+
+patch_termux_host_runtime_jni_dependencies() {
+    local destination_root="$1"
+
+    # Android 只会稳定打包 lib*.so 形态；这里把 Termux ELF 的版本号 NEEDED 改成同目录无版本库名。
+    python3 - "$destination_root" <<'PY'
+import pathlib
+import re
+import sys
+
+destination_root = pathlib.Path(sys.argv[1])
+if not destination_root.is_dir():
+    raise SystemExit(0)
+
+needed_name_pattern = re.compile(rb"lib[0-9A-Za-z_+.-]+\.so\.[0-9][0-9A-Za-z_.-]*")
+
+def patch_bytes(payload: bytes) -> bytes:
+    patched = payload
+    for old in sorted(set(needed_name_pattern.findall(payload)), key=len, reverse=True):
+        new = re.sub(rb"\.so\..*$", b".so", old)
+        if (destination_root / new.decode("utf-8", errors="strict")).is_file():
+            patched = patched.replace(old, new + (b"\0" * (len(old) - len(new))))
+    return patched
+
+for path in destination_root.iterdir():
+    if not path.is_file():
+        continue
+    payload = path.read_bytes()
+    patched = patch_bytes(payload)
+    if patched != payload:
+        path.write_bytes(patched)
+PY
+}
+
+sync_termux_host_runtime_jni_libs() {
+    local source_root="$1"
+    local destination_root="$2"
+
+    mkdir -p "$destination_root"
+    find "$destination_root" -maxdepth 1 -type f \
+        -name 'lib*.so*' \
+        -delete
+
+    # targetSdk 36 不能从可写 files/usr 目录直接 exec ELF；这些入口由 APK nativeLibraryDir 承载。
+    copy_termux_host_executable "$source_root/bin/node" "$destination_root/libtermux-node.so" 'node'
+    copy_termux_host_executable "$source_root/libexec/git-core/git" "$destination_root/libtermux-git.so" 'git'
+    copy_termux_host_executable "$source_root/libexec/git-core/git-remote-http" "$destination_root/libtermux-git-remote-http.so" 'git-remote-http'
+    copy_termux_host_executable "$source_root/bin/dash" "$destination_root/libtermux-sh.so" 'shell'
+    if [[ -f "$source_root/bin/bash" ]]; then
+        copy_termux_host_executable "$source_root/bin/bash" "$destination_root/libtermux-bash.so" 'bash'
+    fi
+
+    sillydroid_require_command readelf
+    while IFS= read -r shared_library_name; do
+        [[ -n "$shared_library_name" ]] || continue
+        copy_termux_host_library_for_jni "$source_root" "$destination_root" "$shared_library_name"
+    done < <(python3 - "$source_root" <<'PY'
+import pathlib
+import re
+import subprocess
+import sys
+
+source_root = pathlib.Path(sys.argv[1])
+seed_relative_paths = [
+    "bin/node",
+    "libexec/git-core/git",
+    "libexec/git-core/git-remote-http",
+    "bin/dash",
+    "bin/bash",
+]
+system_libraries = {
+    "libandroid.so",
+    "libc.so",
+    "libdl.so",
+    "liblog.so",
+    "libm.so",
+}
+needed_pattern = re.compile(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]")
+
+def elf_needed(path: pathlib.Path) -> list[str]:
+    result = subprocess.run(
+        ["readelf", "-d", str(path)],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        return []
+    return [match.group(1) for match in needed_pattern.finditer(result.stdout)]
+
+def resolve_library(name: str) -> pathlib.Path | None:
+    direct = source_root / "lib" / name
+    if direct.exists():
+        return direct.resolve()
+    if ".so." in name:
+        unversioned_name = name.split(".so.", 1)[0] + ".so"
+        unversioned = source_root / "lib" / unversioned_name
+        if unversioned.exists():
+            return unversioned.resolve()
+    return None
+
+queue: list[pathlib.Path] = []
+for relative_path in seed_relative_paths:
+    candidate = source_root / relative_path
+    if candidate.exists():
+        queue.append(candidate.resolve())
+
+seen_elf: set[pathlib.Path] = set()
+needed_libraries: set[str] = set()
+while queue:
+    current = queue.pop(0)
+    if current in seen_elf:
+        continue
+    seen_elf.add(current)
+    for library_name in elf_needed(current):
+        if library_name in system_libraries:
+            continue
+        library_path = resolve_library(library_name)
+        if library_path is None:
+            raise SystemExit(f"Unable to resolve Termux host runtime dependency: {library_name} from {current}")
+        needed_libraries.add(library_name)
+        queue.append(library_path)
+
+for library_name in sorted(needed_libraries):
+    print(library_name)
+PY
+)
+
+    patch_termux_host_runtime_jni_dependencies "$destination_root"
+}
+
 extract_termux_package_version() {
     local package_name="$1"
     local package_filename="$2"
@@ -476,105 +651,6 @@ generate_rootfs_ca_store() {
         echo "Resolved Android rootfs CA bundle is empty: $ca_bundle_path" >&2
         exit 1
     fi
-}
-
-resolve_android_ndk_prebuilt_root() {
-    local ndk_root="$1"
-    local candidate="$ndk_root/toolchains/llvm/prebuilt/linux-x86_64"
-
-    if [[ -d "$candidate" ]]; then
-        realpath "$candidate"
-        return
-    fi
-
-    echo "Unable to resolve Linux Android NDK prebuilt directory under $ndk_root" >&2
-    exit 1
-}
-
-ensure_linux_ndk_root() {
-    local cached_sdk_root="$working_root/android-sdk"
-    local cached_ndk_zip_path="$downloads_root/$(basename "$android_ndk_linux_url")"
-    local cached_ndk_root="$cached_sdk_root/ndk/android-ndk-r27"
-    local candidate
-
-    for candidate in \
-        "${ANDROID_NDK_ROOT:-}" \
-        "${ANDROID_NDK_HOME:-}" \
-        "${ANDROID_SDK_ROOT:-}/ndk/android-ndk-r27" \
-        "${ANDROID_HOME:-}/ndk/android-ndk-r27" \
-        "$HOME/Android/Sdk/ndk/android-ndk-r27" \
-        "$cached_ndk_root"
-    do
-        if [[ -n "$candidate" && -d "$candidate" && -d "$candidate/toolchains/llvm/prebuilt/linux-x86_64" ]]; then
-            realpath "$candidate"
-            return
-        fi
-    done
-
-    mkdir -p "$cached_sdk_root/ndk"
-    download_file_if_missing "$android_ndk_linux_url" "$cached_ndk_zip_path"
-    rm -rf "$cached_ndk_root"
-    sillydroid_extract_archive_with_progress "$cached_ndk_zip_path" "$cached_sdk_root/ndk" 'android-ndk'
-    assert_path_exists "$cached_ndk_root/toolchains/llvm/prebuilt/linux-x86_64" "Unable to provision Linux Android NDK from $android_ndk_linux_url"
-    realpath "$cached_ndk_root"
-}
-
-resolve_tool_path() {
-    local root="$1"
-    local relative_path="$2"
-    local candidate
-
-    for candidate in "$root/$relative_path" "$root/$relative_path.exe"; do
-        if [[ -f "$candidate" ]]; then
-            realpath "$candidate"
-            return
-        fi
-    done
-
-    echo "Unable to resolve required tool: $relative_path" >&2
-    exit 1
-}
-
-create_tool_wrapper() {
-    local wrapper_path="$1"
-    shift
-
-    {
-        printf '#!/usr/bin/env bash\n'
-        printf 'exec'
-        local arg
-        for arg in "$@"; do
-            printf ' %q' "$arg"
-        done
-        printf ' "$@"\n'
-    } > "$wrapper_path"
-    chmod +x "$wrapper_path"
-}
-
-prepare_ndk_wrappers() {
-    local ndk_prebuilt_root="$1"
-    local wrapper_root="$2"
-
-    local clang_path
-    local strip_path
-    local objcopy_path
-    local objdump_path
-    local readelf_path
-
-    clang_path="$(resolve_tool_path "$ndk_prebuilt_root/bin" clang)"
-    strip_path="$(resolve_tool_path "$ndk_prebuilt_root/bin" llvm-strip)"
-    objcopy_path="$(resolve_tool_path "$ndk_prebuilt_root/bin" llvm-objcopy)"
-    objdump_path="$(resolve_tool_path "$ndk_prebuilt_root/bin" llvm-objdump)"
-    readelf_path="$(resolve_tool_path "$ndk_prebuilt_root/bin" llvm-readelf)"
-
-    rm -rf "$wrapper_root"
-    mkdir -p "$wrapper_root"
-
-    create_tool_wrapper "$wrapper_root/clang" "$clang_path" --target=aarch64-linux-android29 --sysroot "$ndk_prebuilt_root/sysroot"
-    create_tool_wrapper "$wrapper_root/strip" "$strip_path"
-    create_tool_wrapper "$wrapper_root/objcopy" "$objcopy_path"
-    create_tool_wrapper "$wrapper_root/objdump" "$objdump_path"
-    create_tool_wrapper "$wrapper_root/readelf" "$readelf_path"
 }
 
 parse_packages_index_records() {
@@ -694,106 +770,11 @@ resolve_termux_package_dependencies() {
     printf '%s\n' "${resolved[@]}"
 }
 
-patch_proot_source() {
-    local source_root="$1"
-
-    # Android NDK 头文件不会像 glibc 一样间接暴露 bzero/string API；这里在已定位的最小文件集上补齐声明。
-    if ! grep -q '#include <strings.h>' "$source_root/src/tracee/tracee.c"; then
-        sed -i '/#include <string.h>/a #include <strings.h>    /* bzero(3), */' "$source_root/src/tracee/tracee.c"
-    fi
-
-    if ! grep -q '#include <strings.h>' "$source_root/src/tracee/event.c"; then
-        sed -i '/#include <string.h>/a #include <strings.h>    /* bzero(3), */' "$source_root/src/tracee/event.c"
-    fi
-
-    if ! grep -q '#include <strings.h>' "$source_root/src/ptrace/ptrace.c"; then
-        sed -i '/#include <string.h>/a #include <strings.h>    /* bzero(3), */' "$source_root/src/ptrace/ptrace.c"
-    fi
-
-    if ! grep -q '#include <string.h>' "$source_root/src/extension/ashmem_memfd/ashmem_memfd.c"; then
-        sed -i '/#include <unistd.h>/a #include <string.h>' "$source_root/src/extension/ashmem_memfd/ashmem_memfd.c"
-    fi
-
-    if ! grep -q '#include <sys/syscall.h>' "$source_root/src/extension/sysvipc/sysvipc_shm.c"; then
-        sed -i '/#include <syscall.h>/a #include <sys\/syscall.h> /* __NR_memfd_create */' "$source_root/src/extension/sysvipc/sysvipc_shm.c"
-    fi
-
-    if ! grep -q 'syscall(__NR_memfd_create, name_buffer, 0)' "$source_root/src/extension/sysvipc/sysvipc_shm.c"; then
-        # Android 12 的 app 进程里，ashmem ioctl 路径会让 PostgreSQL 的 shmget 落到 ENOSPC；这里优先切到 memfd，失败后再保留 ashmem 回退。
-        perl -0pi -e 's@static int sysvipc_shm_do_allocate\(size_t size, int shmid\) \{.*?\n\}\n\nvoid sysvipc_shm_helper_main\(\) \{@static int sysvipc_shm_do_allocate(size_t size, int shmid) {\n#ifdef __ANDROID__\n        char name_buffer[ASHMEM_NAME_LEN] = {0};\n        int fd;\n        snprintf(name_buffer, ASHMEM_NAME_LEN - 1, "sysvshm_0x%X", shmid);\n\n#ifdef __NR_memfd_create\n        fd = syscall(__NR_memfd_create, name_buffer, 0);\n        if (fd >= 0) {\n                if (ftruncate(fd, size) == 0) {\n                        return fd;\n                }\n                close(fd);\n        }\n#endif\n\n        fd = open("/dev/ashmem", O_RDWR, 0);\n        if (fd < 0) return -ENOSPC;\n\n        ioctl(fd, ASHMEM_SET_NAME, name_buffer);\n\n        int ret = ioctl(fd, ASHMEM_SET_SIZE, size);\n        if (ret < 0) {\n                close(fd);\n                return -ENOSPC;\n        }\n\n        return fd;\n#else\n        (void) shmid;\n        FILE *fdesc = tmpfile();\n        if (!fdesc) return -ENOSPC;\n        int fd = dup(fileno(fdesc));\n        fclose(fdesc);\n        if (fd < 0) return -ENOSPC;\n\n        if (ftruncate(fd, size) == -1) {\n                return -ENOSPC;\n        }\n\n        return fd;\n#endif\n}\n\nvoid sysvipc_shm_helper_main() {@s' "$source_root/src/extension/sysvipc/sysvipc_shm.c"
-
-        if ! grep -q 'syscall(__NR_memfd_create, name_buffer, 0)' "$source_root/src/extension/sysvipc/sysvipc_shm.c"; then
-            echo "Failed to patch PRoot sysvipc allocator with memfd support." >&2
-            exit 1
-        fi
-    fi
-}
-
-build_termux_proot() {
-    local source_root="$1"
-    local ndk_prebuilt_root="$2"
-    local include_root="$3"
-    local lib_root="$4"
-    local output_root="$5"
-    local wrapper_root="$6"
-
-    prepare_ndk_wrappers "$ndk_prebuilt_root" "$wrapper_root"
-    patch_proot_source "$source_root"
-
-    export PATH="$wrapper_root:$PATH"
-    export CC="$wrapper_root/clang"
-    export LD="$wrapper_root/clang"
-    export STRIP="$wrapper_root/strip"
-    export OBJCOPY="$wrapper_root/objcopy"
-    export OBJDUMP="$wrapper_root/objdump"
-    export CPPFLAGS="-I$include_root -DARG_MAX=131072"
-    export LDFLAGS="-L$lib_root"
-
-    # 保留 files/usr 作为编译期 fallback loader 路径；真正运行时 loader 会由 App 注入 PROOT_LOADER 指向 nativeLibraryDir。
-    (
-        cd "$source_root/src"
-        make clean
-        make PROOT_UNBUNDLE_LOADER="$runtime_loader_dir" build.h
-        make PROOT_UNBUNDLE_LOADER="$runtime_loader_dir"
-    )
-
-    mkdir -p "$output_root/bin" "$output_root/libexec/proot"
-    cp "$source_root/src/proot" "$output_root/bin/proot"
-    cp "$source_root/src/loader/loader" "$output_root/libexec/proot/loader"
-    if [[ -f "$source_root/src/loader/loader-m32" ]]; then
-        cp "$source_root/src/loader/loader-m32" "$output_root/libexec/proot/loader32"
-    fi
-}
-
-sync_host_runtime_jni_libs() {
-    local source_root="$1"
-    local destination_root="$2"
-
-    mkdir -p "$destination_root"
-    rm -f "$destination_root/libproot.so" "$destination_root/libproot-loader.so" "$destination_root/libproot-loader32.so" "$destination_root/libtalloc_2.so"
-    sillydroid_require_command perl
-
-    # Android 只会把 lib*.so 当成 native lib 收进 APK；这里把 libtalloc.so.2 映射成等长的 libtalloc_2.so，
-    # 再同步改写 libproot.so 的 NEEDED，确保包管理器能把宿主依赖一起放进 lib/arm64-v8a。
-    cp "$source_root/bin/proot" "$destination_root/libproot.so"
-    cp "$source_root/libexec/proot/loader" "$destination_root/libproot-loader.so"
-    assert_path_exists "$source_root/lib/libtalloc.so.2" "缺少 host proot 依赖：$source_root/lib/libtalloc.so.2"
-    cp "$source_root/lib/libtalloc.so.2" "$destination_root/libtalloc_2.so"
-    perl -0pi -e 's/libtalloc\.so\.2/libtalloc_2.so/g' "$destination_root/libproot.so"
-    chmod 0755 "$destination_root/libproot.so" "$destination_root/libproot-loader.so"
-
-    if [[ -f "$source_root/libexec/proot/loader32" ]]; then
-        cp "$source_root/libexec/proot/loader32" "$destination_root/libproot-loader32.so"
-        chmod 0755 "$destination_root/libproot-loader32.so"
-    fi
-}
-
-# rootfs/NDK 的大文件缓存默认落在 WSL 本地文件系统，避免 DrvFs 上的大包下载与解压影响 Linux 构建稳定性。
+# rootfs 的大文件缓存默认落在 WSL 本地文件系统，避免 DrvFs 上的大包下载与解压影响 Linux 构建稳定性。
 working_root="${SILLYDROID_ANDROID_ROOTFS_WORKDIR:-${XDG_CACHE_HOME:-$HOME/.cache}/sillydroid-android-rootfs}"
 downloads_root="$working_root/downloads"
 apt_indexes_root="$working_root/apt-indexes"
 apt_packages_root="$downloads_root/apt"
-proot_build_root="$working_root/proot-build"
 termux_extract_root="$working_root/termux"
 rootfs_extract_root="$working_root/rootfs"
 assets_stage_root="$working_root/assets-stage"
@@ -805,22 +786,22 @@ rootfs_fs_stage_root="$assets_stage_root/fs"
 rootfs_fs_archive_path="$resolved_target_root/rootfs-fs.zip"
 host_prefix_archive_path="$resolved_target_root/rootfs-usr.zip"
 
-proot_package_path="$downloads_root/$(basename "$proot_package_url")"
-proot_source_archive_path="$downloads_root/$(basename "$proot_source_url")"
 termux_packages_index_path="$downloads_root/$(basename "$termux_packages_index_url")"
 
 existing_manifest_path="$resolved_target_root/rootfs-manifest.json"
 if [[ -f "$existing_manifest_path" ]] \
     && grep -Fq '"baseFlavor": "termux"' "$existing_manifest_path" \
+    && grep -Fq '"runtimeMode": "termux-host"' "$existing_manifest_path" \
     && grep -Fq "$termux_packages_index_url" "$existing_manifest_path" \
-    && grep -Fq "$proot_source_url" "$existing_manifest_path" \
-    && grep -Fq "$proot_patch_signature" "$existing_manifest_path" \
+    && grep -Fq "$termux_host_runtime_signature" "$existing_manifest_path" \
     && grep -Fq "$termux_guest_runtime_prefix" "$existing_manifest_path" \
     && grep -Fq '"hostRuntimeEntry": "nativeLibraryDir"' "$existing_manifest_path" \
     && [[ -f "$rootfs_fs_archive_path" ]] \
     && [[ -f "$host_prefix_archive_path" ]] \
-    && [[ -f "$resolved_jni_libs_root/libproot.so" ]] \
-    && [[ -f "$resolved_jni_libs_root/libproot-loader.so" ]]
+    && [[ -f "$resolved_jni_libs_root/libtermux-node.so" ]] \
+    && [[ -f "$resolved_jni_libs_root/libtermux-git.so" ]] \
+    && [[ -f "$resolved_jni_libs_root/libtermux-git-remote-http.so" ]] \
+    && [[ -f "$resolved_jni_libs_root/libtermux-sh.so" ]]
 then
     sillydroid_log "Android rootfs assets are up to date, skipping sync."
     exit 0
@@ -828,41 +809,23 @@ fi
 
 mkdir -p "$downloads_root" "$apt_indexes_root" "$apt_packages_root"
 sillydroid_download_queue_reset
-sillydroid_queue_download_if_missing "$proot_package_url" "$proot_package_path" 'proot-termux'
-sillydroid_queue_download_if_missing "$proot_source_url" "$proot_source_archive_path" 'proot-source'
 sillydroid_queue_download_if_missing "$termux_packages_index_url" "$termux_packages_index_path" 'termux-packages-index'
 sillydroid_run_download_queue
 
 sillydroid_ensure_java_home
-sillydroid_log "开始准备 Android SDK/NDK 工具链"
-android_sdk_root="$(sillydroid_resolve_linux_android_sdk_root)"
-sillydroid_ensure_linux_android_sdk "$android_sdk_root"
-ndk_root="$(sillydroid_ensure_linux_android_ndk_root "$android_sdk_root")"
-ndk_prebuilt_root="$(resolve_android_ndk_prebuilt_root "$ndk_root")"
 jar_path="$JAVA_HOME/bin/jar"
 assert_path_exists "$jar_path" "缺少 jar 命令。Android rootfs 资产归档要求当前 Linux 环境提供 JDK。"
 
-rm -rf "$assets_stage_root" "$termux_extract_root" "$proot_build_root" "$rootfs_extract_root"
-mkdir -p "$host_prefix_stage_root/lib" "$rootfs_fs_stage_root" "$termux_extract_root" "$proot_build_root" "$rootfs_extract_root"
+rm -rf "$assets_stage_root" "$termux_extract_root" "$rootfs_extract_root"
+mkdir -p "$host_prefix_stage_root/lib" "$rootfs_fs_stage_root" "$termux_extract_root" "$rootfs_extract_root"
 
-sillydroid_log "开始解包 Termux proot 与运行时依赖"
-expand_deb_archive "$proot_package_path" "$termux_extract_root/proot-deb" 'termux:proot-deb'
-proot_control_archive_path="$(find "$termux_extract_root/proot-deb" -maxdepth 1 -type f -name 'control.tar*' | head -n 1)"
-assert_path_exists "$proot_control_archive_path" "control.tar archive was not found in $proot_package_path"
-
-proot_depends_value="$(tar -xJOf "$proot_control_archive_path" ./control 2>/dev/null | awk -F': ' '$1 == "Depends" { print $2 }')"
-if [[ -z "$proot_depends_value" ]]; then
-    proot_depends_value="$(tar -xJOf "$proot_control_archive_path" control 2>/dev/null | awk -F': ' '$1 == "Depends" { print $2 }')"
-fi
-
+sillydroid_log "开始解析 Termux host runtime 依赖"
 load_termux_package_table "$termux_packages_index_path" 'https://packages.termux.dev/apt/termux-main'
-mapfile -t proot_dependency_names < <(normalize_dependency_names "$proot_depends_value")
-mapfile -t resolved_termux_dependency_names < <(resolve_termux_package_dependencies "${proot_dependency_names[@]}")
 mapfile -t resolved_termux_base_package_names < <(resolve_termux_package_dependencies "${termux_base_packages[@]}")
 
 declare -A required_termux_packages=()
 resolved_termux_package_names=()
-for package_name in "${resolved_termux_dependency_names[@]}" "${resolved_termux_base_package_names[@]}"; do
+for package_name in "${resolved_termux_base_package_names[@]}"; do
     [[ -n "$package_name" ]] || continue
     if [[ -n "${required_termux_packages[$package_name]:-}" ]]; then
         continue
@@ -896,32 +859,11 @@ for dependency_name in "${resolved_termux_package_names[@]}"; do
 done
 
 install_termux_host_prefix_wrappers "$host_prefix_stage_root"
-
-rm -rf "$proot_build_root/source"
-mkdir -p "$proot_build_root/source"
-sillydroid_extract_archive_with_progress "$proot_source_archive_path" "$proot_build_root/source" 'proot-source'
-proot_source_root="$(find "$proot_build_root/source" -mindepth 1 -maxdepth 1 -type d -name 'proot-*' | LC_ALL=C sort | head -n 1)"
-assert_path_exists "$proot_source_root" "Unable to extract Termux proot source from $proot_source_archive_path"
-
-libtalloc_include_root="$proot_build_root/libtalloc-include"
-libtalloc_lib_root="$proot_build_root/libtalloc-lib"
-rm -rf "$libtalloc_include_root" "$libtalloc_lib_root"
-mkdir -p "$libtalloc_include_root" "$libtalloc_lib_root"
-
-for dependency_name in "${resolved_termux_dependency_names[@]}"; do
-    dependency_data_root="$termux_extract_root/$dependency_name-data"
-    while IFS= read -r include_dir; do
-        copy_resolved_directory_contents "$include_dir" "$libtalloc_include_root"
-    done < <(find "$dependency_data_root" -type d -path '*/usr/include' | LC_ALL=C sort)
-done
-copy_resolved_directory_contents "$host_prefix_stage_root/lib" "$libtalloc_lib_root"
-
-sillydroid_log "开始编译 proot 原生库"
-build_termux_proot "$proot_source_root" "$ndk_prebuilt_root" "$libtalloc_include_root" "$libtalloc_lib_root" "$host_prefix_stage_root" "$proot_build_root/toolwrap"
-sync_host_runtime_jni_libs "$host_prefix_stage_root" "$resolved_jni_libs_root"
+sync_termux_host_runtime_jni_libs "$host_prefix_stage_root" "$resolved_jni_libs_root"
 
 sillydroid_log '开始组装 Termux guest rootfs skeleton'
 install_termux_guest_rootfs_shims "$host_prefix_stage_root" "$rootfs_fs_stage_root"
+prune_termux_host_prefix_for_native_entrypoints "$host_prefix_stage_root"
 
 assert_path_exists "$rootfs_fs_stage_root/bin/sh" "Resolved Android rootfs is incomplete: missing bin/sh at $rootfs_fs_stage_root/bin/sh"
 assert_path_exists "$rootfs_fs_stage_root/etc/ssl/certs/ca-certificates.crt" "Resolved Android rootfs is incomplete: missing CA bundle at $rootfs_fs_stage_root/etc/ssl/certs/ca-certificates.crt"
@@ -946,7 +888,6 @@ if [[ -n "$termux_base_version" ]]; then
 else
     termux_base_version='stable'
 fi
-proot_package_version="$(printf '%s' "$proot_package_url" | sed -n 's#.*/proot_\([^_]*\)_aarch64\.deb#\1#p')"
 runtime_version="$SILLYDROID_ROOTFS_VERSION"
 
 manifest_path="$resolved_target_root/rootfs-manifest.json"
@@ -956,12 +897,10 @@ manifest_path="$resolved_target_root/rootfs-manifest.json"
     printf '  "staiRootfsVersion": "%s",\n' "$(json_escape "$SILLYDROID_ROOTFS_VERSION")"
     printf '  "runtimeVersion": "%s",\n' "$(json_escape "$runtime_version")"
     printf '  "baseFlavor": "termux",\n'
+    printf '  "runtimeMode": "termux-host",\n'
     printf '  "baseVersion": "%s",\n' "$(json_escape "$termux_base_version")"
     printf '  "baseSourceUrl": "%s",\n' "$(json_escape "$termux_packages_index_url")"
-    printf '  "prootVersion": "%s",\n' "$(json_escape "$proot_package_version")"
-    printf '  "prootPackageUrl": "%s",\n' "$(json_escape "$proot_package_url")"
-    printf '  "prootSourceUrl": "%s",\n' "$(json_escape "$proot_source_url")"
-    printf '  "prootPatchSignature": "%s",\n' "$(json_escape "$proot_patch_signature")"
+    printf '  "termuxHostRuntimeSignature": "%s",\n' "$(json_escape "$termux_host_runtime_signature")"
     printf '  "runtimePrefix": "%s",\n' "$(json_escape "$runtime_prefix")"
     printf '  "guestRuntimePrefix": "%s",\n' "$(json_escape "$termux_guest_runtime_prefix")"
     printf '  "guestShellPath": "%s",\n' "$(json_escape "$guest_shell_path")"

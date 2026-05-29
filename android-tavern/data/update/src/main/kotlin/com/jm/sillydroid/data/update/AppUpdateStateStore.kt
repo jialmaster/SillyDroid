@@ -58,6 +58,7 @@ class AppUpdateStateStore(context: Context) : AppUpdateStateRepository {
             .put("releaseTitle", value.releaseTitle)
             .put("versionName", value.versionName)
             .put("hostVersion", value.hostVersion)
+            .put("releaseNotesMarkdown", value.releaseNotesMarkdown)
             .put("apkAssetName", value.apkAssetName)
             .put("apkDownloadUrl", value.apkDownloadUrl)
             .put("apkSha256", value.apkSha256)
@@ -71,6 +72,7 @@ class AppUpdateStateStore(context: Context) : AppUpdateStateRepository {
             val releaseTitle = json.optString("releaseTitle").trim()
             val versionName = json.optString("versionName").trim()
             val hostVersion = json.optString("hostVersion").trim()
+            val releaseNotesMarkdown = json.optTrimmedStringOrNull("releaseNotesMarkdown")
             val apkAssetName = json.optString("apkAssetName").trim()
             val apkDownloadUrl = json.optString("apkDownloadUrl").trim()
             val apkSha256 = json.optString("apkSha256").trim().lowercase()
@@ -91,6 +93,7 @@ class AppUpdateStateStore(context: Context) : AppUpdateStateRepository {
                 releaseTitle = releaseTitle,
                 versionName = versionName,
                 hostVersion = hostVersion,
+                releaseNotesMarkdown = releaseNotesMarkdown,
                 apkAssetName = apkAssetName,
                 apkDownloadUrl = apkDownloadUrl,
                 apkSha256 = apkSha256
@@ -105,6 +108,7 @@ class AppUpdateStateStore(context: Context) : AppUpdateStateRepository {
             .put("releaseTitle", value.releaseTitle)
             .put("versionName", value.versionName)
             .put("hostVersion", value.hostVersion)
+            .put("releaseNotesMarkdown", value.releaseNotesMarkdown)
             .put("apkAssetName", value.apkAssetName)
             .put("apkDownloadUrl", value.apkDownloadUrl)
             .put("apkSha256", value.apkSha256)
@@ -120,6 +124,7 @@ class AppUpdateStateStore(context: Context) : AppUpdateStateRepository {
             val releaseTitle = json.optString("releaseTitle").trim()
             val versionName = json.optString("versionName").trim()
             val hostVersion = json.optString("hostVersion").trim()
+            val releaseNotesMarkdown = json.optTrimmedStringOrNull("releaseNotesMarkdown")
             val apkAssetName = json.optString("apkAssetName").trim()
             val apkDownloadUrl = json.optString("apkDownloadUrl").trim()
             val apkSha256 = json.optString("apkSha256").trim().lowercase()
@@ -142,11 +147,16 @@ class AppUpdateStateStore(context: Context) : AppUpdateStateRepository {
                 releaseTitle = releaseTitle,
                 versionName = versionName,
                 hostVersion = hostVersion,
+                releaseNotesMarkdown = releaseNotesMarkdown,
                 apkAssetName = apkAssetName,
                 apkDownloadUrl = apkDownloadUrl,
                 apkSha256 = apkSha256,
                 verifiedReadyToInstall = json.optBoolean("verifiedReadyToInstall", false)
             )
         }.getOrNull()
+    }
+
+    private fun JSONObject.optTrimmedStringOrNull(name: String): String? {
+        return (opt(name) as? String)?.trim()?.ifBlank { null }
     }
 }

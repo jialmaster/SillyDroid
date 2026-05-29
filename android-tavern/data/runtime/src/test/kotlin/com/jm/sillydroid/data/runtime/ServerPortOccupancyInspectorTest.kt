@@ -25,8 +25,8 @@ class ServerPortOccupancyInspectorTest {
         val bootstrapProcess = OwnedProcessInfo(
             pid = 321,
             ppid = 1,
-            name = "libproot.so",
-            cmdline = "/data/app/libproot.so /tavern/server/server.js"
+            name = "libtermux-node.so",
+            cmdline = "/data/app/lib/arm64/libtermux-node.so /data/data/com.jm.sillydroid/files/android-tavern/bootstrap/server/server.js"
         )
 
         val result = ServerPortOccupancyInspector.classifyPortOccupancy(
@@ -38,6 +38,27 @@ class ServerPortOccupancyInspectorTest {
 
         assertTrue(result is ServerPortOccupancy.OccupiedByThisApp)
         assertEquals(321, (result as ServerPortOccupancy.OccupiedByThisApp).process.pid)
+        assertTrue(result.recognizedAsBootstrapServer)
+    }
+
+    @Test
+    fun `classifyPortOccupancy recognizes termux host node process as bootstrap server`() {
+        val bootstrapProcess = OwnedProcessInfo(
+            pid = 432,
+            ppid = 1,
+            name = "libtermux-node.so",
+            cmdline = "/data/app/lib/arm64/libtermux-node.so server.js --port 8000"
+        )
+
+        val result = ServerPortOccupancyInspector.classifyPortOccupancy(
+            port = 8000,
+            listeningSocketInodes = setOf(23456L),
+            ownedProcesses = listOf(bootstrapProcess),
+            socketInodesByPid = mapOf(432 to setOf(23456L))
+        )
+
+        assertTrue(result is ServerPortOccupancy.OccupiedByThisApp)
+        assertEquals(432, (result as ServerPortOccupancy.OccupiedByThisApp).process.pid)
         assertTrue(result.recognizedAsBootstrapServer)
     }
 

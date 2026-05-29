@@ -6,7 +6,7 @@ import com.jm.sillydroid.domain.bootstrap.ConsoleShellLaunchSpec
 import java.io.File
 
 /**
- * 设置页终端的 runtime 入口必须和酒馆服务共享同一套 rootfs/proot 资产，
+ * 设置页终端的 runtime 入口必须和酒馆服务共享同一套 Termux host 资产，
  * 但它只负责“准备资产 + 给出 shell 启动规格”，不能偷偷附带 bootstrap 状态机副作用。
  */
 class DefaultConsoleRuntimeRepository(context: Context) : ConsoleRuntimeRepository {
@@ -43,7 +43,7 @@ internal fun resolveConsoleGuestShellPath(
 }
 
 /**
- * 终端 shell 启动规格必须复用宿主统一的 proot/rootfs 环境变量，
+ * 终端 shell 启动规格必须复用宿主统一的 Termux host 环境变量，
  * 否则设置页终端看到的目录、prefix 和 DNS 会和正式运行时分叉。
  */
 internal fun buildConsoleShellLaunchSpec(

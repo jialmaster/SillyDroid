@@ -30,6 +30,9 @@ html[data-sillydroid-theme="glass"] {
     --sillydroid-glass-active-bg: linear-gradient(135deg, color-mix(in srgb, var(--sillydroid-glass-primary) 42%, rgb(0 0 0 / 0)), color-mix(in srgb, var(--sillydroid-glass-secondary) 30%, rgb(0 0 0 / 0))), var(--sillydroid-glass-field-strong);
     --sillydroid-glass-edge-highlight: color-mix(in srgb, var(--sillydroid-glass-primary) 18%, rgb(255 255 255 / 0.2));
     --sillydroid-glass-edge-highlight-soft: color-mix(in srgb, var(--sillydroid-glass-secondary) 14%, rgb(255 255 255 / 0.14));
+    /* 高光只画顶边 1px，避免黑/白 mix 铺满组件后把按钮和面板变成实心块。 */
+    --sillydroid-glass-edge-line-bg: linear-gradient(180deg, var(--sillydroid-glass-edge-highlight) 0, var(--sillydroid-glass-edge-highlight) 1px, rgb(255 255 255 / 0) 1px);
+    --sillydroid-glass-edge-line-bg-soft: linear-gradient(180deg, var(--sillydroid-glass-edge-highlight-soft) 0, var(--sillydroid-glass-edge-highlight-soft) 1px, rgb(255 255 255 / 0) 1px);
     --sillydroid-glass-shadow: 0 14px 36px rgb(0 0 0 / 0.28), 0 0 32px color-mix(in srgb, var(--sillydroid-glass-primary) 10%, rgb(0 0 0 / 0)), inset 0 1px 0 var(--sillydroid-glass-edge-highlight);
     --sillydroid-glass-shadow-soft: 0 8px 22px rgb(0 0 0 / 0.2), 0 0 20px color-mix(in srgb, var(--sillydroid-glass-secondary) 8%, rgb(0 0 0 / 0)), inset 0 1px 0 var(--sillydroid-glass-edge-highlight-soft);
     /* 浮层阴影统一走语义 token；高质量模式只改 token，避免弹窗、菜单、提示各自散写质感。 */
@@ -62,13 +65,24 @@ html[data-sillydroid-theme="glass"] {
         0 8px 20px color-mix(in srgb, var(--sillydroid-glass-primary) 10%, rgb(0 0 0 / 0));
     --sillydroid-glass-panel-bg: var(--sillydroid-glass-gradient);
     --sillydroid-glass-panel-border: var(--sillydroid-glass-border);
+    --sillydroid-glass-panel-mix: rgb(0 0 0 / 0.5);
+    --sillydroid-glass-panel-mix-bg:
+        linear-gradient(135deg,
+            color-mix(in srgb, var(--sillydroid-glass-primary) 8%, var(--sillydroid-glass-panel-mix)),
+            color-mix(in srgb, var(--sillydroid-glass-secondary) 6%, var(--sillydroid-glass-panel-mix)));
     --sillydroid-glass-surface-bg:
         linear-gradient(135deg, color-mix(in srgb, var(--sillydroid-glass-primary) 12%, rgb(255 255 255 / 0.02)), rgb(0 0 0 / 0) 44%),
         var(--sillydroid-glass-panel-bg);
     --sillydroid-glass-strong-surface-bg:
         linear-gradient(135deg, color-mix(in srgb, var(--sillydroid-glass-primary) 18%, rgb(0 0 0 / 0)), color-mix(in srgb, var(--sillydroid-glass-secondary) 14%, rgb(0 0 0 / 0))),
         var(--sillydroid-glass-panel-bg);
-    --sillydroid-glass-panel-highlight-bg: var(--sillydroid-glass-surface-bg);
+    --sillydroid-glass-panel-highlight-bg:
+        var(--sillydroid-glass-edge-line-bg-soft),
+        var(--sillydroid-glass-panel-mix-bg),
+        var(--sillydroid-glass-surface-bg);
+    --sillydroid-glass-panel-on-shell-bg:
+        var(--sillydroid-glass-panel-highlight-bg),
+        var(--sillydroid-glass-panel-highlight-bg);
     --sillydroid-glass-expander-bg:
         linear-gradient(90deg, color-mix(in srgb, var(--sillydroid-glass-primary) 18%, rgb(0 0 0 / 0)), color-mix(in srgb, var(--sillydroid-glass-secondary) 11%, rgb(0 0 0 / 0))),
         var(--sillydroid-glass-control-bg);
@@ -76,10 +90,10 @@ html[data-sillydroid-theme="glass"] {
         linear-gradient(90deg, color-mix(in srgb, var(--sillydroid-glass-primary) 20%, rgb(0 0 0 / 0)), color-mix(in srgb, var(--sillydroid-glass-secondary) 13%, rgb(0 0 0 / 0))),
         var(--sillydroid-glass-control-bg-hover);
     --sillydroid-glass-expander-highlight-bg:
-        linear-gradient(180deg, var(--sillydroid-glass-edge-highlight-soft), rgb(255 255 255 / 0) 42%),
+        var(--sillydroid-glass-edge-line-bg-soft),
         var(--sillydroid-glass-expander-bg);
     --sillydroid-glass-expander-highlight-bg-hover:
-        linear-gradient(180deg, var(--sillydroid-glass-edge-highlight), rgb(255 255 255 / 0) 46%),
+        var(--sillydroid-glass-edge-line-bg),
         var(--sillydroid-glass-expander-bg-hover);
     --sillydroid-glass-menu-item-bg: var(--sillydroid-glass-control-bg);
     --sillydroid-glass-menu-item-bg-hover: var(--sillydroid-glass-control-bg-hover);
@@ -94,6 +108,7 @@ html[data-sillydroid-theme="glass"] {
     --sillydroid-glass-slider-track-size: calc(var(--mainFontSize) * 0.34);
     --sillydroid-glass-slider-thumb-size: calc(var(--mainFontSize) * 0.95);
     --sillydroid-glass-checkbox-size: calc(var(--mainFontSize) * 0.95);
+    --sillydroid-glass-switch-thumb-off-bg: rgb(0 0 0 / 0.5);
     --sillydroid-glass-message-action-size: calc(var(--mainFontSize) * 1.38);
     --sillydroid-glass-checkbox-mark: rgb(255 255 255);
     --sillydroid-glass-toast-success: #37d67a;
@@ -151,6 +166,8 @@ html[data-sillydroid-theme="glass"][data-sillydroid-theme-resolved-mode="light"]
     --sillydroid-glass-blur-soft: blur(7px);
     --sillydroid-glass-gradient:
         linear-gradient(135deg, color-mix(in srgb, var(--sillydroid-glass-primary-tint) 80%, rgb(255 255 255 / 0)), color-mix(in srgb, var(--sillydroid-glass-secondary-tint) 70%, rgb(255 255 255 / 0)));
+    --sillydroid-glass-panel-mix: rgb(255 255 255 / 0.5);
+    --sillydroid-glass-switch-thumb-off-bg: rgb(255 255 255 / 0.5);
     --sillydroid-glass-surface-bg: var(--sillydroid-glass-gradient);
     --sillydroid-glass-strong-surface-bg:
         linear-gradient(135deg, color-mix(in srgb, var(--sillydroid-glass-primary-tint) 88%, rgb(255 255 255 / 0)), color-mix(in srgb, var(--sillydroid-glass-secondary-tint) 78%, rgb(255 255 255 / 0)));
@@ -226,21 +243,22 @@ html[data-sillydroid-theme="glass"][data-sillydroid-theme-effective-performance=
         linear-gradient(135deg, color-mix(in srgb, var(--sillydroid-glass-primary) 10%, rgb(0 0 0 / 0)), color-mix(in srgb, var(--sillydroid-glass-secondary) 8%, rgb(0 0 0 / 0))),
         var(--sillydroid-glass-gradient);
     --sillydroid-glass-panel-highlight-bg:
-        linear-gradient(180deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.026) 31%, rgb(255 255 255 / 0)),
+        var(--sillydroid-glass-edge-line-bg-soft),
+        var(--sillydroid-glass-panel-mix-bg),
         var(--sillydroid-glass-surface-bg);
     --sillydroid-glass-control-highlight-bg:
-        linear-gradient(180deg, rgb(255 255 255 / 0.14), rgb(255 255 255 / 0.036) 34%, rgb(255 255 255 / 0)),
+        var(--sillydroid-glass-edge-line-bg-soft),
         linear-gradient(135deg, color-mix(in srgb, var(--sillydroid-glass-primary) 12%, transparent), color-mix(in srgb, var(--sillydroid-glass-secondary) 9%, transparent)),
         var(--sillydroid-glass-control-bg);
     --sillydroid-glass-control-highlight-bg-hover:
-        linear-gradient(180deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.05) 36%, rgb(255 255 255 / 0)),
+        var(--sillydroid-glass-edge-line-bg),
         linear-gradient(135deg, color-mix(in srgb, var(--sillydroid-glass-primary) 16%, transparent), color-mix(in srgb, var(--sillydroid-glass-secondary) 12%, transparent)),
         var(--sillydroid-glass-control-bg-hover);
     --sillydroid-glass-expander-highlight-bg:
-        linear-gradient(180deg, rgb(255 255 255 / 0.15), rgb(255 255 255 / 0.035) 34%, rgb(255 255 255 / 0)),
+        var(--sillydroid-glass-edge-line-bg-soft),
         var(--sillydroid-glass-expander-bg);
     --sillydroid-glass-expander-highlight-bg-hover:
-        linear-gradient(180deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.048) 36%, rgb(255 255 255 / 0)),
+        var(--sillydroid-glass-edge-line-bg),
         var(--sillydroid-glass-expander-bg-hover);
     --sillydroid-glass-control-hover-shadow:
         0 0 0 1px color-mix(in srgb, var(--sillydroid-glass-primary) 24%, rgb(0 0 0 / 0)),
@@ -297,21 +315,22 @@ html[data-sillydroid-theme="glass"][data-sillydroid-theme-resolved-mode="light"]
     --sillydroid-glass-strong-surface-bg:
         linear-gradient(135deg, color-mix(in srgb, var(--sillydroid-glass-primary-tint) 72%, rgb(255 255 255 / 0)), color-mix(in srgb, var(--sillydroid-glass-secondary-tint) 64%, rgb(255 255 255 / 0)));
     --sillydroid-glass-panel-highlight-bg:
-        linear-gradient(180deg, rgb(255 255 255 / 0.24), rgb(255 255 255 / 0.05) 30%, rgb(255 255 255 / 0.01)),
+        var(--sillydroid-glass-edge-line-bg-soft),
+        var(--sillydroid-glass-panel-mix-bg),
         var(--sillydroid-glass-surface-bg);
     --sillydroid-glass-control-highlight-bg:
-        linear-gradient(180deg, rgb(255 255 255 / 0.38), rgb(255 255 255 / 0.08) 34%, rgb(255 255 255 / 0.015)),
+        var(--sillydroid-glass-edge-line-bg-soft),
         linear-gradient(135deg, color-mix(in srgb, var(--sillydroid-glass-primary) 12%, transparent), color-mix(in srgb, var(--sillydroid-glass-secondary) 9%, transparent)),
         var(--sillydroid-glass-control-bg);
     --sillydroid-glass-control-highlight-bg-hover:
-        linear-gradient(180deg, rgb(255 255 255 / 0.46), rgb(255 255 255 / 0.11) 36%, rgb(255 255 255 / 0.02)),
+        var(--sillydroid-glass-edge-line-bg),
         linear-gradient(135deg, color-mix(in srgb, var(--sillydroid-glass-primary) 16%, transparent), color-mix(in srgb, var(--sillydroid-glass-secondary) 12%, transparent)),
         var(--sillydroid-glass-control-bg-hover);
     --sillydroid-glass-expander-highlight-bg:
-        linear-gradient(180deg, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0.06) 32%, rgb(255 255 255 / 0.01)),
+        var(--sillydroid-glass-edge-line-bg-soft),
         var(--sillydroid-glass-expander-bg);
     --sillydroid-glass-expander-highlight-bg-hover:
-        linear-gradient(180deg, rgb(255 255 255 / 0.34), rgb(255 255 255 / 0.08) 34%, rgb(255 255 255 / 0.01)),
+        var(--sillydroid-glass-edge-line-bg),
         var(--sillydroid-glass-expander-bg-hover);
     --sillydroid-glass-control-shadow: none;
     --sillydroid-glass-shadow: 0 14px 34px rgb(54 78 116 / 0.13);
@@ -449,7 +468,6 @@ html[data-sillydroid-theme="glass"] :is(
     .ctxmenu,
     .context-menu,
     .dropdown-menu,
-    .list-group,
     #export_format_popup,
     #dialogue_popup,
     #character_context_menu,
@@ -460,7 +478,7 @@ html[data-sillydroid-theme="glass"] :is(
     #logprobsViewer
 ) {
     border-color: var(--sillydroid-glass-panel-border) !important;
-    background: var(--sillydroid-glass-surface-bg) !important;
+    background: var(--sillydroid-glass-panel-highlight-bg) !important;
     color: var(--sillydroid-glass-text) !important;
     box-shadow: var(--sillydroid-glass-shadow-floating);
     backdrop-filter: var(--sillydroid-glass-blur) !important;
@@ -485,11 +503,47 @@ html[data-sillydroid-theme="glass"] :is(
     #character_context_menu
 ) {
     border-color: var(--sillydroid-glass-border) !important;
-    background: var(--sillydroid-glass-surface-bg) !important;
+    background: var(--sillydroid-glass-panel-highlight-bg) !important;
     color: var(--sillydroid-glass-text) !important;
     box-shadow: var(--sillydroid-glass-shadow-panel);
     backdrop-filter: var(--sillydroid-glass-blur) !important;
     -webkit-backdrop-filter: var(--sillydroid-glass-blur) !important;
+}
+
+html[data-sillydroid-theme="glass"] :is(
+    #send_form
+) {
+    /* 底部由 #form_sheld 承担唯一 panel；#send_form 只是内部布局层，避免和底部 panel 叠色。 */
+    border-color: transparent !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+html[data-sillydroid-theme="glass"] #rm_characters_block.right_menu {
+    /* 角色抽屉本身仍是 panel；角色列表只是内部滚动区，必须透明，只保留角色卡片自身表面。 */
+    border-color: transparent !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+html[data-sillydroid-theme="glass"] #rm_characters_block :is(
+    #charListFixedTop,
+    #rm_print_characters_block
+) {
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 html[data-sillydroid-theme="glass"] :is(
@@ -506,6 +560,14 @@ html[data-sillydroid-theme="glass"] :is(
 html[data-sillydroid-theme="glass"] #sheld {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
+}
+
+html[data-sillydroid-theme="glass"] body.bubblechat #sheld,
+html[data-sillydroid-theme="glass"] #sheld:has(#chat > .welcomePanel) {
+    /* #sheld 是最后面的灰色底板，只承载背景色，不作为前景 panel 叠加阴影或边框。 */
+    background: var(--sillydroid-glass-panel-highlight-bg) !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
 }
 
 html[data-sillydroid-theme="glass"] #chat {
@@ -526,6 +588,8 @@ html[data-sillydroid-theme="glass"] #top-bar {
     /* SillyTavern top bar defaults to bottom input height; glass theme keeps the top chrome tied to top-bar tokens so icons sit visually centered. */
     block-size: var(--topBarBlockSize) !important;
     height: var(--topBarBlockSize) !important;
+    /* #top-bar 在 #sheld 外面，不能真实吃到 #sheld 后景；这里自带同款后景，让顶部菜单和中间 panel 叠色一致。 */
+    background: var(--sillydroid-glass-panel-on-shell-bg) !important;
     box-shadow: var(--sillydroid-glass-shadow-topbar) !important;
 }
 
@@ -1324,7 +1388,8 @@ html[data-sillydroid-theme="glass"] :is(
 }
 
 html[data-sillydroid-theme="glass"] input[type="checkbox"]:not(.del_checkbox):checked {
-    background: linear-gradient(135deg, var(--sillydroid-glass-primary), var(--sillydroid-glass-secondary)) !important;
+    background: var(--sillydroid-glass-primary) !important;
+    background-color: var(--sillydroid-glass-primary) !important;
     border-color: var(--sillydroid-glass-border-strong) !important;
 }
 
@@ -1350,7 +1415,7 @@ html[data-sillydroid-theme="glass"] :is(
     outline: 1px solid color-mix(in srgb, var(--sillydroid-glass-primary) 62%, rgb(0 0 0 / 0));
     box-shadow:
         0 0 0 2px color-mix(in srgb, var(--sillydroid-glass-primary) 24%, rgb(0 0 0 / 0)),
-        0 0 18px color-mix(in srgb, var(--sillydroid-glass-secondary) 26%, rgb(0 0 0 / 0));
+        0 0 18px color-mix(in srgb, var(--sillydroid-glass-primary) 22%, rgb(0 0 0 / 0));
 }
 
 html[data-sillydroid-theme="glass"] .sillydroid-host-switch input {
@@ -1397,22 +1462,39 @@ html[data-sillydroid-theme="glass"] input[type="range"]::-webkit-slider-thumb {
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--sillydroid-glass-primary) 24%, rgb(0 0 0 / 0)), 0 0 16px color-mix(in srgb, var(--sillydroid-glass-secondary) 28%, rgb(0 0 0 / 0));
 }
 
+html[data-sillydroid-theme="glass"] input[type="range"].sillydroid-host-color-channel::-webkit-slider-runnable-track {
+    /* 宿主颜色选择器是编辑颜色值本身；HSL 通道使用固定语义轨道，必须覆盖全局 range 主题渐变。 */
+    background: var(--sillydroid-host-color-channel-track) !important;
+}
+
+html[data-sillydroid-theme="glass"] input[type="range"].sillydroid-host-color-channel::-webkit-slider-thumb {
+    border-color: rgb(255 255 255 / 0.46) !important;
+    background: var(--sillydroid-host-color-channel-thumb) !important;
+    box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--sillydroid-host-color-channel-thumb) 26%, transparent),
+        0 0 12px color-mix(in srgb, var(--sillydroid-host-color-channel-thumb) 30%, transparent) !important;
+}
+
 html[data-sillydroid-theme="glass"] .sillydroid-host-switch-track {
     border-color: var(--sillydroid-glass-border) !important;
     background: transparent !important;
-    box-shadow: var(--sillydroid-glass-control-shadow) !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
 }
 
 html[data-sillydroid-theme="glass"] .sillydroid-host-switch-track::after {
-    background: var(--sillydroid-glass-primary) !important;
-    box-shadow: 0 0 10px color-mix(in srgb, var(--sillydroid-glass-primary) 32%, transparent) !important;
+    background: var(--sillydroid-glass-switch-thumb-off-bg) !important;
+    box-shadow: 0 0 8px rgb(0 0 0 / 0.18) !important;
 }
 
 html[data-sillydroid-theme="glass"] .sillydroid-host-switch input:checked + .sillydroid-host-switch-track {
-    border-color: var(--sillydroid-glass-border-strong) !important;
+    border-color: var(--sillydroid-glass-primary) !important;
     background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
     box-shadow:
-        0 0 0 1px var(--sillydroid-glass-border-strong),
+        0 0 0 1px color-mix(in srgb, var(--sillydroid-glass-primary) 60%, transparent),
         0 0 14px color-mix(in srgb, var(--sillydroid-glass-primary) 20%, transparent) !important;
 }
 
@@ -1709,7 +1791,7 @@ html[data-sillydroid-theme="glass"] #rightSendForm #send_but:is(:hover, :focus-v
 html[data-sillydroid-theme="glass"] :is(#options, #extensionsMenu) {
     border: 1px solid var(--sillydroid-glass-panel-border) !important;
     border-radius: var(--sillydroid-glass-radius-lg) !important;
-    background: var(--sillydroid-glass-surface-bg) !important;
+    background: var(--sillydroid-glass-panel-highlight-bg) !important;
     box-shadow: var(--sillydroid-glass-shadow-menu) !important;
     backdrop-filter: var(--sillydroid-glass-blur-soft) !important;
     -webkit-backdrop-filter: var(--sillydroid-glass-blur-soft) !important;
@@ -1796,17 +1878,18 @@ html[data-sillydroid-theme="glass"][data-sillydroid-theme-resolved-mode="light"]
 }
 
 html[data-sillydroid-theme="glass"] .sillydroid-host-section-title {
+    padding-inline: var(--sillydroid-glass-space-2) !important;
     color: var(--sillydroid-glass-text) !important;
 }
 
 html[data-sillydroid-theme="glass"] .sillydroid-host-section {
-    /* fieldset + legend 会让浏览器把左上边框切开；宿主设置区改用 shadow 画圆角边，避免左侧圆角断层。 */
-    border: 0 !important;
+    /* fieldset 只是分组边框，不是 panel；背景保持透明，由外层宿主 panel 承载玻璃底。 */
+    border: 1px solid var(--sillydroid-glass-panel-border) !important;
     border-radius: var(--sillydroid-glass-radius-md) !important;
-    background: var(--sillydroid-glass-panel-highlight-bg) !important;
-    box-shadow:
-        inset 0 0 0 1px var(--sillydroid-glass-panel-border),
-        var(--sillydroid-glass-control-shadow) !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
 }
 
 html[data-sillydroid-theme="glass"] .sillydroid-host-color-panel {
@@ -1922,9 +2005,6 @@ html[data-sillydroid-theme="glass"][data-sillydroid-theme-resolved-mode="light"]
 }
 
 html[data-sillydroid-theme="glass"][data-sillydroid-theme-effective-performance="quality"] :is(
-    #top-bar,
-    #form_sheld,
-    #send_form,
     .drawer-content,
     .right_menu,
     .popup,
@@ -1983,9 +2063,6 @@ html[data-sillydroid-theme="glass"][data-sillydroid-theme-effective-performance=
 }
 
 html[data-sillydroid-theme="glass"][data-sillydroid-theme-resolved-mode="light"][data-sillydroid-theme-effective-performance="quality"] :is(
-    #top-bar,
-    #form_sheld,
-    #send_form,
     .drawer-content,
     .right_menu,
     .popup,
@@ -2077,8 +2154,10 @@ html[data-sillydroid-theme="glass"][data-sillydroid-theme-resolved-mode="light"]
         inset 0 -1px 0 color-mix(in srgb, var(--sillydroid-glass-secondary) 16%, rgb(255 255 255 / 0.18)) !important;
 }
 
-html[data-sillydroid-theme="glass"][data-sillydroid-theme-resolved-mode="light"] .sillydroid-host-panel .sillydroid-host-switch-track {
-    background: rgb(255 255 255 / 0) !important;
+html[data-sillydroid-theme="glass"][data-sillydroid-theme-resolved-mode="light"] .sillydroid-host-panel .sillydroid-host-switch input:not(:checked) + .sillydroid-host-switch-track {
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
     box-shadow: none !important;
 }
 
@@ -2093,14 +2172,33 @@ html[data-sillydroid-theme="glass"][data-sillydroid-theme-resolved-mode="light"]
     background-color: var(--sillydroid-glass-control-bg) !important;
 }
 
+html[data-sillydroid-theme="glass"] #sillydroid_android_host_settings_panel :is(
+    .sillydroid-host-switch,
+    .sillydroid-host-select-control,
+    .sillydroid-host-color-control
+) {
+    /* label + 控件只是布局行，不再作为独立卡片；真正需要边框的是内部 select、switch、颜色按钮等控件本体。 */
+    border-color: transparent !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+}
+
 html[data-sillydroid-theme="glass"] .welcomeRecent .recentChatList .recentChat,
-html[data-sillydroid-theme="glass"] #chat > .welcomePanel ~ .mes:not(.smallSysMes),
-html[data-sillydroid-theme="glass"] body.bubblechat .welcomePanel {
-    border-color: var(--sillydroid-glass-border) !important;
-    background: var(--sillydroid-glass-surface-bg) !important;
-    box-shadow: var(--sillydroid-glass-shadow-soft);
+html[data-sillydroid-theme="glass"] #chat > .welcomePanel ~ .mes:not(.smallSysMes) {
+    border-color: var(--sillydroid-glass-panel-border) !important;
+    background: var(--sillydroid-glass-panel-highlight-bg) !important;
+    box-shadow: var(--sillydroid-glass-shadow-panel) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
+}
+
+html[data-sillydroid-theme="glass"] #chat > .welcomePanel,
+html[data-sillydroid-theme="glass"] body.bubblechat .welcomePanel {
+    /* 主页欢迎区是外层大 panel；最近聊天条目和消息卡片仍走 surface，避免把小组件一起压黑。 */
+    border-color: var(--sillydroid-glass-panel-border) !important;
+    background: var(--sillydroid-glass-panel-highlight-bg) !important;
+    box-shadow: var(--sillydroid-glass-shadow-panel) !important;
 }
 
 html[data-sillydroid-theme="glass"] #chat > .welcomePanel ~ .mes:not(.smallSysMes) {
@@ -2170,7 +2268,7 @@ html[data-sillydroid-theme="glass"] #chat :is(
     .mes_edit_buttons .menu_button,
     .mes_reasoning_actions .menu_button
 ) {
-    /* 消息内动作是轻量图标按钮；这里只调尺寸和表面，不写 display，避免覆盖上游隐藏/展开状态。 */
+    /* 消息内动作是轻量图标按钮；不写 display，避免覆盖上游隐藏/展开状态，只用行盒把非紧凑模式图标居中。 */
     width: var(--sillydroid-glass-message-action-size) !important;
     height: var(--sillydroid-glass-message-action-size) !important;
     inline-size: var(--sillydroid-glass-message-action-size) !important;
@@ -2189,7 +2287,8 @@ html[data-sillydroid-theme="glass"] #chat :is(
     filter: none !important;
     opacity: 0.86 !important;
     font-size: calc(var(--mainFontSize) * 0.92) !important;
-    line-height: 1 !important;
+    text-align: center !important;
+    line-height: var(--sillydroid-glass-message-action-size) !important;
     text-shadow: none !important;
 }
 
@@ -2218,12 +2317,88 @@ html[data-sillydroid-theme="glass"] #chat :is(
     fill: currentColor !important;
     font-size: calc(var(--mainFontSize) * 0.92) !important;
     line-height: 1 !important;
+    vertical-align: middle !important;
+}
+
+html[data-sillydroid-theme="glass"]:not([data-sillydroid-chat-compact="true"]) {
+    --sillydroid-glass-swipe-rail-inline-size: calc(var(--mainFontSize) * 1.55);
+    --sillydroid-glass-swipe-rail-block-size: calc(var(--mainFontSize) * 3.1);
+    --sillydroid-glass-swipe-rail-inline-offset: 0px;
+    --sillydroid-glass-swipe-rail-bottom-offset: calc(var(--mainFontSize) * 1.15);
+}
+
+html[data-sillydroid-theme="glass"]:not([data-sillydroid-chat-compact="true"]) #chat .mes:not(.smallSysMes) > .swipe_left,
+html[data-sillydroid-theme="glass"]:not([data-sillydroid-chat-compact="true"]) #chat .mes:not(.smallSysMes) > .swipeRightBlock :is(.swipe_right, .swipes-counter) {
+    /* swipe 翻页只显示箭头/数字，不继承全局 interactable 的玻璃按钮底。 */
+    border: 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+html[data-sillydroid-theme="glass"]:not([data-sillydroid-chat-compact="true"]) #chat .mes.swipes_visible:not(.smallSysMes) > .swipe_left,
+html[data-sillydroid-theme="glass"]:not([data-sillydroid-chat-compact="true"]) #chat .mes.swipes_visible:not(.smallSysMes) > .swipeRightBlock .swipe_right {
+    /* 非紧凑模式 swipe 是消息两侧的翻页 rail，不按普通方形消息按钮处理。 */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    inline-size: var(--sillydroid-glass-swipe-rail-inline-size) !important;
+    block-size: var(--sillydroid-glass-swipe-rail-block-size) !important;
+    min-inline-size: var(--sillydroid-glass-swipe-rail-inline-size) !important;
+    min-block-size: var(--sillydroid-glass-swipe-rail-block-size) !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: calc(var(--sillydroid-glass-radius-sm) * 0.9) !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    font-size: calc(var(--mainFontSize) * 1.05) !important;
+    line-height: var(--sillydroid-glass-swipe-rail-block-size) !important;
+    text-align: center !important;
+}
+
+html[data-sillydroid-theme="glass"]:not([data-sillydroid-chat-compact="true"]) #chat .mes.swipes_visible:not(.smallSysMes) > .swipe_left {
+    inset-block-start: auto !important;
+    inset-block-end: var(--sillydroid-glass-swipe-rail-bottom-offset) !important;
+    inset-inline-start: var(--sillydroid-glass-swipe-rail-inline-offset) !important;
+    transform: none !important;
+}
+
+html[data-sillydroid-theme="glass"]:not([data-sillydroid-chat-compact="true"]) #chat .mes.swipes_visible:not(.smallSysMes) > .swipeRightBlock {
+    align-items: center !important;
+    inline-size: var(--sillydroid-glass-swipe-rail-inline-size) !important;
+    min-inline-size: var(--sillydroid-glass-swipe-rail-inline-size) !important;
+    inset-block-start: auto !important;
+    inset-block-end: var(--sillydroid-glass-swipe-rail-bottom-offset) !important;
+    inset-inline-end: var(--sillydroid-glass-swipe-rail-inline-offset) !important;
+    transform: none !important;
+    gap: var(--sillydroid-glass-space-1) !important;
+    overflow: visible !important;
+}
+
+html[data-sillydroid-theme="glass"]:not([data-sillydroid-chat-compact="true"]) #chat .mes.swipes_visible:not(.smallSysMes) > .swipeRightBlock .swipes-counter {
+    inline-size: var(--sillydroid-glass-swipe-rail-inline-size) !important;
+    min-inline-size: var(--sillydroid-glass-swipe-rail-inline-size) !important;
+    max-inline-size: var(--sillydroid-glass-swipe-rail-inline-size) !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    font-size: calc(var(--mainFontSize) * 0.66) !important;
+    line-height: 1 !important;
+    text-align: center !important;
 }
 
 html[data-sillydroid-theme="glass"] body.bubblechat #chat .mes {
-    border-color: var(--sillydroid-glass-border) !important;
-    background: var(--sillydroid-glass-surface-bg) !important;
-    box-shadow: var(--sillydroid-glass-shadow-soft);
+    /* 聊天消息本身就是 chat 内 panel，不能退回浅 surface。 */
+    border-color: var(--sillydroid-glass-panel-border) !important;
+    background: var(--sillydroid-glass-panel-highlight-bg) !important;
+    box-shadow: var(--sillydroid-glass-shadow-panel) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
 }
@@ -2231,6 +2406,7 @@ html[data-sillydroid-theme="glass"] body.bubblechat #chat .mes {
 html[data-sillydroid-theme="glass"][data-sillydroid-theme-effective-performance="quality"] :is(
     .welcomeRecent .recentChatList .recentChat,
     #chat > .welcomePanel ~ .mes:not(.smallSysMes),
+    #chat > .welcomePanel,
     body.bubblechat .welcomePanel,
     body.bubblechat #chat .mes
 ) {
@@ -2240,7 +2416,7 @@ html[data-sillydroid-theme="glass"][data-sillydroid-theme-effective-performance=
 }
 
 html[data-sillydroid-theme="glass"] body.bubblechat #chat .mes[is_user="true"] {
-    background: var(--sillydroid-glass-strong-surface-bg) !important;
+    background: var(--sillydroid-glass-panel-highlight-bg) !important;
 }
 
 html[data-sillydroid-theme="glass"][data-sillydroid-theme-effective-performance="simple"] :is(
@@ -2479,13 +2655,13 @@ html[data-sillydroid-theme="glass"] .select2-results .select2-results__option[ar
 
 html[data-sillydroid-theme="glass"] .select2-results .select2-results__option--selected::before,
 html[data-sillydroid-theme="glass"] .select2-results .select2-results__option[aria-selected="true"]::before {
-    /* 选中态只在真实 selected/aria-selected 状态显示勾，勾号用明暗模式文字色，避免和主题渐变同色导致误读。 */
+    /* 选中态只在真实 selected/aria-selected 状态显示勾；小方块用单主色，不再做主/副色渐变。 */
     content: "✓" !important;
-    border-color: color-mix(in srgb, var(--sillydroid-glass-secondary) 64%, var(--sillydroid-glass-primary)) !important;
-    background: linear-gradient(135deg, var(--sillydroid-glass-primary), var(--sillydroid-glass-secondary)) !important;
+    border-color: var(--sillydroid-glass-primary) !important;
+    background: var(--sillydroid-glass-primary) !important;
     background-color: var(--sillydroid-glass-primary) !important;
     color: var(--sillydroid-glass-text) !important;
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--sillydroid-glass-primary) 30%, transparent), 0 0 12px color-mix(in srgb, var(--sillydroid-glass-secondary) 24%, transparent) !important;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--sillydroid-glass-primary) 30%, transparent), 0 0 12px color-mix(in srgb, var(--sillydroid-glass-primary) 22%, transparent) !important;
 }
 
 html[data-sillydroid-theme="glass"] .select2-results .select2-results__option--highlighted.select2-results__option--selectable {
@@ -2603,4 +2779,15 @@ html[data-sillydroid-theme="glass"][data-sillydroid-chat-compact="true"] #chat .
     box-shadow: none !important;
     color: transparent !important;
     text-shadow: none !important;
+}
+
+html[data-sillydroid-theme="glass"][data-sillydroid-theme-effective-performance="quality"] #rm_characters_block.right_menu {
+    /* 角色列表不是菜单 panel；最终收尾处重申透明，避免高质量 panel 规则后加载后把内部滚动区压黑。 */
+    border-color: transparent !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }

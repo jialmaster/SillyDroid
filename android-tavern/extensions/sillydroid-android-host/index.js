@@ -9,7 +9,7 @@ const themeStylesheetId = 'sillydroid_android_host_theme_stylesheet';
 const themeNativeObserverId = 'sillydroidThemeBound';
 const startupThemeStateKey = 'sillydroidAndroidHostStartupThemeState';
 // 主题 CSS URL 版本用于破坏 WebView/浏览器缓存；修改内置主题样式时必须同步 bump，避免继续使用旧 glass.css。
-const themeStylesheetVersion = '1.0.2';
+const themeStylesheetVersion = '1.0.30';
 const worldInfoSelect2ObserverId = 'sillydroidWorldInfoSelect2Observed';
 const popupTitle = '安卓宿主';
 const webViewSafeAutoMajorVersion = 121;
@@ -36,7 +36,6 @@ const themePerformanceChoices = [
 ];
 
 const defaultSettings = {
-    enableFloatingBubble: false,
     enableNotification: false,
     enableSoundNotification: false,
     compactChatLayout: false,
@@ -140,6 +139,34 @@ function getBridge() {
     return bridge;
 }
 
+function resolveHostManagedSwitchState(hostInfo = getHostVersionInfo()) {
+    return {
+        // 悬浮球和下拉刷新都由 Android 宿主偏好持久化；扩展面板首屏必须读宿主真实值，不能退回本地默认值。
+        floatingBubbleEnabled: hostInfo?.floatingLogBubbleEnabled === true,
+        pullRefreshEnabled: hostInfo?.webViewPullRefreshEnabled === true,
+    };
+}
+
+function resolveHostPanelCapabilities(hostInfo = getHostVersionInfo()) {
+    const bridge = getBridge();
+    const notificationBridge = getNativeNotificationBridge();
+    return {
+        showVersionSummary: Boolean(hostInfo),
+        canOpenSettings: Boolean(bridge && typeof bridge.openSettings === 'function'),
+        canOpenCurrentPageInBrowser: Boolean(bridge && typeof bridge.openCurrentPageInBrowser === 'function'),
+        canReloadTavern: Boolean(bridge && typeof bridge.reloadTavern === 'function'),
+        canToggleFloatingBubble: Boolean(bridge && typeof bridge.setFloatingLogsBubbleEnabled === 'function'),
+        canTogglePullRefresh: Boolean(bridge && typeof bridge.setWebViewPullRefreshEnabled === 'function'),
+        showNotificationSection: Boolean(notificationBridge),
+    };
+}
+
+function setElementHidden(element, hidden) {
+    if (element instanceof HTMLElement) {
+        element.toggleAttribute('hidden', hidden);
+    }
+}
+
 function isAndroidTouchEnvironment() {
     return Boolean(getBridge()) || (/Android/i.test(navigator.userAgent || '') && navigator.maxTouchPoints > 0);
 }
@@ -156,6 +183,82 @@ function hexToRgb(color) {
 function rgbToHex({ r, g, b }) {
     const toHex = value => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0');
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function hexToHsl(color) {
+    const { r, g, b } = hexToRgb(color);
+    const red = r / 255;
+    const green = g / 255;
+    const blue = b / 255;
+    const max = Math.max(red, green, blue);
+    const min = Math.min(red, green, blue);
+    const lightness = (max + min) / 2;
+
+    if (max === min) {
+        return { h: 0, s: 0, l: Math.round(lightness * 100) };
+    }
+
+    const delta = max - min;
+    const saturation = lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+    let hue = 0;
+
+    if (max === red) {
+        hue = (green - blue) / delta + (green < blue ? 6 : 0);
+    } else if (max === green) {
+        hue = (blue - red) / delta + 2;
+    } else {
+        hue = (red - green) / delta + 4;
+    }
+
+    return {
+        h: Math.round(hue * 60),
+        s: Math.round(saturation * 100),
+        l: Math.round(lightness * 100),
+    };
+}
+
+function hslToHex({ h, s, l }) {
+    const hue = (((Number(h) || 0) % 360) + 360) % 360;
+    const saturation = Math.max(0, Math.min(100, Number(s) || 0)) / 100;
+    const lightness = Math.max(0, Math.min(100, Number(l) || 0)) / 100;
+    const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+    const hueSection = hue / 60;
+    const x = chroma * (1 - Math.abs((hueSection % 2) - 1));
+    const match = lightness - chroma / 2;
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+
+    if (hueSection < 1) {
+        red = chroma;
+        green = x;
+    } else if (hueSection < 2) {
+        red = x;
+        green = chroma;
+    } else if (hueSection < 3) {
+        green = chroma;
+        blue = x;
+    } else if (hueSection < 4) {
+        green = x;
+        blue = chroma;
+    } else if (hueSection < 5) {
+        red = x;
+        blue = chroma;
+    } else {
+        red = chroma;
+        blue = x;
+    }
+
+    return rgbToHex({
+        r: (red + match) * 255,
+        g: (green + match) * 255,
+        b: (blue + match) * 255,
+    });
+}
+
+function formatHslChannelValue(channel, value) {
+    const normalizedValue = Number.parseInt(value, 10) || 0;
+    return channel === 'h' ? `${normalizedValue}°` : `${normalizedValue}%`;
 }
 
 function setImportantColorBackground(element, color) {
@@ -705,7 +808,7 @@ async function setFloatingBubbleEnabled(enabled) {
         return { updated: false };
     }
 
-    saveExtensionSetting('enableFloatingBubble', enabled);
+    // 悬浮球状态以宿主 SharedPreferences 为唯一事实源，避免扩展本地缓存把首次打开面板的状态带偏。
     toastr[enabled ? 'success' : 'info'](enabled ? '已启用悬浮球。' : '已关闭悬浮球。', popupTitle);
     return { updated: true };
 }
@@ -944,6 +1047,7 @@ function syncLiveThemeColorProperties(colorRole, color) {
 function createColorChannelControl(colorRole, channel, label, value) {
     const wrapper = document.createElement('label');
     wrapper.classList.add('sillydroid-host-color-channel-row');
+    wrapper.dataset.sillydroidColorChannel = channel;
 
     const labelText = document.createElement('span');
     labelText.classList.add('sillydroid-host-color-channel-label');
@@ -953,16 +1057,17 @@ function createColorChannelControl(colorRole, channel, label, value) {
     input.classList.add('sillydroid-host-color-channel');
     input.type = 'range';
     input.min = '0';
-    input.max = '255';
+    input.max = channel === 'h' ? '360' : '100';
     input.step = '1';
     input.value = String(value);
     input.dataset.sillydroidColorRole = colorRole;
     input.dataset.sillydroidColorChannel = channel;
-    input.setAttribute('aria-label', `${label} 通道`);
+    const channelName = channel === 'h' ? '色相' : channel === 's' ? '饱和度' : '明度';
+    input.setAttribute('aria-label', `${channelName} 通道`);
 
     const valueText = document.createElement('span');
     valueText.classList.add('sillydroid-host-color-channel-value');
-    valueText.textContent = String(value);
+    valueText.textContent = formatHslChannelValue(channel, value);
 
     wrapper.append(labelText, input, valueText);
     return wrapper;
@@ -1153,14 +1258,14 @@ function createColorControl(id, text, value, presets, colorRole) {
     const channels = document.createElement('div');
     channels.classList.add('sillydroid-host-color-channel-grid');
     channels.setAttribute('aria-label', `${text}自定义颜色`);
-    const { r, g, b } = hexToRgb(value);
+    const { h, s, l } = hexToHsl(value);
     channels.append(
-        createColorChannelControl(colorRole, 'r', 'R', r),
-        createColorChannelControl(colorRole, 'g', 'G', g),
-        createColorChannelControl(colorRole, 'b', 'B', b)
+        createColorChannelControl(colorRole, 'h', '色相', h),
+        createColorChannelControl(colorRole, 's', '饱和度', s),
+        createColorChannelControl(colorRole, 'l', '明度', l)
     );
 
-    // 自定义颜色只走 Web 内 HEX + RGB 滑杆，不调用 Android / WebView 原生颜色选择器。
+    // 自定义颜色只走 Web 内 HEX + HSL 滑杆，不调用 Android / WebView 原生颜色选择器。
     panel.append(customTitle, customGroup, channels);
     controls.append(trigger, panel);
     row.appendChild(label);
@@ -1187,6 +1292,8 @@ function createThemePerformanceNotice() {
 function buildSettingsPanel() {
     const settings = getExtensionSettings();
     const hostInfo = getHostVersionInfo();
+    const hostManagedState = resolveHostManagedSwitchState(hostInfo);
+    const hostCapabilities = resolveHostPanelCapabilities(hostInfo);
     const existingPanel = document.getElementById(settingsPanelId);
     if (existingPanel) {
         return existingPanel;
@@ -1215,22 +1322,41 @@ function buildSettingsPanel() {
     versionSummary.id = 'sillydroid_android_host_version_summary';
     versionSummary.classList.add('sillydroid-host-version-line');
     versionSummary.textContent = formatVersionSummary(hostInfo);
+    versionSummary.toggleAttribute('hidden', !hostCapabilities.showVersionSummary);
 
     const hostGrid = createGrid(3);
-    hostGrid.appendChild(createActionButton('sillydroid_android_host_open_settings', '打开设置', 'fa-solid fa-sliders'));
-    hostGrid.appendChild(createActionButton('sillydroid_android_host_open_current_page_in_browser', '在浏览器中打开', 'fa-solid fa-arrow-up-right-from-square'));
-    hostGrid.appendChild(createActionButton('sillydroid_android_host_reload_tavern', '刷新', 'fa-solid fa-rotate-right'));
-    hostGrid.appendChild(createActionButton('sillydroid_android_host_version_info', '版本说明', 'fa-solid fa-circle-info'));
-    hostGrid.appendChild(createSwitchControl(
+    const openSettingsButton = createActionButton('sillydroid_android_host_open_settings', '打开设置', 'fa-solid fa-sliders');
+    openSettingsButton.toggleAttribute('hidden', !hostCapabilities.canOpenSettings);
+    hostGrid.appendChild(openSettingsButton);
+
+    const openCurrentPageInBrowserButton = createActionButton('sillydroid_android_host_open_current_page_in_browser', '在浏览器中打开', 'fa-solid fa-arrow-up-right-from-square');
+    openCurrentPageInBrowserButton.toggleAttribute('hidden', !hostCapabilities.canOpenCurrentPageInBrowser);
+    hostGrid.appendChild(openCurrentPageInBrowserButton);
+
+    const reloadButton = createActionButton('sillydroid_android_host_reload_tavern', '刷新', 'fa-solid fa-rotate-right');
+    reloadButton.toggleAttribute('hidden', !hostCapabilities.canReloadTavern);
+    hostGrid.appendChild(reloadButton);
+
+    const versionButton = createActionButton('sillydroid_android_host_version_info', '版本说明', 'fa-solid fa-circle-info');
+    versionButton.toggleAttribute('hidden', !hostCapabilities.showVersionSummary);
+    hostGrid.appendChild(versionButton);
+
+    const floatingBubbleSwitch = createSwitchControl(
         'sillydroid_android_host_floating_bubble',
         '悬浮球',
-        settings.enableFloatingBubble === true
-    ));
-    hostGrid.appendChild(createSwitchControl(
+        hostManagedState.floatingBubbleEnabled
+    );
+    floatingBubbleSwitch.toggleAttribute('hidden', !hostCapabilities.canToggleFloatingBubble);
+    hostGrid.appendChild(floatingBubbleSwitch);
+
+    const pullRefreshSwitch = createSwitchControl(
         'sillydroid_android_host_pull_refresh',
         '下拉刷新',
-        hostInfo?.webViewPullRefreshEnabled === true
-    ));
+        hostManagedState.pullRefreshEnabled
+    );
+    pullRefreshSwitch.toggleAttribute('hidden', !hostCapabilities.canTogglePullRefresh);
+    hostGrid.appendChild(pullRefreshSwitch);
+
     hostGrid.appendChild(createSwitchControl(
         'sillydroid_android_host_compact_chat',
         '聊天紧凑模式',
@@ -1252,6 +1378,7 @@ function buildSettingsPanel() {
         settings.enableSoundNotification === true
     ));
     notificationSection.appendChild(notificationGrid);
+    notificationSection.toggleAttribute('hidden', !hostCapabilities.showNotificationSection);
 
     const themeSection = createSection('主题切换');
     const themeGrid = createGrid(3);
@@ -1302,7 +1429,13 @@ function buildSettingsPanel() {
 function syncSettingsPanel() {
     const settings = getExtensionSettings();
     const hostInfo = getHostVersionInfo();
+    const hostManagedState = resolveHostManagedSwitchState(hostInfo);
+    const hostCapabilities = resolveHostPanelCapabilities(hostInfo);
     const panel = document.getElementById(settingsPanelId);
+    const openSettingsButton = document.getElementById('sillydroid_android_host_open_settings');
+    const openCurrentPageInBrowserButton = document.getElementById('sillydroid_android_host_open_current_page_in_browser');
+    const reloadButton = document.getElementById('sillydroid_android_host_reload_tavern');
+    const versionButton = document.getElementById('sillydroid_android_host_version_info');
     const bubbleToggle = document.getElementById('sillydroid_android_host_floating_bubble');
     const pullRefreshToggle = document.getElementById('sillydroid_android_host_pull_refresh');
     const compactChatToggle = document.getElementById('sillydroid_android_host_compact_chat');
@@ -1325,12 +1458,19 @@ function syncSettingsPanel() {
         panel.dataset.sillydroidThemePerformance = settings.themePerformanceMode;
     }
 
+    setElementHidden(openSettingsButton, !hostCapabilities.canOpenSettings);
+    setElementHidden(openCurrentPageInBrowserButton, !hostCapabilities.canOpenCurrentPageInBrowser);
+    setElementHidden(reloadButton, !hostCapabilities.canReloadTavern);
+    setElementHidden(versionButton, !hostCapabilities.showVersionSummary);
+
     if (bubbleToggle instanceof HTMLInputElement) {
-        bubbleToggle.checked = settings.enableFloatingBubble === true;
+        setElementHidden(bubbleToggle.closest('.sillydroid-host-control'), !hostCapabilities.canToggleFloatingBubble);
+        bubbleToggle.checked = hostManagedState.floatingBubbleEnabled;
     }
 
     if (pullRefreshToggle instanceof HTMLInputElement) {
-        pullRefreshToggle.checked = hostInfo?.webViewPullRefreshEnabled === true;
+        setElementHidden(pullRefreshToggle.closest('.sillydroid-host-control'), !hostCapabilities.canTogglePullRefresh);
+        pullRefreshToggle.checked = hostManagedState.pullRefreshEnabled;
     }
 
     if (compactChatToggle instanceof HTMLInputElement) {
@@ -1344,6 +1484,8 @@ function syncSettingsPanel() {
     if (soundNotificationToggle instanceof HTMLInputElement) {
         soundNotificationToggle.checked = settings.enableSoundNotification === true;
     }
+
+    setElementHidden(notificationToggle instanceof HTMLElement ? notificationToggle.closest('.sillydroid-host-section') : null, !hostCapabilities.showNotificationSection);
 
     if (themeSelect instanceof HTMLSelectElement) {
         themeSelect.value = settings.theme;
@@ -1389,6 +1531,7 @@ function syncSettingsPanel() {
     }
 
     if (versionSummary instanceof HTMLElement) {
+        versionSummary.toggleAttribute('hidden', !hostCapabilities.showVersionSummary);
         versionSummary.textContent = formatVersionSummary(hostInfo);
     }
 
@@ -1512,21 +1655,21 @@ function syncThemeColorChannelControls(colorRole, color) {
         return;
     }
 
-    const rgb = hexToRgb(color);
+    const hsl = hexToHsl(color);
     panel.querySelectorAll('.sillydroid-host-color-channel').forEach(input => {
         if (!(input instanceof HTMLInputElement)) {
             return;
         }
 
         const channel = input.dataset.sillydroidColorChannel;
-        const value = channel === 'g' ? rgb.g : channel === 'b' ? rgb.b : rgb.r;
+        const value = channel === 's' ? hsl.s : channel === 'l' ? hsl.l : hsl.h;
         if (input.value !== String(value)) {
             input.value = String(value);
         }
 
         const valueText = input.closest('.sillydroid-host-color-channel-row')?.querySelector('.sillydroid-host-color-channel-value');
         if (valueText instanceof HTMLElement) {
-            valueText.textContent = String(value);
+            valueText.textContent = formatHslChannelValue(channel, value);
         }
     });
 }
@@ -1537,19 +1680,22 @@ function readThemeColorFromChannels(colorRole) {
         return null;
     }
 
-    const values = { r: 0, g: 0, b: 0 };
+    const currentColor = colorRole === 'secondary'
+        ? getExtensionSettings().themeSecondaryColor
+        : getExtensionSettings().themeAccentColor;
+    const values = hexToHsl(currentColor);
     panel.querySelectorAll('.sillydroid-host-color-channel').forEach(input => {
         if (!(input instanceof HTMLInputElement)) {
             return;
         }
 
         const channel = input.dataset.sillydroidColorChannel;
-        if (channel === 'r' || channel === 'g' || channel === 'b') {
+        if (channel === 'h' || channel === 's' || channel === 'l') {
             values[channel] = Number.parseInt(input.value, 10) || 0;
         }
     });
 
-    return rgbToHex(values);
+    return hslToHex(values);
 }
 
 function closeThemeColorPanels(exceptPanel = null) {
@@ -1769,7 +1915,7 @@ function bindSettingsPanelEvents() {
         bubbleToggle.addEventListener('change', async () => {
             const result = await setFloatingBubbleEnabled(bubbleToggle.checked);
             if (!result.updated) {
-                bubbleToggle.checked = getExtensionSettings().enableFloatingBubble === true;
+                bubbleToggle.checked = resolveHostManagedSwitchState(getHostVersionInfo()).floatingBubbleEnabled;
             }
         });
     }
@@ -1779,7 +1925,7 @@ function bindSettingsPanelEvents() {
         pullRefreshToggle.addEventListener('change', async () => {
             const result = await setWebViewPullRefreshEnabled(pullRefreshToggle.checked);
             if (!result.updated) {
-                pullRefreshToggle.checked = getHostVersionInfo()?.webViewPullRefreshEnabled === true;
+                pullRefreshToggle.checked = resolveHostManagedSwitchState(getHostVersionInfo()).pullRefreshEnabled;
             }
         });
     }

@@ -876,11 +876,16 @@ apply_runtime_image() {
     sillydroid_extract_archive_with_progress "$image_path" "$extract_root" 'runtime-image'
 
     sillydroid_assert_path_exists "$extract_root/assets/bootstrap/rootfs/rootfs-fs.zip" "runtime image 缺少 rootfs 资产：$image_path"
-    sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libproot.so" "runtime image 缺少 jniLibs 资产：$image_path"
+    sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libtermux-node.so" "runtime image 缺少 Termux node 入口：$image_path"
+    sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libtermux-git.so" "runtime image 缺少 Termux git 入口：$image_path"
+    sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libtermux-git-remote-http.so" "runtime image 缺少 Termux git HTTPS helper 入口：$image_path"
+    sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libtermux-sh.so" "runtime image 缺少 Termux shell 入口：$image_path"
 
     cp -R "$extract_root/assets/bootstrap/rootfs" "$bootstrap_root/"
 
-    rm -f "$jni_lib_root"/libproot.so "$jni_lib_root"/libproot-loader.so "$jni_lib_root"/libproot-loader32.so "$jni_lib_root"/libtalloc_2.so
+    find "$jni_lib_root" -maxdepth 1 -type f \
+        -name 'lib*.so*' \
+        -delete
     cp -R "$extract_root/jniLibs/arm64-v8a/." "$jni_lib_root/"
 
     sillydroid_log "已应用 Tavern runtime image：$image_path"

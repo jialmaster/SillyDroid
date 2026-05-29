@@ -101,8 +101,10 @@ class AppUpdateCoordinator(
 
     override fun onStart(owner: LifecycleOwner) {
         registerDownloadReceiver()
-        activity.lifecycleScope.launch {
+        syncJob?.cancel()
+        syncJob = activity.lifecycleScope.launch {
             syncDownloadState(showErrors = false, openInstallerIfReady = false)
+            checkForUpdatesOnStart()
         }
     }
 
@@ -185,14 +187,23 @@ class AppUpdateCoordinator(
             renderState()
         }.onFailure { exception ->
             val errorMessage = formatUpdateCheckError(exception)
-            appUpdateRepository.checkErrorMessage = errorMessage
             if (!silent) {
+                appUpdateRepository.checkErrorMessage = errorMessage
                 showMessage(activity.getString(R.string.app_update_check_failed_with_reason, errorMessage))
             }
             renderState()
         }
 
         return result.isSuccess
+    }
+
+    private suspend fun checkForUpdatesOnStart() {
+        if (appUpdateRepository.cachedDownloadState() != null) {
+            return
+        }
+
+        // 启动时自动刷新 latest 指针，让主界面右上角更新入口能及时显示红点和提示文案。
+        checkForUpdates(silent = true)
     }
 
     private suspend fun syncDownloadState(showErrors: Boolean, openInstallerIfReady: Boolean) {
@@ -352,8 +363,9 @@ class AppUpdateCoordinator(
     private fun renderState() {
         val currentDownload = appUpdateRepository.cachedDownloadState()
         val availableRelease = appUpdateRepository.cachedAvailableRelease()
-        overlayUi?.container?.isVisible = false
-        overlayUi?.badgeView?.isVisible = false
+        val showOverlayUpdateEntry = currentDownload != null || availableRelease != null
+        overlayUi?.container?.isVisible = showOverlayUpdateEntry
+        overlayUi?.badgeView?.isVisible = showOverlayUpdateEntry
         overlayUi?.button?.isEnabled = true
         overlayUi?.button?.contentDescription = when {
             currentDownload?.verifiedReadyToInstall == true -> activity.getString(R.string.bootstrap_update_open)
@@ -402,9 +414,12 @@ class AppUpdateCoordinator(
                 }
 
                 availableRelease != null -> {
-                    statusText = activity.getString(
-                        R.string.bootstrap_settings_about_update_status_available,
-                        availableRelease.versionName
+                    statusText = appendReleaseNotes(
+                        baseText = activity.getString(
+                            R.string.bootstrap_settings_about_update_status_available,
+                            availableRelease.versionName
+                        ),
+                        releaseNotesMarkdown = availableRelease.releaseNotesMarkdown
                     )
                     actionText = activity.getString(R.string.bootstrap_settings_about_update_action_download)
                     actionEnabled = true
@@ -437,6 +452,11 @@ class AppUpdateCoordinator(
             exception = exception,
             unknownFallback = activity.getString(R.string.app_update_check_failed_unknown_reason)
         )
+    }
+
+    private fun appendReleaseNotes(baseText: String, releaseNotesMarkdown: String?): String {
+        val notes = releaseNotesMarkdown?.trim()?.ifBlank { null } ?: return baseText
+        return baseText + "\n\n" + activity.getString(R.string.bootstrap_settings_about_update_notes, notes)
     }
 
     private suspend fun queryDownloadStatus(downloadId: Long): AppDownloadStatus {

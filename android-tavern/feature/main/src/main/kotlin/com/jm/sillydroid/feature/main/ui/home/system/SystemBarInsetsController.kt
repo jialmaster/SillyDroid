@@ -1,5 +1,6 @@
 package com.jm.sillydroid.feature.main.ui.home.system
 
+import android.content.res.Configuration
 import android.view.View
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -33,6 +34,7 @@ class SystemBarInsetsController(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
             val displayMode = displayModeProvider()
+            val isLandscape = view.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
             val imeVisibleNow = insets.isVisible(WindowInsetsCompat.Type.ime())
             if (imeVisibleNow != homeViewModel.isImeVisible) {
                 homeViewModel.isImeVisible = imeVisibleNow
@@ -43,26 +45,31 @@ class SystemBarInsetsController(
             } else {
                 null
             }
-            val topInset = when (displayMode) {
-                // 普通模式保留顶部安全区；另外两档都要求让 WebView 顶到最上面，不再留状态栏空带。
-                HostDisplayMode.NORMAL -> systemBarsInsets.top
-                HostDisplayMode.STATUS_BAR_HIDDEN,
-                HostDisplayMode.IMMERSIVE -> 0
-            }
-            val bottomSystemInset = when (displayMode) {
-                // 沉浸式全屏下底部也不再为系统栏预留空白，手势唤出的 transient bars 直接压在内容上。
-                HostDisplayMode.IMMERSIVE -> 0
-                HostDisplayMode.NORMAL,
-                HostDisplayMode.STATUS_BAR_HIDDEN -> systemBarsInsets.bottom
-            }
-            // 系统栏底色和内容安全区使用同一份 insets，避免根容器只能单色导致顶部/底部无法分色。
-            updateInsetBackgroundHeight(statusBarBackground, topInset)
-            updateInsetBackgroundHeight(navigationBarBackground, bottomSystemInset)
+            val contentPadding = calculateMainContentPadding(
+                initialPadding = SystemBarEdgeInsets(
+                    left = initialLeftPadding,
+                    top = initialTopPadding,
+                    right = initialRightPadding,
+                    bottom = initialBottomPadding
+                ),
+                systemBarsInsets = SystemBarEdgeInsets(
+                    left = systemBarsInsets.left,
+                    top = systemBarsInsets.top,
+                    right = systemBarsInsets.right,
+                    bottom = systemBarsInsets.bottom
+                ),
+                imeBottomInset = imeInsets?.bottom ?: 0,
+                displayMode = displayMode,
+                isLandscape = isLandscape
+            )
+            // 系统栏底色和内容安全区使用同一份计算结果，避免根容器只能单色导致顶部/底部无法分色。
+            updateInsetBackgroundHeight(statusBarBackground, contentPadding.statusBarBackgroundHeight)
+            updateInsetBackgroundHeight(navigationBarBackground, contentPadding.navigationBarBackgroundHeight)
             view.setPadding(
-                initialLeftPadding + systemBarsInsets.left,
-                initialTopPadding + topInset,
-                initialRightPadding + systemBarsInsets.right,
-                initialBottomPadding + bottomSystemInset + (imeInsets?.bottom ?: 0)
+                contentPadding.left,
+                contentPadding.top,
+                contentPadding.right,
+                contentPadding.bottom
             )
             onContentBoundsChanged()
             insets

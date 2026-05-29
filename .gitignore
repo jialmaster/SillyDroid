@@ -8,7 +8,6 @@ docs/
 tmp/
 __pycache__/
 *.pyc
-
 android-tavern/local.properties
 android-tavern/.gradle/
 android-tavern/.kotlin/
@@ -29,3 +28,4 @@ android-tavern/app/signing/release.keystore
 android-tavern/app/signing/release-signing.properties
 AGENTS.md
 classes.jar
+agent_memory/

@@ -58,6 +58,8 @@ class BootstrapSettingsScreenController(
     private val restoreDefaultsButton: ImageButton,
     private val importButton: MaterialButton,
     private val exportButton: MaterialButton,
+    private val openTavernDirectoryButton: MaterialButton,
+    private val openTavernDirectoryMtButton: MaterialButton,
     private val clearDataButton: MaterialButton,
     private val clearBrowserDataButton: MaterialButton,
     private val saveStartButton: MaterialButton,
@@ -102,6 +104,8 @@ class BootstrapSettingsScreenController(
         restoreDefaultsButton.isEnabled = !busy
         importButton.isEnabled = !busy
         exportButton.isEnabled = !busy
+        openTavernDirectoryButton.isEnabled = !busy
+        openTavernDirectoryMtButton.isEnabled = !busy
         clearDataButton.isEnabled = !busy
         clearBrowserDataButton.isEnabled = !busy
         busyLockedControls.forEach { view ->

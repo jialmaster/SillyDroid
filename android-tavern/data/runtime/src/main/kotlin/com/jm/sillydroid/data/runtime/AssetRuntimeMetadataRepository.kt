@@ -23,16 +23,10 @@ class AssetRuntimeMetadataRepository(context: Context) : RuntimeMetadataReposito
             return directVersion
         }
 
-        // 当前宿主只认 termux rootfs manifest 结构：baseFlavor/baseVersion/baseSourceUrl/prootVersion。
+        // 当前宿主只认 no-proot Termux host manifest 结构：runtimeVersion 优先，缺失时退回 baseFlavor/baseVersion。
         // 历史 ubuntuBase* 兼容已移除，避免运行时版本解析继续暗示旧基线仍被支持。
         val baseFlavor = manifest.optMeaningfulString("baseFlavor")
         val baseVersion = manifest.optMeaningfulString("baseVersion")
-        val prootVersion = manifest.optMeaningfulString("prootVersion").ifBlank {
-            extractFirstGroup(
-                source = manifest.optMeaningfulString("prootPackageUrl"),
-                pattern = """proot_([^_]+)_aarch64\.deb"""
-            )
-        }
 
         val baseLabel = when {
             baseVersion.isBlank() -> ""
@@ -41,9 +35,7 @@ class AssetRuntimeMetadataRepository(context: Context) : RuntimeMetadataReposito
         }
 
         return when {
-            baseLabel.isNotBlank() && prootVersion.isNotBlank() -> "$baseLabel+proot.$prootVersion"
             baseLabel.isNotBlank() -> baseLabel
-            prootVersion.isNotBlank() -> "proot.$prootVersion"
             else -> null
         }
     }

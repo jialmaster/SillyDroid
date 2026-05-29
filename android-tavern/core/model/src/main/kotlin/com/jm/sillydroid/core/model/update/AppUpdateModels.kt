@@ -5,6 +5,7 @@ data class AvailableAppRelease(
     val releaseTitle: String,
     val versionName: String,
     val hostVersion: String,
+    val releaseNotesMarkdown: String?,
     val apkAssetName: String,
     val apkDownloadUrl: String,
     val apkSha256: String
@@ -16,6 +17,7 @@ data class AppDownloadState(
     val releaseTitle: String,
     val versionName: String,
     val hostVersion: String,
+    val releaseNotesMarkdown: String?,
     val apkAssetName: String,
     val apkDownloadUrl: String,
     val apkSha256: String,

@@ -70,18 +70,18 @@ class BootstrapFailureDiagnoserTest {
     }
 
     @Test
-    fun `rootfs proot seccomp crash points to runtime compatibility`() {
+    fun `termux host native linker failure points to runtime assets`() {
         val diagnosis = BootstrapFailureDiagnoser.diagnose(
             stepId = BootstrapStepId.ENSURE_ROOTFS_RUNTIME,
             stageTitle = "初始化离线 Linux 运行时",
             details = "Linux 离线运行时校验失败。",
             errorKind = null,
             logFileName = "rootfs-runtime.log",
-            logExcerpt = "proot info: ptrace operation not permitted\nsignal 11"
+            logExcerpt = "CANNOT LINK EXECUTABLE libtermux-node.so: library libssl.so.3 not found"
         )
 
-        assertTrue(diagnosis.suspectedReason.contains("proot"))
-        assertTrue(diagnosis.solutions.any { solution -> solution.contains("PROOT_NO_SECCOMP") })
+        assertTrue(diagnosis.suspectedReason.contains("Termux host runtime"))
+        assertTrue(diagnosis.solutions.any { solution -> solution.contains("nativeLibraryDir") })
     }
 
     @Test
