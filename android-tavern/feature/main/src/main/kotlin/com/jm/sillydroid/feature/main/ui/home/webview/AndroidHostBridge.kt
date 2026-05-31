@@ -14,8 +14,13 @@ class AndroidHostBridge(
     private val applySystemBarsBackgroundColor: (String) -> Unit,
     private val applySystemBarsBackgroundColors: (String, String) -> Unit,
     private val reloadTavern: () -> Unit,
-    private val hostVersionInfoJson: () -> String
+    private val hostVersionInfoJson: () -> String,
+    private val recordWebPerformanceDiagnosticPayload: (String) -> Unit = {}
 ) {
+    private companion object {
+        private const val WEB_PERFORMANCE_DIAGNOSTIC_PAYLOAD_LIMIT = 4_096
+    }
+
     @JavascriptInterface
     fun openSettings(): Boolean {
         if (!isHostActive()) {
@@ -107,5 +112,24 @@ class AndroidHostBridge(
     @JavascriptInterface
     fun getHostVersionInfo(): String {
         return hostVersionInfoJson()
+    }
+
+    @JavascriptInterface
+    fun recordWebPerformanceDiagnostic(payload: String): Boolean {
+        if (!isHostActive() || payload.isBlank()) {
+            return false
+        }
+
+        // 性能探针只需要一行聚合摘要；这里裁剪长度并移除换行，避免页面侧误传超长内容污染宿主诊断日志。
+        val compactPayload = payload
+            .replace("\r", " ")
+            .replace("\n", " ")
+            .trim()
+            .take(WEB_PERFORMANCE_DIAGNOSTIC_PAYLOAD_LIMIT)
+        if (compactPayload.isBlank()) {
+            return false
+        }
+        recordWebPerformanceDiagnosticPayload(compactPayload)
+        return true
     }
 }

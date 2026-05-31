@@ -303,7 +303,10 @@ class MainActivity : AppCompatActivity() {
                 applySystemBarsBackgroundColor = ::applyWebViewSurfaceSystemBars,
                 applySystemBarsBackgroundColors = ::applyWebViewSurfaceSystemBars,
                 reloadTavern = { webViewHost.reloadTavernWebView(source = "android_host_bridge") },
-                hostVersionInfoJson = ::buildAndroidHostVersionInfoJson
+                hostVersionInfoJson = ::buildAndroidHostVersionInfoJson,
+                recordWebPerformanceDiagnosticPayload = { payload ->
+                    recordDetailedHostDiagnostic(category = "web_performance", body = payload)
+                }
             ),
             androidHostBridgeName
         )

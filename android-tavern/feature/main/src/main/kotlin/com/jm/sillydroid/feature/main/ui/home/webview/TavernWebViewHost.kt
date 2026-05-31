@@ -73,6 +73,8 @@ class TavernWebViewHost(
         // 恢复出来的 WebView 以 onPageCommitVisible 作为健康信号；在超时后仍未获得信号
         // 表示 surface 可能被系统回收成空白，退回 loadUrl 以重新拉起页面。
         private const val RESTORED_STATE_COMMIT_VISIBLE_TIMEOUT_MS = 6_000L
+        // 部分机型从桌面切回时 WebView URL 会短暂为空或 about:blank；回前台健康检查先延迟确认，避免误刷新。
+        private const val RESUME_WEB_VIEW_HEALTH_CHECK_DELAY_MS = 800L
 
         // 仅 debug 包响应；用来手动踏 renderer-gone 路径。
         // adb shell am broadcast -a com.jm.sillydroid.debug.CRASH_RENDERER -p com.jm.sillydroid
@@ -106,6 +108,7 @@ class TavernWebViewHost(
     }
 
     private var rendererRecoveryActivityRecreateScheduled = false
+    private var pendingResumeHealthCheck: Runnable? = null
 
     private val webReloadTracer by lazy { WebReloadTracer(LOG_TAG) }
 
@@ -442,7 +445,7 @@ class TavernWebViewHost(
 
     fun onResume() {
         // about:blank 白屏现场已经证明：不能只靠启动阶段判断，Activity 回前台时也要基于真实 WebView URL 复核一次。
-        ensureVisibleWebViewUrlHealth(trigger = "activity_resume")
+        scheduleResumeWebViewUrlHealthCheck()
     }
 
     fun onTrimMemory(level: Int) {
@@ -460,6 +463,7 @@ class TavernWebViewHost(
     }
 
     fun onDestroy() {
+        cancelPendingResumeHealthCheck()
         cancelRestoredStateWatchdog()
         uninstallDebugRendererCrashReceiver()
         webSessionPersistenceController?.close()
@@ -603,6 +607,7 @@ class TavernWebViewHost(
         CookieManager.getInstance().flush()
         installBlobBridgeScriptOnPageFinished(sourceWebView)
         installSystemBarThemeSyncScript(sourceWebView)
+        installWebPerformanceDiagnosticScript(sourceWebView)
         if (!url.isNullOrBlank()) {
             homeViewModel.loadedUrl = url
             homeViewModel.pendingLocalRetryAttempts = 0
@@ -728,6 +733,118 @@ class TavernWebViewHost(
 
                     window.__sillyDroidSystemBarThemeSyncInstalled = true;
                     scheduleNotify();
+                    return 'installed';
+                })();
+            """.trimIndent(),
+            null
+        )
+    }
+
+    private fun installWebPerformanceDiagnosticScript(sourceWebView: WebView) {
+        // 只在页面 load 后上报一次聚合性能摘要，用来同机对比 Chrome 与 App WebView 的真实瓶颈。
+        sourceWebView.evaluateJavascript(
+            """
+                (function() {
+                    if (window.__sillyDroidWebPerformanceDiagnosticInstalled) {
+                        return 'already_installed';
+                    }
+                    window.__sillyDroidWebPerformanceDiagnosticInstalled = true;
+
+                    const bridge = window.SillyDroidAndroidHostBridge;
+                    if (!bridge || typeof bridge.recordWebPerformanceDiagnostic !== 'function') {
+                        return 'bridge_missing';
+                    }
+
+                    const longTasks = [];
+                    let observer = null;
+                    if ('PerformanceObserver' in window) {
+                        try {
+                            observer = new PerformanceObserver(function(list) {
+                                for (const entry of list.getEntries()) {
+                                    longTasks.push(Math.round(entry.duration || 0));
+                                }
+                            });
+                            observer.observe({ type: 'longtask', buffered: true });
+                        } catch (error) {
+                            observer = null;
+                        }
+                    }
+
+                    function round(value) {
+                        return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+                    }
+
+                    function hostKind(urlText) {
+                        try {
+                            const url = new URL(urlText, location.href);
+                            if (url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '::1') {
+                                return 'local';
+                            }
+                            return url.protocol === 'data:' || url.protocol === 'blob:' ? url.protocol.slice(0, -1) : 'remote';
+                        } catch (error) {
+                            return 'unknown';
+                        }
+                    }
+
+                    function buildSummary() {
+                        const nav = performance.getEntriesByType('navigation')[0];
+                        const resources = performance.getEntriesByType('resource');
+                        const slowResources = resources
+                            .filter(function(entry) { return (entry.duration || 0) >= 250; })
+                            .sort(function(left, right) { return (right.duration || 0) - (left.duration || 0); })
+                            .slice(0, 5)
+                            .map(function(entry) {
+                                return {
+                                    kind: entry.initiatorType || 'unknown',
+                                    host: hostKind(entry.name),
+                                    durationMs: round(entry.duration),
+                                    transferSize: round(entry.transferSize || 0),
+                                    encodedBodySize: round(entry.encodedBodySize || 0)
+                                };
+                            });
+
+                        const sortedLongTasks = longTasks.slice().sort(function(left, right) { return right - left; });
+                        return {
+                            event: 'page_load_summary',
+                            hrefHost: hostKind(location.href),
+                            navType: nav ? nav.type : 'unknown',
+                            domContentLoadedMs: nav ? round(nav.domContentLoadedEventEnd - nav.startTime) : 0,
+                            loadEventMs: nav ? round(nav.loadEventEnd - nav.startTime) : 0,
+                            responseEndMs: nav ? round(nav.responseEnd - nav.startTime) : 0,
+                            transferSize: nav ? round(nav.transferSize || 0) : 0,
+                            encodedBodySize: nav ? round(nav.encodedBodySize || 0) : 0,
+                            resourceCount: resources.length,
+                            slowResourceCount: resources.filter(function(entry) { return (entry.duration || 0) >= 250; }).length,
+                            slowResources: slowResources,
+                            longTaskCount: longTasks.length,
+                            maxLongTaskMs: sortedLongTasks[0] || 0,
+                            topLongTasksMs: sortedLongTasks.slice(0, 5)
+                        };
+                    }
+
+                    function sendSummary() {
+                        if (window.__sillyDroidWebPerformanceDiagnosticSent) {
+                            return;
+                        }
+                        window.__sillyDroidWebPerformanceDiagnosticSent = true;
+                        try {
+                            if (observer) {
+                                observer.disconnect();
+                            }
+                            bridge.recordWebPerformanceDiagnostic(JSON.stringify(buildSummary()));
+                        } catch (error) {
+                            bridge.recordWebPerformanceDiagnostic('event=page_load_summary_failed reason=' + String(error && error.message || error));
+                        }
+                    }
+
+                    if (document.readyState === 'complete') {
+                        setTimeout(sendSummary, 800);
+                    } else {
+                        window.addEventListener('load', function() {
+                            setTimeout(sendSummary, 800);
+                        }, { once: true });
+                    }
+
                     return 'installed';
                 })();
             """.trimIndent(),
@@ -866,7 +983,38 @@ class TavernWebViewHost(
         )
     }
 
-    private fun ensureVisibleWebViewUrlHealth(trigger: String, observedUrl: String? = null) {
+    private fun scheduleResumeWebViewUrlHealthCheck() {
+        schedulePendingResumeHealthCheck {
+            ensureVisibleWebViewUrlHealth(trigger = "activity_resume", recoverImmediately = false)
+        }
+    }
+
+    private fun schedulePendingResumeHealthCheck(block: () -> Unit) {
+        cancelPendingResumeHealthCheck()
+        val healthCheck = object : Runnable {
+            override fun run() {
+                if (pendingResumeHealthCheck !== this) {
+                    return
+                }
+                pendingResumeHealthCheck = null
+                block()
+            }
+        }
+        pendingResumeHealthCheck = healthCheck
+        webView.postDelayed(healthCheck, RESUME_WEB_VIEW_HEALTH_CHECK_DELAY_MS)
+    }
+
+    private fun cancelPendingResumeHealthCheck() {
+        val healthCheck = pendingResumeHealthCheck ?: return
+        pendingResumeHealthCheck = null
+        webView.removeCallbacks(healthCheck)
+    }
+
+    private fun ensureVisibleWebViewUrlHealth(
+        trigger: String,
+        observedUrl: String? = null,
+        recoverImmediately: Boolean = true
+    ) {
         if (!processManager.currentSnapshot().isReady) {
             return
         }
@@ -884,7 +1032,8 @@ class TavernWebViewHost(
 
         val expectedBaseUrl = runtimeConfigRepository.localServiceUrl()
         val currentUrl = webView.url.orEmpty().trim()
-        if (hasLoadedCurrentWebViewPageForBaseUrl(currentUrl, expectedBaseUrl)) {
+        val healthState = classifyWebViewUrlHealth(currentUrl, expectedBaseUrl)
+        if (healthState == WebViewUrlHealthState.IN_SITE) {
             return
         }
 
@@ -894,16 +1043,74 @@ class TavernWebViewHost(
             return
         }
 
+        if (!recoverImmediately) {
+            recordUnexpectedVisibleWebViewUrl(
+                trigger = trigger,
+                observedUrl = observedUrl,
+                action = "schedule_confirm",
+                currentUrl = currentUrl,
+                expectedBaseUrl = expectedBaseUrl,
+                recoveryUrl = resolveInitialTavernUrl(
+                    baseUrl = expectedBaseUrl,
+                    rememberedUrl = homeViewModel.loadedUrl
+                ),
+                healthState = healthState
+            )
+            schedulePendingResumeHealthCheck {
+                ensureVisibleWebViewUrlHealth(
+                    trigger = "${trigger}_confirm",
+                    observedUrl = currentUrl,
+                    recoverImmediately = true
+                )
+            }
+            return
+        }
+
         val recoveryUrl = resolveInitialTavernUrl(
             baseUrl = expectedBaseUrl,
             rememberedUrl = homeViewModel.loadedUrl
         )
+        if (!healthState.recoverable) {
+            recordUnexpectedVisibleWebViewUrl(
+                trigger = trigger,
+                observedUrl = observedUrl,
+                action = "record_only",
+                currentUrl = currentUrl,
+                expectedBaseUrl = expectedBaseUrl,
+                recoveryUrl = recoveryUrl,
+                healthState = healthState
+            )
+            return
+        }
+        recordUnexpectedVisibleWebViewUrl(
+            trigger = trigger,
+            observedUrl = observedUrl,
+            action = "load_url",
+            currentUrl = currentUrl,
+            expectedBaseUrl = expectedBaseUrl,
+            recoveryUrl = recoveryUrl,
+            healthState = healthState
+        )
+        homeViewModel.loadedUrl = recoveryUrl
+        webView.loadUrl(recoveryUrl)
+    }
+
+    private fun recordUnexpectedVisibleWebViewUrl(
+        trigger: String,
+        observedUrl: String?,
+        action: String,
+        currentUrl: String,
+        expectedBaseUrl: String,
+        recoveryUrl: String,
+        healthState: WebViewUrlHealthState
+    ) {
         recordHostDiagnostic(
             category = "webview",
             body = buildString {
                 append("event=unexpected_visible_webview_url")
                 append(" trigger=$trigger")
-                append(" action=load_url")
+                append(" action=$action")
+                append(" reason=${healthState.reason}")
                 append(" observedUrl=${normalizeDiagnosticValue(observedUrl)}")
                 append(" targetUrl=${normalizeDiagnosticValue(recoveryUrl)}")
                 append(" expectedBaseUrl=${normalizeDiagnosticValue(buildInitialTavernUrl(expectedBaseUrl))}")
@@ -912,8 +1119,6 @@ class TavernWebViewHost(
                 append(currentWebViewDiagnosticState())
             }
         )
-        homeViewModel.loadedUrl = recoveryUrl
-        webView.loadUrl(recoveryUrl)
     }
 
     private fun scheduleLocalWebViewRetry(failingUrl: String) {
@@ -1110,6 +1315,13 @@ class TavernWebViewHost(
             append(" activityDestroyed=${activity.isDestroyed}")
             append(" watchdogScheduled=${restoredWebViewWatchdog.isScheduled}")
             append(" watchdogUrl=${normalizeDiagnosticValue(restoredWebViewWatchdog.pendingUrl)}")
+            append(" webViewHardwareAccelerated=${webView.isHardwareAccelerated}")
+            append(" webViewLayerType=${resolveViewLayerTypeName(webView.layerType)}")
+            append(" webViewCacheMode=${resolveWebSettingsCacheModeName(webView.settings.cacheMode)}")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                append(" rendererPriority=${resolveWebViewRendererPriorityName(webView.rendererRequestedPriority)}")
+                append(" rendererPriorityWaivedWhenNotVisible=${webView.rendererPriorityWaivedWhenNotVisible}")
+            }
         }
     }
 
@@ -1238,6 +1450,55 @@ internal fun isTavernUrlForBaseUrl(url: String, baseUrl: String): Boolean {
         normalizedCurrentUrl.startsWith("$normalizedBaseUrl/#") ||
         normalizedCurrentUrl.startsWith("$normalizedBaseUrl/?") ||
         normalizedCurrentUrl.startsWith("$normalizedBaseUrl/")
+}
+
+internal enum class WebViewUrlHealthState(
+    val reason: String,
+    val recoverable: Boolean
+) {
+    IN_SITE(reason = "in_site", recoverable = false),
+    BLANK(reason = "blank", recoverable = true),
+    ABOUT_BLANK(reason = "about_blank", recoverable = true),
+    ERROR_PAGE(reason = "error_page", recoverable = true),
+    OLD_LOCAL_PORT(reason = "old_local_port", recoverable = true),
+    NON_LOCAL(reason = "non_local", recoverable = false),
+    UNKNOWN(reason = "unknown", recoverable = false)
+}
+
+internal fun classifyWebViewUrlHealth(currentUrl: String, baseUrl: String): WebViewUrlHealthState {
+    val trimmedCurrentUrl = currentUrl.trim()
+    if (isTavernUrlForBaseUrl(trimmedCurrentUrl, baseUrl)) {
+        return WebViewUrlHealthState.IN_SITE
+    }
+    if (trimmedCurrentUrl.isBlank()) {
+        return WebViewUrlHealthState.BLANK
+    }
+    if (trimmedCurrentUrl.equals("about:blank", ignoreCase = true)) {
+        return WebViewUrlHealthState.ABOUT_BLANK
+    }
+
+    val parsedCurrentUrl = runCatching { java.net.URI(trimmedCurrentUrl) }.getOrNull()
+        ?: return WebViewUrlHealthState.UNKNOWN
+    val currentScheme = parsedCurrentUrl.scheme.orEmpty().lowercase()
+    if (currentScheme == "chrome-error") {
+        return WebViewUrlHealthState.ERROR_PAGE
+    }
+
+    val parsedBaseUrl = runCatching { java.net.URI(baseUrl.trim()) }.getOrNull()
+        ?: return WebViewUrlHealthState.UNKNOWN
+    val currentHost = parsedCurrentUrl.host.orEmpty().trim('[', ']')
+    val baseHost = parsedBaseUrl.host.orEmpty().trim('[', ']')
+    val currentIsLoopback = currentHost == "127.0.0.1" || currentHost == "localhost" || currentHost == "::1"
+    val baseIsLoopback = baseHost == "127.0.0.1" || baseHost == "localhost" || baseHost == "::1"
+    if (currentScheme == parsedBaseUrl.scheme.orEmpty().lowercase() && currentIsLoopback && baseIsLoopback) {
+        return WebViewUrlHealthState.OLD_LOCAL_PORT
+    }
+
+    return if (currentScheme == "http" || currentScheme == "https") {
+        WebViewUrlHealthState.NON_LOCAL
+    } else {
+        WebViewUrlHealthState.UNKNOWN
+    }
 }
 
 internal fun buildInitialTavernUrl(baseUrl: String): String {

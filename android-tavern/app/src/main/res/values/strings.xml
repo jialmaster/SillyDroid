@@ -9,5 +9,5 @@
     <string name="host_notification_channel_downloads_description">用于展示普通下载、应用更新下载和安装就绪通知。</string>
     <string name="tavern_data_documents_provider_label">SillyDroid 数据</string>
     <string name="tavern_data_documents_root_title">酒馆数据</string>
-    <string name="tavern_data_documents_root_summary">当前 SillyDroid 私有 Tavern 根目录</string>
+    <string name="tavern_data_documents_root_summary">当前 SillyDroid 私有 Tavern 数据目录</string>
 </resources>

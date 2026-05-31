@@ -59,4 +59,31 @@ class TavernWebViewHostUrlResolutionTest {
             )
         )
     }
+
+    @Test
+    fun `classifyWebViewUrlHealth marks current site as healthy`() {
+        assertEquals(
+            WebViewUrlHealthState.IN_SITE,
+            classifyWebViewUrlHealth("http://127.0.0.1:8000/#/chat", "http://127.0.0.1:8000")
+        )
+    }
+
+    @Test
+    fun `classifyWebViewUrlHealth recovers blank and error pages`() {
+        assertEquals(WebViewUrlHealthState.BLANK, classifyWebViewUrlHealth("", "http://127.0.0.1:8000"))
+        assertEquals(WebViewUrlHealthState.ABOUT_BLANK, classifyWebViewUrlHealth("about:blank", "http://127.0.0.1:8000"))
+        assertEquals(WebViewUrlHealthState.ERROR_PAGE, classifyWebViewUrlHealth("chrome-error://chromewebdata/", "http://127.0.0.1:8000"))
+    }
+
+    @Test
+    fun `classifyWebViewUrlHealth recovers old local port but not remote urls`() {
+        assertEquals(
+            WebViewUrlHealthState.OLD_LOCAL_PORT,
+            classifyWebViewUrlHealth("http://127.0.0.1:9000/settings", "http://127.0.0.1:8000")
+        )
+        assertEquals(
+            WebViewUrlHealthState.NON_LOCAL,
+            classifyWebViewUrlHealth("https://example.com/page", "http://127.0.0.1:8000")
+        )
+    }
 }

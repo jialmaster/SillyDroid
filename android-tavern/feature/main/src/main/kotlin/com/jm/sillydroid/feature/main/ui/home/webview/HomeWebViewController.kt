@@ -8,6 +8,7 @@ import android.os.Message
 import android.webkit.ConsoleMessage
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
+import android.webkit.WebSettings
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -76,9 +77,6 @@ class HomeWebViewController(
         webView.settings.allowContentAccess = true
         webView.settings.setSupportMultipleWindows(true)
         webView.settings.javaScriptCanOpenWindowsAutomatically = true
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, false)
-        }
 
         installSessionPersistence()
         installJavascriptInterfaces(webView)
@@ -274,5 +272,24 @@ class HomeWebViewController(
                 return super.onConsoleMessage(consoleMessage)
             }
         }
+    }
+}
+
+internal fun resolveWebViewRendererPriorityName(priority: Int): String {
+    return when (priority) {
+        WebView.RENDERER_PRIORITY_BOUND -> "RENDERER_PRIORITY_BOUND"
+        WebView.RENDERER_PRIORITY_IMPORTANT -> "RENDERER_PRIORITY_IMPORTANT"
+        WebView.RENDERER_PRIORITY_WAIVED -> "RENDERER_PRIORITY_WAIVED"
+        else -> "UNKNOWN"
+    }
+}
+
+internal fun resolveWebSettingsCacheModeName(cacheMode: Int): String {
+    return when (cacheMode) {
+        WebSettings.LOAD_DEFAULT -> "LOAD_DEFAULT"
+        WebSettings.LOAD_CACHE_ELSE_NETWORK -> "LOAD_CACHE_ELSE_NETWORK"
+        WebSettings.LOAD_NO_CACHE -> "LOAD_NO_CACHE"
+        WebSettings.LOAD_CACHE_ONLY -> "LOAD_CACHE_ONLY"
+        else -> "UNKNOWN"
     }
 }
