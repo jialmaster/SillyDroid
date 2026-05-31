@@ -159,8 +159,8 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
     }
 
     private fun tavernRootDirectory(): File {
-        // MT/SAF 入口面向高级用户，直接暴露当前解包后的 SillyTavern 根目录，方便编辑脚本、配置和扩展。
-        return hostPaths().serverDir
+        // MT/SAF 入口面向高级用户，直接暴露运行时 APP_DATA_ROOT，根层应是 config/data/plugins/extensions。
+        return hostPaths().serverDataDir
     }
 
     private fun hostPaths(): HostPaths {
@@ -238,10 +238,7 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
     private fun isInsideAccessibleRoot(file: File): Boolean {
         val paths = hostPaths()
         val canonicalFile = file.canonicalFile
-        // 酒馆根目录里的 plugins / third-party extensions 会指向持久化数据目录，允许这些链接继续可写。
-        return listOf(paths.serverDir, paths.serverDataDir)
-            .map { it.canonicalFile }
-            .any { root -> isInside(root, canonicalFile) }
+        return isInside(paths.serverDataDir.canonicalFile, canonicalFile)
     }
 
     private fun isInsidePath(parent: File, child: File): Boolean {
