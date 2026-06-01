@@ -47,43 +47,23 @@ jobs:
             --event-action "$RELEASE_EVENT_ACTION" \
             --output "$RUNNER_TEMP/latest-release.json"
 
-      - name: Upload latest release state to site server
+      - name: Publish latest release state to site API
         env:
-          SILLYDROID_SITE_SSH_HOST: ${{ secrets.SILLYDROID_SITE_SSH_HOST }}
-          SILLYDROID_SITE_SSH_PORT: ${{ secrets.SILLYDROID_SITE_SSH_PORT }}
-          SILLYDROID_SITE_SSH_USER: ${{ secrets.SILLYDROID_SITE_SSH_USER }}
-          SILLYDROID_SITE_SSH_KEY: ${{ secrets.SILLYDROID_SITE_SSH_KEY }}
-          SILLYDROID_SITE_RELEASE_STATE_PATH: ${{ secrets.SILLYDROID_SITE_RELEASE_STATE_PATH }}
+          SILLYDROID_SITE_RELEASE_API_URL: ${{ vars.SILLYDROID_SITE_RELEASE_API_URL || 'https://sd.jlmaster.online/api/admin/projects/sillydroid/releases/latest' }}
+          SILLYDROID_SITE_RELEASE_WRITER_KEY: ${{ secrets.SILLYDROID_SITE_RELEASE_WRITER_KEY }}
         run: |
           set -euo pipefail
 
-          for variable_name in SILLYDROID_SITE_SSH_HOST SILLYDROID_SITE_SSH_USER SILLYDROID_SITE_SSH_KEY SILLYDROID_SITE_RELEASE_STATE_PATH; do
+          for variable_name in SILLYDROID_SITE_RELEASE_API_URL SILLYDROID_SITE_RELEASE_WRITER_KEY; do
             if [ -z "${!variable_name:-}" ]; then
               echo "Missing required GitHub Actions secret: $variable_name" >&2
               exit 1
             fi
           done
 
-          ssh_port="${SILLYDROID_SITE_SSH_PORT:-22}"
-          ssh_root="$RUNNER_TEMP/sillydroid-site-ssh"
-          mkdir -p "$ssh_root"
-          chmod 700 "$ssh_root"
-          printf '%s\n' "$SILLYDROID_SITE_SSH_KEY" > "$ssh_root/id_key"
-          chmod 600 "$ssh_root/id_key"
-
-          remote_dir="$(dirname "$SILLYDROID_SITE_RELEASE_STATE_PATH")"
-          ssh_common_options=(
-            -i "$ssh_root/id_key"
-            -p "$ssh_port"
-            -o StrictHostKeyChecking=accept-new
-            -o IdentitiesOnly=yes
-          )
-          scp_common_options=(
-            -i "$ssh_root/id_key"
-            -P "$ssh_port"
-            -o StrictHostKeyChecking=accept-new
-            -o IdentitiesOnly=yes
-          )
-
-          ssh "${ssh_common_options[@]}" "$SILLYDROID_SITE_SSH_USER@$SILLYDROID_SITE_SSH_HOST" "mkdir -p '$remote_dir'"
-          scp "${scp_common_options[@]}" "$RUNNER_TEMP/latest-release.json" "$SILLYDROID_SITE_SSH_USER@$SILLYDROID_SITE_SSH_HOST:$SILLYDROID_SITE_RELEASE_STATE_PATH"
+          # 站点后端负责校验、存储并发布 latest release state；Android 发布链只负责按契约推送 JSON。
+          curl --fail-with-body --silent --show-error \
+            -X PUT "$SILLYDROID_SITE_RELEASE_API_URL" \
+            -H 'Content-Type: application/json' \
+            -H "X-SillyDroid-Release-Key: $SILLYDROID_SITE_RELEASE_WRITER_KEY" \
+            --data-binary @"$RUNNER_TEMP/latest-release.json"

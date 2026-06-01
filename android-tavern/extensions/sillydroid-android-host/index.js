@@ -39,6 +39,7 @@ const defaultSettings = {
     enableNotification: false,
     enableSoundNotification: false,
     compactChatLayout: false,
+    unifyAndroidMultipleSelect: false,
     theme: 'default',
     themeMode: 'auto',
     themePerformanceMode: 'auto',
@@ -121,6 +122,7 @@ function getExtensionSettings() {
     settings.themeAccentColor = normalizeThemeColor(settings.themeAccentColor, defaultSettings.themeAccentColor);
     settings.themeSecondaryColor = normalizeThemeColor(settings.themeSecondaryColor, defaultSettings.themeSecondaryColor);
     settings.compactChatLayout = settings.compactChatLayout === true;
+    settings.unifyAndroidMultipleSelect = settings.unifyAndroidMultipleSelect === true;
     return settings;
 }
 
@@ -1050,8 +1052,14 @@ function bindNativeThemeRefresh() {
 
 function shouldApplyBusinessUiPatches(settings = getExtensionSettings()) {
     // 默认主题只保留宿主桥能力、设置面板和样式挂载；不要再主动改酒馆业务界面结构/交互，
-    // 避免 Android 多选兼容补丁、紧凑聊天等宿主增强继续影响“附加世界书”等原生页面行为。
+    // 避免紧凑聊天等宿主增强继续影响酒馆原生页面行为。
     return settings.theme !== 'default';
+}
+
+function shouldUnifyAndroidMultipleSelect(settings = getExtensionSettings()) {
+    // 原生 select[multiple] 在不同 WebView 上外观差异很大；该开关显式恢复旧 Select2 统一版本，
+    // 但不再默认开启，避免默认主题无意改动世界书、触发器、角色筛选等业务控件。
+    return settings.unifyAndroidMultipleSelect === true;
 }
 
 function applyCompactChatLayoutState(settings = getExtensionSettings()) {
@@ -1132,6 +1140,20 @@ function setCompactChatLayoutEnabled(enabled) {
     saveExtensionSetting('compactChatLayout', normalizedEnabled);
     syncSettingsPanel();
     toastr[normalizedEnabled ? 'success' : 'info'](normalizedEnabled ? '已启用聊天紧凑模式。' : '已关闭聊天紧凑模式。', popupTitle);
+}
+
+function setUnifyAndroidMultipleSelectEnabled(enabled) {
+    const normalizedEnabled = enabled === true;
+    saveExtensionSetting('unifyAndroidMultipleSelect', normalizedEnabled);
+    syncSettingsPanel();
+    if (normalizedEnabled) {
+        destroyAndroidMultipleSelect2();
+        observeAndroidMultipleSelect2();
+        ensureAndroidMultipleSelect2();
+    } else {
+        destroyAndroidMultipleSelect2();
+    }
+    toastr[normalizedEnabled ? 'success' : 'info'](normalizedEnabled ? '已全局统一安卓多选框。' : '已恢复系统原生多选框。', popupTitle);
 }
 
 function setThemeAccentColor(color, options = {}) {
@@ -1530,6 +1552,11 @@ function buildSettingsPanel() {
         '聊天紧凑模式',
         settings.compactChatLayout === true
     ));
+    hostGrid.appendChild(createSwitchControl(
+        'sillydroid_android_host_unify_multiple_select',
+        '统一多选框',
+        settings.unifyAndroidMultipleSelect === true
+    ));
     hostSection.appendChild(versionSummary);
     hostSection.appendChild(hostGrid);
 
@@ -1607,6 +1634,7 @@ function syncSettingsPanel() {
     const bubbleToggle = document.getElementById('sillydroid_android_host_floating_bubble');
     const pullRefreshToggle = document.getElementById('sillydroid_android_host_pull_refresh');
     const compactChatToggle = document.getElementById('sillydroid_android_host_compact_chat');
+    const unifyMultipleSelectToggle = document.getElementById('sillydroid_android_host_unify_multiple_select');
     const notificationToggle = document.getElementById('sillydroid_android_host_notification');
     const soundNotificationToggle = document.getElementById('sillydroid_android_host_sound_notification');
     const themeSelect = document.getElementById('sillydroid_android_host_theme');
@@ -1643,6 +1671,10 @@ function syncSettingsPanel() {
 
     if (compactChatToggle instanceof HTMLInputElement) {
         compactChatToggle.checked = settings.compactChatLayout === true;
+    }
+
+    if (unifyMultipleSelectToggle instanceof HTMLInputElement) {
+        unifyMultipleSelectToggle.checked = settings.unifyAndroidMultipleSelect === true;
     }
 
     if (notificationToggle instanceof HTMLInputElement) {
@@ -2017,15 +2049,66 @@ function getAndroidMultipleSelect2Placeholder(select) {
 }
 
 function scheduleAndroidMultipleSelect2Restore(delay = 0) {
-    if (!isAndroidTouchEnvironment()) {
+    if (!shouldUnifyAndroidMultipleSelect() || !isAndroidTouchEnvironment()) {
         return;
     }
 
     window.setTimeout(ensureAndroidMultipleSelect2, delay);
 }
 
+function destroyAndroidMultipleSelect2() {
+    const $ = globalThis.jQuery || globalThis.$;
+    if (!$?.fn?.select2) {
+        return;
+    }
+
+    document.querySelectorAll('select[multiple][data-sillydroid-multiple-select2="true"]').forEach(select => {
+        if (!(select instanceof HTMLSelectElement)) {
+            return;
+        }
+
+        const $select = $(select);
+        if ($select.data('select2')) {
+            $select.select2('destroy');
+        }
+        delete select.dataset.sillydroidMultipleSelect2;
+    });
+}
+
+function isSelectInteractable(select) {
+    if (!(select instanceof HTMLSelectElement) || !select.isConnected) {
+        return false;
+    }
+
+    // 上游会保留隐藏模板/旧弹窗节点；这些节点的 select 自身可能有 options，但父链不可见。
+    // 只跳过完全不可交互的模板，仍保持“全局多选统一”覆盖所有真实可见的 select[multiple]。
+    if (select.closest('[hidden], template, .template_element, .displayNone, .displaynone')) {
+        return false;
+    }
+
+    const style = getComputedStyle(select);
+    if (style.display === 'none' || style.visibility === 'hidden') {
+        return false;
+    }
+
+    let element = select.parentElement;
+    while (element && element !== document.body) {
+        const elementStyle = getComputedStyle(element);
+        if (elementStyle.display === 'none' || elementStyle.visibility === 'hidden') {
+            return false;
+        }
+        element = element.parentElement;
+    }
+
+    return true;
+}
+
+function getAndroidMultipleSelect2DropdownParent(select) {
+    return select.closest('.popup, .popup-content, .drawer-content, .inline-drawer-content') || document.body;
+}
+
 function ensureAndroidMultipleSelect2() {
-    if (!isAndroidTouchEnvironment()) {
+    if (!shouldUnifyAndroidMultipleSelect() || !isAndroidTouchEnvironment()) {
         return;
     }
 
@@ -2039,25 +2122,30 @@ function ensureAndroidMultipleSelect2() {
             return;
         }
 
+        if (!isSelectInteractable(select)) {
+            return;
+        }
+
         const $select = $(select);
         if ($select.data('select2')) {
             return;
         }
 
         // 上游移动端会跳过部分 multiple select 的 Select2 初始化；Android WebView 原生多选会变成黑白列表。
-        // 只恢复已经存在的数据控件，不改 option/value 链路，让世界书、绑定角色/标签等同类多选保持同一操作模式。
+        // 只在原 select 上挂 Select2，不替换业务节点、不维护并行值；值和事件仍由 Select2/上游原链路处理。
         $select.select2({
             width: '100%',
             placeholder: getAndroidMultipleSelect2Placeholder(select),
             allowClear: true,
             closeOnSelect: false,
+            dropdownParent: $(getAndroidMultipleSelect2DropdownParent(select)),
         });
         select.dataset.sillydroidMultipleSelect2 = 'true';
     });
 }
 
 function observeAndroidMultipleSelect2() {
-    if (!shouldApplyBusinessUiPatches() || !isAndroidTouchEnvironment() || document.documentElement.dataset[worldInfoSelect2ObserverId]) {
+    if (!shouldUnifyAndroidMultipleSelect() || !isAndroidTouchEnvironment() || document.documentElement.dataset[worldInfoSelect2ObserverId]) {
         return;
     }
 
@@ -2095,6 +2183,7 @@ function bindSettingsPanelEvents() {
     const bubbleToggle = document.getElementById('sillydroid_android_host_floating_bubble');
     const pullRefreshToggle = document.getElementById('sillydroid_android_host_pull_refresh');
     const compactChatToggle = document.getElementById('sillydroid_android_host_compact_chat');
+    const unifyMultipleSelectToggle = document.getElementById('sillydroid_android_host_unify_multiple_select');
     const notificationToggle = document.getElementById('sillydroid_android_host_notification');
     const soundNotificationToggle = document.getElementById('sillydroid_android_host_sound_notification');
     const themeSelect = document.getElementById('sillydroid_android_host_theme');
@@ -2156,6 +2245,13 @@ function bindSettingsPanelEvents() {
         compactChatToggle.dataset.sillydroidBound = 'true';
         compactChatToggle.addEventListener('change', () => {
             setCompactChatLayoutEnabled(compactChatToggle.checked);
+        });
+    }
+
+    if (unifyMultipleSelectToggle instanceof HTMLInputElement && !unifyMultipleSelectToggle.dataset.sillydroidBound) {
+        unifyMultipleSelectToggle.dataset.sillydroidBound = 'true';
+        unifyMultipleSelectToggle.addEventListener('change', () => {
+            setUnifyAndroidMultipleSelectEnabled(unifyMultipleSelectToggle.checked);
         });
     }
 
