@@ -76,6 +76,8 @@ const themeColorPattern = /^#[\da-f]{6}$/i;
 
 let messageAlertHandler = null;
 let notificationAudioContext = null;
+let androidMultipleSelect2RestoreTimer = null;
+const androidMultipleSelect2NoKeyboardBoundSelects = new WeakSet();
 
 function normalizeTheme(value) {
     return themeOptions.has(value) ? value : defaultSettings.theme;
@@ -1050,12 +1052,6 @@ function bindNativeThemeRefresh() {
     });
 }
 
-function shouldApplyBusinessUiPatches(settings = getExtensionSettings()) {
-    // 默认主题只保留宿主桥能力、设置面板和样式挂载；不要再主动改酒馆业务界面结构/交互，
-    // 避免紧凑聊天等宿主增强继续影响酒馆原生页面行为。
-    return settings.theme !== 'default';
-}
-
 function shouldUnifyAndroidMultipleSelect(settings = getExtensionSettings()) {
     // 原生 select[multiple] 在不同 WebView 上外观差异很大；该开关显式恢复旧 Select2 统一版本，
     // 但不再默认开启，避免默认主题无意改动世界书、触发器、角色筛选等业务控件。
@@ -1064,14 +1060,10 @@ function shouldUnifyAndroidMultipleSelect(settings = getExtensionSettings()) {
 
 function applyCompactChatLayoutState(settings = getExtensionSettings()) {
     const html = document.documentElement;
-    if (!shouldApplyBusinessUiPatches(settings)) {
-        delete html.dataset.sillydroidChatCompact;
-        return;
-    }
-
     const enabled = settings.compactChatLayout === true;
     if (enabled) {
         // 紧凑模式只暴露状态标记，布局由 CSS 处理；禁止移动聊天 DOM，避免破坏上游 swipe/按钮逻辑。
+        // 该开关是宿主独立功能，不能被默认主题门控；否则默认主题下会丢失用户已启用的紧凑布局。
         html.dataset.sillydroidChatCompact = 'true';
         return;
     }
@@ -2053,7 +2045,28 @@ function scheduleAndroidMultipleSelect2Restore(delay = 0) {
         return;
     }
 
+    if (delay <= 0) {
+        if (androidMultipleSelect2RestoreTimer !== null) {
+            return;
+        }
+
+        androidMultipleSelect2RestoreTimer = window.setTimeout(() => {
+            androidMultipleSelect2RestoreTimer = null;
+            ensureAndroidMultipleSelect2();
+        }, 0);
+        return;
+    }
+
     window.setTimeout(ensureAndroidMultipleSelect2, delay);
+}
+
+function restoreAndroidMultipleSelect2BeforeNativeSelect(event) {
+    if (!(event.target instanceof HTMLSelectElement) || !event.target.multiple) {
+        return;
+    }
+
+    // 在原生 select[multiple] 打开前同步恢复 Select2，避免 Android WebView 先弹出系统多选/输入焦点。
+    ensureAndroidMultipleSelect2();
 }
 
 function destroyAndroidMultipleSelect2() {
@@ -2070,9 +2083,15 @@ function destroyAndroidMultipleSelect2() {
         const $select = $(select);
         if ($select.data('select2')) {
             $select.select2('destroy');
+        } else {
+            resetStaleSelect2DomState(select);
         }
+        $select.off('.sillydroidNoKeyboard');
+        androidMultipleSelect2NoKeyboardBoundSelects.delete(select);
         delete select.dataset.sillydroidMultipleSelect2;
     });
+
+    resetAndroidMultipleSelect2NoKeyboardDecorations();
 }
 
 function isSelectInteractable(select) {
@@ -2103,8 +2122,187 @@ function isSelectInteractable(select) {
     return true;
 }
 
+function isSelect2Container(element) {
+    return element instanceof HTMLElement && element.classList.contains('select2-container');
+}
+
+function getAdjacentSelect2Containers(select) {
+    const containers = [];
+    let element = select.nextElementSibling;
+    while (isSelect2Container(element)) {
+        containers.push(element);
+        element = element.nextElementSibling;
+    }
+    return containers;
+}
+
+function cleanupAdjacentSelect2Containers(select, preferredContainer = null) {
+    const containers = getAdjacentSelect2Containers(select);
+    if (containers.length <= 1) {
+        return;
+    }
+
+    // Select2 的视觉容器应只紧跟原 select 保留一个；附加世界书弹窗会重建节点，
+    // 若重复初始化留下相邻容器，这里只移除多余外壳，不碰原 select 的 value 和事件绑定。
+    const containerToKeep = preferredContainer && containers.includes(preferredContainer)
+        ? preferredContainer
+        : containers[0];
+    containers.forEach(container => {
+        if (container !== containerToKeep) {
+            container.remove();
+        }
+    });
+}
+
+function removeAdjacentSelect2Containers(select) {
+    getAdjacentSelect2Containers(select).forEach(container => {
+        container.remove();
+    });
+}
+
+function hasStaleSelect2DomState(select) {
+    return select.classList.contains('select2-hidden-accessible') || getAdjacentSelect2Containers(select).length > 0;
+}
+
+function resetStaleSelect2DomState(select) {
+    removeAdjacentSelect2Containers(select);
+    select.classList.remove('select2-hidden-accessible');
+    select.removeAttribute('aria-hidden');
+    select.removeAttribute('data-select2-id');
+    select.removeAttribute('tabindex');
+}
+
+function isAndroidMultipleSelect2NoKeyboardActive(field) {
+    return shouldUnifyAndroidMultipleSelect()
+        && isAndroidTouchEnvironment()
+        && field.closest('.sillydroid-multiple-select2-no-keyboard');
+}
+
+function disableAndroidMultipleSelect2SearchField(field) {
+    if (!(field instanceof HTMLInputElement) && !(field instanceof HTMLTextAreaElement)) {
+        return;
+    }
+
+    // Android 统一多选只承担选项选择，不承担文本搜索；Select2 内置搜索框不能弹出软键盘或显示输入光标。
+    field.readOnly = true;
+    field.inputMode = 'none';
+    field.setAttribute('readonly', 'readonly');
+    field.setAttribute('inputmode', 'none');
+    field.setAttribute('autocomplete', 'off');
+    field.setAttribute('autocapitalize', 'off');
+    field.setAttribute('spellcheck', 'false');
+    field.style.caretColor = 'transparent';
+
+    if (field.dataset.sillydroidNoKeyboardBound === 'true') {
+        return;
+    }
+
+    field.dataset.sillydroidNoKeyboardBound = 'true';
+    field.addEventListener('beforeinput', event => {
+        if (isAndroidMultipleSelect2NoKeyboardActive(field)) {
+            event.preventDefault();
+        }
+    }, true);
+    field.addEventListener('input', () => {
+        if (isAndroidMultipleSelect2NoKeyboardActive(field)) {
+            field.value = '';
+        }
+    }, true);
+}
+
+function resetAndroidMultipleSelect2SearchField(field) {
+    if (!(field instanceof HTMLInputElement) && !(field instanceof HTMLTextAreaElement)) {
+        return;
+    }
+
+    field.readOnly = false;
+    field.removeAttribute('readonly');
+    field.removeAttribute('inputmode');
+    field.removeAttribute('autocomplete');
+    field.removeAttribute('autocapitalize');
+    field.removeAttribute('spellcheck');
+    field.style.removeProperty('caret-color');
+}
+
+function resetAndroidMultipleSelect2NoKeyboardDecorations() {
+    document.querySelectorAll('.sillydroid-multiple-select2-no-keyboard').forEach(container => {
+        container.querySelectorAll('.select2-search__field').forEach(resetAndroidMultipleSelect2SearchField);
+        container.classList.remove('sillydroid-multiple-select2-no-keyboard');
+    });
+}
+
+function applyAndroidMultipleSelect2NoKeyboard(select, select2Instance = null) {
+    const $ = globalThis.jQuery || globalThis.$;
+    const resolvedSelect2Instance = select2Instance || $?.(select).data('select2');
+    const container = resolvedSelect2Instance?.$container?.[0] || getAdjacentSelect2Containers(select)[0];
+
+    if (container instanceof HTMLElement) {
+        container.classList.add('sillydroid-multiple-select2-no-keyboard');
+        container.querySelectorAll('.select2-search__field').forEach(disableAndroidMultipleSelect2SearchField);
+    }
+
+    document.querySelectorAll('.select2-container--open .select2-search__field').forEach(disableAndroidMultipleSelect2SearchField);
+
+    if (!$ || androidMultipleSelect2NoKeyboardBoundSelects.has(select)) {
+        return;
+    }
+
+    androidMultipleSelect2NoKeyboardBoundSelects.add(select);
+    $(select).on('select2:opening.sillydroidNoKeyboard select2:open.sillydroidNoKeyboard', () => {
+        window.setTimeout(() => {
+            applyAndroidMultipleSelect2NoKeyboard(select);
+        }, 0);
+        window.setTimeout(() => {
+            applyAndroidMultipleSelect2NoKeyboard(select);
+        }, 80);
+    });
+}
+
+function syncAndroidMultipleSelect2State(select, select2Instance = null, options = {}) {
+    cleanupAdjacentSelect2Containers(select, select2Instance?.$container?.[0]);
+    if (options.managedByHost === true) {
+        select.dataset.sillydroidMultipleSelect2 = 'true';
+    }
+    applyAndroidMultipleSelect2NoKeyboard(select, select2Instance);
+}
+
+function getAndroidMultipleSelect2Options(select) {
+    return {
+        width: '100%',
+        placeholder: getAndroidMultipleSelect2Placeholder(select),
+        allowClear: true,
+        closeOnSelect: false,
+        minimumResultsForSearch: Infinity,
+        dropdownParent: (globalThis.jQuery || globalThis.$)(getAndroidMultipleSelect2DropdownParent(select)),
+    };
+}
+
 function getAndroidMultipleSelect2DropdownParent(select) {
     return select.closest('.popup, .popup-content, .drawer-content, .inline-drawer-content') || document.body;
+}
+
+function ensureAndroidMultipleSelect2ForSelect(select, $) {
+    if (!(select instanceof HTMLSelectElement) || !isSelectInteractable(select)) {
+        return;
+    }
+
+    const $select = $(select);
+    const select2Instance = $select.data('select2');
+    if (select2Instance) {
+        syncAndroidMultipleSelect2State(select, select2Instance);
+        return;
+    }
+
+    if (hasStaleSelect2DomState(select)) {
+        // 没有 Select2 实例但仍带隐藏 class/相邻容器时，这是弹窗重建或重复初始化留下的残留外壳。
+        // 清理后仍在同一个原 select 上初始化，保留 selectedOptions 和上游绑定在 select 上的事件。
+        resetStaleSelect2DomState(select);
+    }
+
+    // 上游移动端会跳过部分 multiple select 的 Select2 初始化；Android WebView 原生多选会变成黑白列表。
+    // 只在原 select 上挂 Select2，不替换业务节点、不维护并行值；值和事件仍由 Select2/上游原链路处理。
+    $select.select2(getAndroidMultipleSelect2Options(select));
+    syncAndroidMultipleSelect2State(select, $select.data('select2'), { managedByHost: true });
 }
 
 function ensureAndroidMultipleSelect2() {
@@ -2118,29 +2316,7 @@ function ensureAndroidMultipleSelect2() {
     }
 
     document.querySelectorAll('select[multiple]').forEach(select => {
-        if (!(select instanceof HTMLSelectElement)) {
-            return;
-        }
-
-        if (!isSelectInteractable(select)) {
-            return;
-        }
-
-        const $select = $(select);
-        if ($select.data('select2')) {
-            return;
-        }
-
-        // 上游移动端会跳过部分 multiple select 的 Select2 初始化；Android WebView 原生多选会变成黑白列表。
-        // 只在原 select 上挂 Select2，不替换业务节点、不维护并行值；值和事件仍由 Select2/上游原链路处理。
-        $select.select2({
-            width: '100%',
-            placeholder: getAndroidMultipleSelect2Placeholder(select),
-            allowClear: true,
-            closeOnSelect: false,
-            dropdownParent: $(getAndroidMultipleSelect2DropdownParent(select)),
-        });
-        select.dataset.sillydroidMultipleSelect2 = 'true';
+        ensureAndroidMultipleSelect2ForSelect(select, $);
     });
 }
 
@@ -2155,15 +2331,23 @@ function observeAndroidMultipleSelect2() {
     }
 
     document.documentElement.dataset[worldInfoSelect2ObserverId] = 'true';
-    const observer = new MutationObserver(() => {
-        scheduleAndroidMultipleSelect2Restore();
+    const observer = new MutationObserver(mutations => {
+        if (mutations.some(mutation => mutation.type === 'childList' || mutation.type === 'attributes')) {
+            scheduleAndroidMultipleSelect2Restore();
+        }
     });
 
     // 多选控件会随抽屉/弹窗重建；一个观察器集中恢复 Android 上被上游移动端跳过的 Select2。
+    // 部分上游界面先保留隐藏节点，再通过 class/style/hidden 切到可见；属性变化也必须触发恢复。
     observer.observe(document.body, {
+        attributes: true,
         childList: true,
+        attributeFilter: ['class', 'style', 'hidden', 'aria-hidden', 'open'],
         subtree: true,
     });
+
+    document.addEventListener('pointerdown', restoreAndroidMultipleSelect2BeforeNativeSelect, true);
+    document.addEventListener('touchstart', restoreAndroidMultipleSelect2BeforeNativeSelect, true);
 
     document.addEventListener('pointerup', () => {
         scheduleAndroidMultipleSelect2Restore(80);
