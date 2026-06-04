@@ -14,6 +14,7 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         private const val servicePortKey = "service-port"
         private const val hostDisplayModeKey = "host-display-mode"
         private const val launchWebViewOnReadyKey = "launch-webview-on-ready"
+        private const val backgroundHealthCheckEnabledKey = "background-health-check-enabled"
         private const val webViewPullRefreshEnabledKey = "webview-pull-refresh-enabled"
         private const val debugDiagnosticsEnabledKey = "debug-diagnostics-enabled"
         private const val unrestrictedFileImportSelectionEnabledKey = "unrestricted-file-import-selection-enabled"
@@ -62,6 +63,14 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         set(value) {
             preferences.edit()
                 .putBoolean(launchWebViewOnReadyKey, value)
+                .apply()
+        }
+
+    override var backgroundHealthCheckEnabled: Boolean
+        get() = preferences.getBoolean(backgroundHealthCheckEnabledKey, false)
+        set(value) {
+            preferences.edit()
+                .putBoolean(backgroundHealthCheckEnabledKey, value)
                 .apply()
         }
 

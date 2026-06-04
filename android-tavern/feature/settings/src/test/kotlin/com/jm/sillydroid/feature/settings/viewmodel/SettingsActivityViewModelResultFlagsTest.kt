@@ -37,10 +37,24 @@ class SettingsActivityViewModelResultFlagsTest {
         assertEquals(BrowserDataClearTarget.RESOURCE_CACHE.mask, state.browserDataClearMask)
     }
 
+    @Test
+    fun `background health check defaults off and persists toggle`() {
+        val repository = FakeHostPreferencesRepository()
+        val viewModel = SettingsActivityViewModel(repository)
+
+        assertFalse(viewModel.uiState.value.backgroundHealthCheckEnabled)
+
+        viewModel.setBackgroundHealthCheckEnabled(true)
+
+        assertTrue(repository.backgroundHealthCheckEnabled)
+        assertTrue(viewModel.uiState.value.backgroundHealthCheckEnabled)
+    }
+
     private class FakeHostPreferencesRepository : HostPreferencesRepository {
         override var servicePort: Int = 8000
         override var hostDisplayMode: HostDisplayMode = HostDisplayMode.NORMAL
         override var launchWebViewOnReady: Boolean = true
+        override var backgroundHealthCheckEnabled: Boolean = false
         override var webViewPullRefreshEnabled: Boolean = true
         override var debugDiagnosticsEnabled: Boolean = false
         override var unrestrictedFileImportSelectionEnabled: Boolean = false

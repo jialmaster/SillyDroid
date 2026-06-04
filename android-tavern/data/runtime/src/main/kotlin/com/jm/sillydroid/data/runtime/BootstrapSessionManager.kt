@@ -900,6 +900,12 @@ class BootstrapSessionManager(
     }
 
     private fun startReadyWatchdog(readinessUrl: String, localUrl: String) {
+        if (!hostPreferences.backgroundHealthCheckEnabled) {
+            // 默认关闭后台周期探活，避免部分机器无法稳定响应探针时反复触发自动重启和页面刷新。
+            healthMonitor.stopReadyWatchdog(reason = "background health check disabled")
+            appendStartupLog("Ready watchdog skipped because background health check is disabled.")
+            return
+        }
         healthMonitor.startReadyWatchdog(readinessUrl = readinessUrl, localUrl = localUrl)
     }
 

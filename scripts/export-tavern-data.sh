@@ -54,6 +54,38 @@ ensure_python_available() {
     find_python_command >/dev/null 2>&1
 }
 
+run_command_with_timeout() {
+    local timeout_seconds="$1"
+    shift
+
+    # 分享面板可能在厂商系统/Termux:API 组合里不返回；这里统一用自带看门狗，
+    # 并优先杀进程组，避免 shell wrapper 里的子进程残留导致导出卡在发布阶段。
+    if command -v setsid >/dev/null 2>&1; then
+        setsid "$@" &
+    else
+        "$@" &
+    fi
+    local command_pid=$!
+    (
+        sleep "$timeout_seconds"
+        if kill -0 "$command_pid" >/dev/null 2>&1; then
+            kill -- "-$command_pid" >/dev/null 2>&1 || true
+            kill "$command_pid" >/dev/null 2>&1 || true
+            sleep 1
+            kill -9 -- "-$command_pid" >/dev/null 2>&1 || true
+            kill -9 "$command_pid" >/dev/null 2>&1 || true
+        fi
+    ) &
+    local watchdog_pid=$!
+
+    local status=0
+    wait "$command_pid" || status=$?
+    kill "$watchdog_pid" >/dev/null 2>&1 || true
+    wait "$watchdog_pid" >/dev/null 2>&1 || true
+
+    return "$status"
+}
+
 COLOR_RESET=''
 COLOR_BOLD=''
 COLOR_DIM=''
@@ -1233,8 +1265,11 @@ publish_with_download_manager() {
 
 publish_with_share_sheet() {
     local archive_path="$1"
-    if ! termux-share -a send -c application/zip "$archive_path"; then
-        echo "调用 termux-share 失败。" >&2
+    local share_timeout_seconds="${SILLYDROID_EXPORT_SHARE_TIMEOUT_SECONDS:-60}"
+
+    log "正在打开 Android 系统分享面板，若厂商系统未响应会在 ${share_timeout_seconds} 秒后自动尝试下载服务。"
+    if ! run_command_with_timeout "$share_timeout_seconds" termux-share -a send -c application/zip "$archive_path"; then
+        echo "调用 termux-share 失败或超时。" >&2
         return 1
     fi
     log "已打开 Android 系统分享面板，请选择文件管理器、网盘或聊天应用保存压缩包。"
@@ -1253,7 +1288,19 @@ publish_archive() {
             publish_with_download_manager "$archive_path" "$archive_name"
             ;;
         share)
-            publish_with_share_sheet "$archive_path"
+            if publish_with_share_sheet "$archive_path"; then
+                return 0
+            fi
+            warn "系统分享面板没有完成发布，将继续尝试 Android 系统下载服务。"
+            ensure_python_available || true
+            if command -v termux-download >/dev/null 2>&1 && find_python_command >/dev/null 2>&1; then
+                EXPORT_METHOD='download'
+                EXPORT_LABEL='Android 系统下载服务'
+                publish_with_download_manager "$archive_path" "$archive_name"
+                return $?
+            fi
+            echo "分享失败后无法继续下载服务：未检测到 termux-download 或 python/python3。" >&2
+            return 1
             ;;
         *)
             echo "未知导出发布方式：$EXPORT_METHOD" >&2

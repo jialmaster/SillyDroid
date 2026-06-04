@@ -53,6 +53,7 @@ class BootstrapSettingsScreenController(
     private val quickActionsButton: MaterialButton,
     private val floatingLogsSwitch: MaterialSwitch,
     private val backgroundOnlyModeSwitch: MaterialSwitch,
+    private val backgroundHealthCheckSwitch: MaterialSwitch,
     private val pullRefreshSwitch: MaterialSwitch,
     private val hostDisplayModeRow: View,
     private val unrestrictedFileImportSelectionSwitch: MaterialSwitch,
@@ -100,6 +101,7 @@ class BootstrapSettingsScreenController(
         quickActionsButton.isEnabled = !busy
         floatingLogsSwitch.isEnabled = !busy
         backgroundOnlyModeSwitch.isEnabled = !busy
+        backgroundHealthCheckSwitch.isEnabled = !busy
         pullRefreshSwitch.isEnabled = !busy
         hostDisplayModeRow.isEnabled = !busy
         unrestrictedFileImportSelectionSwitch.isEnabled = !busy

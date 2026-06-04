@@ -19,6 +19,7 @@ class SettingsActivityViewModel(
         SettingsActivityUiState(
             hostDisplayMode = hostPreferencesRepository.hostDisplayMode,
             backgroundOnlyModeEnabled = !hostPreferencesRepository.launchWebViewOnReady,
+            backgroundHealthCheckEnabled = hostPreferencesRepository.backgroundHealthCheckEnabled,
             floatingLogsEnabled = hostPreferencesRepository.floatingLogBubbleEnabled,
             pullRefreshEnabled = hostPreferencesRepository.webViewPullRefreshEnabled,
             debugDiagnosticsEnabled = hostPreferencesRepository.debugDiagnosticsEnabled,
@@ -55,6 +56,14 @@ class SettingsActivityViewModel(
             hostPreferencesRepository.launchWebViewOnReady = launchWebViewOnReady
         }
         _uiState.update { current -> current.copy(backgroundOnlyModeEnabled = enabled) }
+    }
+
+    fun setBackgroundHealthCheckEnabled(enabled: Boolean) {
+        // 后台健康检查会周期性探测本地 Tavern 服务；默认关闭，避免不通的机器反复触发重启刷新。
+        if (hostPreferencesRepository.backgroundHealthCheckEnabled != enabled) {
+            hostPreferencesRepository.backgroundHealthCheckEnabled = enabled
+        }
+        _uiState.update { current -> current.copy(backgroundHealthCheckEnabled = enabled) }
     }
 
     fun setPullRefreshEnabled(enabled: Boolean) {

@@ -111,6 +111,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var quickFieldContainer: LinearLayout
     private lateinit var floatingLogsSwitch: MaterialSwitch
     private lateinit var backgroundOnlyModeSwitch: MaterialSwitch
+    private lateinit var backgroundHealthCheckSwitch: MaterialSwitch
     private lateinit var pullRefreshSwitch: MaterialSwitch
     private lateinit var displayModeRow: View
     private lateinit var displayModeValueView: TextView
@@ -340,6 +341,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         quickFieldContainer = findViewById(R.id.bootstrapSettingsQuickFieldContainer)
         floatingLogsSwitch = findViewById(R.id.bootstrapSettingsFloatingLogsSwitch)
         backgroundOnlyModeSwitch = findViewById(R.id.bootstrapSettingsBackgroundOnlyModeSwitch)
+        backgroundHealthCheckSwitch = findViewById(R.id.bootstrapSettingsBackgroundHealthCheckSwitch)
         pullRefreshSwitch = findViewById(R.id.bootstrapSettingsPullRefreshSwitch)
         displayModeRow = findViewById(R.id.bootstrapSettingsDisplayModeRow)
         displayModeValueView = findViewById(R.id.bootstrapSettingsDisplayModeValue)
@@ -417,6 +419,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             quickActionsButton = quickActionsButton,
             floatingLogsSwitch = floatingLogsSwitch,
             backgroundOnlyModeSwitch = backgroundOnlyModeSwitch,
+            backgroundHealthCheckSwitch = backgroundHealthCheckSwitch,
             pullRefreshSwitch = pullRefreshSwitch,
             hostDisplayModeRow = displayModeRow,
             unrestrictedFileImportSelectionSwitch = unrestrictedFileImportSelectionSwitch,
@@ -463,6 +466,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             viewModel = settingsActivityViewModel,
             floatingLogsSwitch = floatingLogsSwitch,
             backgroundOnlyModeSwitch = backgroundOnlyModeSwitch,
+            backgroundHealthCheckSwitch = backgroundHealthCheckSwitch,
             pullRefreshSwitch = pullRefreshSwitch,
             hostDisplayModeRow = displayModeRow,
             hostDisplayModeValueView = displayModeValueView,

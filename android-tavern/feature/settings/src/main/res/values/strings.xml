@@ -19,6 +19,8 @@
     <string name="bootstrap_settings_host_display_mode_immersive">顶部和底部都沉浸式全屏</string>
     <string name="bootstrap_settings_host_background_only_mode_title">纯后台模式</string>
     <string name="bootstrap_settings_host_background_only_mode_summary">启动时只运行本地 Tavern 服务，不自动拉起酒馆 WebView。默认关闭，保持启动后进入酒馆页面。</string>
+    <string name="bootstrap_settings_host_background_health_check_title">后台健康检查</string>
+    <string name="bootstrap_settings_host_background_health_check_summary">周期性探测本地 Tavern 服务，失去响应时自动重启。默认关闭，避免部分机器探针不通时反复刷新界面。</string>
     <string name="bootstrap_settings_host_floating_logs_title">调试日志球</string>
     <string name="bootstrap_settings_host_floating_logs_summary">在主界面右下角显示悬浮球，点击后可实时查看最新酒馆日志。该开关立即生效，不需要重新保存配置。</string>
     <string name="bootstrap_settings_host_debug_diagnostics_title">调试模式</string>

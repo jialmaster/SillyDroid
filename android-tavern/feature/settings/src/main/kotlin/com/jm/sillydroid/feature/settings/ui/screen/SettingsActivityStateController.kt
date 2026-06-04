@@ -19,6 +19,7 @@ class SettingsActivityStateController(
     private val viewModel: SettingsActivityViewModel,
     private val floatingLogsSwitch: MaterialSwitch,
     private val backgroundOnlyModeSwitch: MaterialSwitch,
+    private val backgroundHealthCheckSwitch: MaterialSwitch,
     private val pullRefreshSwitch: MaterialSwitch,
     private val hostDisplayModeRow: View,
     private val hostDisplayModeValueView: TextView,
@@ -36,6 +37,10 @@ class SettingsActivityStateController(
         backgroundOnlyModeSwitch.isChecked = initialState.backgroundOnlyModeEnabled
         backgroundOnlyModeSwitch.setOnCheckedChangeListener { _, isChecked ->
             viewModel.setBackgroundOnlyModeEnabled(isChecked)
+        }
+        backgroundHealthCheckSwitch.isChecked = initialState.backgroundHealthCheckEnabled
+        backgroundHealthCheckSwitch.setOnCheckedChangeListener { _, isChecked ->
+            viewModel.setBackgroundHealthCheckEnabled(isChecked)
         }
         pullRefreshSwitch.isChecked = initialState.pullRefreshEnabled
         pullRefreshSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -70,6 +75,9 @@ class SettingsActivityStateController(
         }
         if (backgroundOnlyModeSwitch.isChecked != state.backgroundOnlyModeEnabled) {
             backgroundOnlyModeSwitch.isChecked = state.backgroundOnlyModeEnabled
+        }
+        if (backgroundHealthCheckSwitch.isChecked != state.backgroundHealthCheckEnabled) {
+            backgroundHealthCheckSwitch.isChecked = state.backgroundHealthCheckEnabled
         }
         if (pullRefreshSwitch.isChecked != state.pullRefreshEnabled) {
             pullRefreshSwitch.isChecked = state.pullRefreshEnabled
