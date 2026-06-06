@@ -26,6 +26,10 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         private const val floatingLogBubbleXKey = "floating-log-bubble-x"
         private const val floatingLogBubbleYKey = "floating-log-bubble-y"
         private const val defaultExtensionsPromptConsumedKey = "default-extensions-prompt-consumed"
+        private const val crashLogUploadEnabledKey = "crash-log-upload-enabled"
+        private const val crashLogUploadPromptConsumedKey = "crash-log-upload-prompt-consumed"
+        private const val legacyCrashLogUploadPromptVersionCodeKey = "crash-log-upload-prompt-version-code"
+        private const val lastCrashLogAutoUploadKeyKey = "last-crash-log-auto-upload-key"
 
         const val floatingLogRefreshIntervalRealtimeMillis = FloatingLogRefreshIntervals.REALTIME_MILLIS
         const val floatingLogRefreshIntervalOneSecondMillis = FloatingLogRefreshIntervals.ONE_SECOND_MILLIS
@@ -177,6 +181,40 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
             preferences.edit()
                 .putBoolean(defaultExtensionsPromptConsumedKey, value)
                 .apply()
+        }
+
+    override var crashLogUploadEnabled: Boolean
+        get() = preferences.getBoolean(crashLogUploadEnabledKey, false)
+        set(value) {
+            preferences.edit()
+                .putBoolean(crashLogUploadEnabledKey, value)
+                .apply()
+        }
+
+    override var crashLogUploadPromptConsumed: Boolean
+        get() = preferences.getBoolean(crashLogUploadPromptConsumedKey, false) ||
+            preferences.getLong(legacyCrashLogUploadPromptVersionCodeKey, 0L) > 0L
+        set(value) {
+            // 旧开发包曾按 versionCode 记录授权提示；这里迁移为“看过一次即永久不再提示”。
+            preferences.edit()
+                .putBoolean(crashLogUploadPromptConsumedKey, value)
+                .remove(legacyCrashLogUploadPromptVersionCodeKey)
+                .apply()
+        }
+
+    override var lastCrashLogAutoUploadKey: String?
+        get() = preferences.getString(lastCrashLogAutoUploadKeyKey, null)
+            ?.trim()
+            ?.takeIf { value -> value.isNotBlank() }
+        set(value) {
+            preferences.edit().apply {
+                val normalized = value.orEmpty().trim()
+                if (normalized.isBlank()) {
+                    remove(lastCrashLogAutoUploadKeyKey)
+                } else {
+                    putString(lastCrashLogAutoUploadKeyKey, normalized)
+                }
+            }.apply()
         }
 
     private fun sanitizeServicePort(value: Int): Int {

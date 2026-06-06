@@ -134,6 +134,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var logsContentView: TextView
     private lateinit var logsSelectButton: MaterialButton
     private lateinit var logsExportButton: MaterialButton
+    private lateinit var logsUploadButton: MaterialButton
     private lateinit var logsReloadButton: MaterialButton
     private lateinit var logsClearButton: MaterialButton
     private lateinit var terminalPanelView: View
@@ -153,6 +154,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var aboutVersionView: TextView
     private lateinit var aboutUpdateStatusView: TextView
     private lateinit var aboutUpdateButton: MaterialButton
+    private lateinit var aboutCrashUploadSwitch: MaterialSwitch
     private lateinit var sectionContainer: LinearLayout
     private lateinit var configPathView: TextView
     private lateinit var warningView: TextView
@@ -364,6 +366,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         logsContentView = findViewById(R.id.bootstrapSettingsLogsContent)
         logsSelectButton = findViewById(R.id.bootstrapSettingsLogsSelectButton)
         logsExportButton = findViewById(R.id.bootstrapSettingsLogsExportButton)
+        logsUploadButton = findViewById(R.id.bootstrapSettingsLogsUploadButton)
         logsReloadButton = findViewById(R.id.bootstrapSettingsLogsReloadButton)
         logsClearButton = findViewById(R.id.bootstrapSettingsLogsClearButton)
         terminalPanelView = findViewById(R.id.bootstrapSettingsTerminalPanel)
@@ -383,6 +386,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         aboutVersionView = findViewById(R.id.bootstrapSettingsAboutVersion)
         aboutUpdateStatusView = findViewById(R.id.bootstrapSettingsAboutUpdateStatus)
         aboutUpdateButton = findViewById(R.id.bootstrapSettingsAboutUpdateButton)
+        aboutCrashUploadSwitch = findViewById(R.id.bootstrapSettingsAboutCrashUploadSwitch)
         sectionContainer = findViewById(R.id.bootstrapSettingsSectionContainer)
         configPathView = findViewById(R.id.bootstrapSettingsConfigPath)
         warningView = findViewById(R.id.bootstrapSettingsWarning)
@@ -437,6 +441,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
                 extensionsReloadButton,
                 logsSelectButton,
                 logsExportButton,
+                logsUploadButton,
                 logsReloadButton,
                 logsClearButton,
                 logsScrollToBottomButton,
@@ -478,6 +483,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         aboutController = BootstrapSettingsAboutController(
             activity = this,
             githubButton = aboutGithubButton,
+            crashUploadSwitch = aboutCrashUploadSwitch,
+            hostPreferencesRepository = hostConfigStore,
             githubRepository = appGraph.appUpdateBuildConfig.githubRepository,
             externalBrowserFailureMessage = { getString(R.string.browser_open_external_failed) }
         )
@@ -577,9 +584,11 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             scrollToBottomButton = logsScrollToBottomButton,
             selectButton = logsSelectButton,
             exportButton = logsExportButton,
+            uploadButton = logsUploadButton,
             reloadButton = logsReloadButton,
             clearButton = logsClearButton,
             hostLogRepository = hostLogRepository,
+            uploadConfig = appGraph.appUpdateBuildConfig,
             preferTavernServerLog = { processManager.currentSnapshot().shouldPreferTavernServerLog() },
             setBusy = screenController::setBusy,
             showError = settingsCoordinator::showValidationMessage,

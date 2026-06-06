@@ -48,6 +48,8 @@ data class AppUpdateRequestConfig(
 data class AppUpdateBuildConfig(
     val githubRepository: String,
     val latestReleaseMetadataUrl: String,
+    val crashLogUploadUrl: String,
+    val crashLogUploadWriterApiKey: String,
     val buildType: String,
     val hostVersion: String,
     val upstreamVersion: String

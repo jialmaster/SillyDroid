@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
+import com.jm.sillydroid.core.model.logs.HostLogBundleAttachment
 import com.jm.sillydroid.core.model.logs.HostLogBundleExportResult
 import com.jm.sillydroid.core.model.logs.HostLogEntry
 import com.jm.sillydroid.core.model.logs.HostLogExportOption
@@ -58,6 +59,11 @@ object HostLogManager {
     private const val bundleFilePrefix = "sillydroid-logs"
     private const val asyncWriterLogTag = "HostLogAsyncWriter"
     private const val asyncWriterShutdownTimeoutMillis = 750L
+    private const val uploadMaxLogArchiveBytes = HostLogUploadBundlePolicy.maxCompactLogArchiveBytes
+    private const val uploadCompactMaxBytes = HostLogUploadBundlePolicy.compactMaxBytes
+    private const val uploadCompactMaxChars = HostLogUploadBundlePolicy.compactMaxChars
+    private const val uploadCompactMaxLines = HostLogUploadBundlePolicy.compactMaxLines
+    private const val uploadTavernServerHeadLines = HostLogUploadBundlePolicy.tavernServerHeadLines
 
     const val crashLogFileName = "app-last-crash.log"
     const val exitInfoLogFileName = "app-last-exit-info.log"
@@ -516,6 +522,163 @@ object HostLogManager {
         }
     }
 
+    fun exportToCacheFile(
+        context: Context,
+        bundleFileName: String = buildBundleFileName(),
+        includedRelativePaths: Set<String>? = null,
+        compactForUpload: Boolean = false,
+        feedbackText: String? = null,
+        attachments: List<HostLogBundleAttachment> = emptyList(),
+        maxArchiveSizeBytes: Long? = null
+    ): Pair<File, HostLogBundleExportResult> {
+        val cacheDir = File(context.applicationContext.cacheDir, "host-log-upload").apply { mkdirs() }
+        val targetFile = File(cacheDir, bundleFileName)
+        return try {
+            val logLimitBytes = maxArchiveSizeBytes
+                ?: if (compactForUpload) uploadMaxLogArchiveBytes else null
+            targetFile.outputStream().use { output ->
+                writeBundle(
+                    context = context,
+                    output = output,
+                    bundleFileName = bundleFileName,
+                    includedRelativePaths = includedRelativePaths,
+                    compactForUpload = compactForUpload,
+                    feedbackText = feedbackText,
+                    attachments = attachments
+                )
+            }
+            if (compactForUpload && logLimitBytes != null) {
+                rewriteCompactUploadBundleNearLogLimit(
+                    context = context,
+                    targetFile = targetFile,
+                    bundleFileName = bundleFileName,
+                    includedRelativePaths = includedRelativePaths,
+                    feedbackText = feedbackText,
+                    attachments = attachments,
+                    logLimitBytes = logLimitBytes
+                )
+            }
+            val archiveSizeBytes = targetFile.length()
+            targetFile to HostLogBundleExportResult(
+                bundleFileName = bundleFileName,
+                zipPath = targetFile.absolutePath,
+                logFileCount = countZipLogEntries(targetFile),
+                archiveSizeBytes = archiveSizeBytes
+            )
+        } catch (error: Throwable) {
+            targetFile.delete()
+            throw error
+        }
+    }
+
+    private fun rewriteCompactUploadBundleNearLogLimit(
+        context: Context,
+        targetFile: File,
+        bundleFileName: String,
+        includedRelativePaths: Set<String>?,
+        feedbackText: String?,
+        attachments: List<HostLogBundleAttachment>,
+        logLimitBytes: Long
+    ) {
+        val logsDir = logsDirectory(context).apply { mkdirs() }
+        val prioritizedLogFiles = prioritizeCompactUploadLogFiles(
+            collectLogFiles(logsDir, normalizeIncludedPaths(includedRelativePaths))
+        )
+        val minLogCount = if (prioritizedLogFiles.isEmpty()) 0 else 1
+        var selectedLogCount = prioritizedLogFiles.size
+
+        // 上传大小只约束日志证据包，不约束用户反馈图片；图片可能单张就超过目标值，不能因此丢失。
+        val logProbeFile = File(targetFile.parentFile, "${targetFile.name}.logs-only.tmp")
+        try {
+            writeCompactUploadBundleForProbe(
+                context = context,
+                targetFile = logProbeFile,
+                bundleFileName = bundleFileName,
+                logFiles = prioritizedLogFiles.take(selectedLogCount)
+            )
+            while (logProbeFile.length() > logLimitBytes && selectedLogCount > minLogCount) {
+                selectedLogCount -= 1
+                writeCompactUploadBundleForProbe(
+                    context = context,
+                    targetFile = logProbeFile,
+                    bundleFileName = bundleFileName,
+                    logFiles = prioritizedLogFiles.take(selectedLogCount)
+                )
+            }
+        } finally {
+            logProbeFile.delete()
+        }
+
+        targetFile.outputStream().use { output ->
+            writeBundle(
+                context = context,
+                output = output,
+                bundleFileName = bundleFileName,
+                compactForUpload = true,
+                feedbackText = feedbackText,
+                attachments = attachments,
+                logFilesOverride = prioritizedLogFiles.take(selectedLogCount)
+            )
+        }
+    }
+
+    private fun writeCompactUploadBundleForProbe(
+        context: Context,
+        targetFile: File,
+        bundleFileName: String,
+        logFiles: List<File>
+    ) {
+        targetFile.outputStream().use { output ->
+            writeBundle(
+                context = context,
+                output = output,
+                bundleFileName = bundleFileName,
+                compactForUpload = true,
+                logFilesOverride = logFiles
+            )
+        }
+    }
+
+    fun exportCompactUploadBundleToCacheFile(
+        context: Context,
+        includedRelativePaths: Set<String>? = null,
+        feedbackText: String? = null,
+        attachments: List<HostLogBundleAttachment> = emptyList()
+    ): Pair<File, HostLogBundleExportResult> {
+        return exportToCacheFile(
+            context = context,
+            includedRelativePaths = includedRelativePaths,
+            compactForUpload = true,
+            feedbackText = feedbackText,
+            attachments = attachments,
+            maxArchiveSizeBytes = uploadMaxLogArchiveBytes
+        )
+    }
+
+    fun uploadMaxArchiveSizeBytes(): Long {
+        return uploadMaxLogArchiveBytes
+    }
+
+    fun uploadTavernServerHeadLineLimit(): Int {
+        return uploadTavernServerHeadLines
+    }
+
+    fun defaultUploadRelativePaths(context: Context): Set<String> {
+        val logsDir = logsDirectory(context).apply { mkdirs() }
+        return HostLogUploadBundlePolicy.defaultUploadRelativePaths(
+            logFiles = collectLogFiles(logsDir),
+            logsDir = logsDir
+        )
+    }
+
+    fun crashAutoUploadKey(context: Context): String? {
+        val crashFile = crashLogFile(context)
+        if (!crashFile.isFile || crashFile.length() <= 0L) {
+            return null
+        }
+        return "${crashFile.name}:${crashFile.lastModified()}:${crashFile.length()}"
+    }
+
     fun startCurrentServerTail(context: Context) {
         val applicationContext = context.applicationContext
         val logFile = currentServerLogFile(applicationContext)
@@ -915,17 +1078,19 @@ object HostLogManager {
         context: Context,
         output: OutputStream,
         bundleFileName: String,
-        includedRelativePaths: Set<String>? = null
+        includedRelativePaths: Set<String>? = null,
+        compactForUpload: Boolean = false,
+        feedbackText: String? = null,
+        attachments: List<HostLogBundleAttachment> = emptyList(),
+        logFilesOverride: List<File>? = null
     ): HostLogBundleExportResult {
         val logsDir = logsDirectory(context)
         logsDir.mkdirs()
-        val normalizedIncludedPaths = includedRelativePaths
-            ?.map { path -> path.replace('\\', '/').trimStart('/') }
-            ?.toSet()
+        val normalizedIncludedPaths = normalizeIncludedPaths(includedRelativePaths)
         if (normalizedIncludedPaths != null && normalizedIncludedPaths.isEmpty()) {
             throw IllegalArgumentException("No log files were selected for export.")
         }
-        val logFiles = collectLogFiles(logsDir, normalizedIncludedPaths)
+        val logFiles = logFilesOverride ?: collectLogFiles(logsDir, normalizedIncludedPaths)
         val baseInfo = HostLogBundleBaseInfoResolver.resolve(context, bundleFilePrefix)
         val logSummary = HostLogBundleInfoFormatter.summarize(logFiles, logsDir)
         ZipOutputStream(output).use { zipOut ->
@@ -941,10 +1106,33 @@ object HostLogManager {
             logFiles.forEach { logFile ->
                 val relativePath = logFile.relativeTo(logsDir).invariantSeparatorsPath
                 zipOut.putNextEntry(ZipEntry(relativePath))
-                logFile.inputStream().use { input ->
-                    input.copyTo(zipOut)
+                if (compactForUpload) {
+                    writeCompactUploadLogEntry(context, logFile, zipOut)
+                } else {
+                    logFile.inputStream().use { input ->
+                        input.copyTo(zipOut)
+                    }
                 }
                 zipOut.closeEntry()
+            }
+
+            feedbackText
+                ?.trim()
+                ?.takeIf { text -> text.isNotBlank() }
+                ?.let { text ->
+                    zipOut.putNextEntry(ZipEntry("feedback/feedback.txt"))
+                    zipOut.write(text.toByteArray(Charsets.UTF_8))
+                    zipOut.closeEntry()
+                }
+
+            attachments.forEachIndexed { index, attachment ->
+                context.contentResolver.openInputStream(attachment.sourceUri)?.use { input ->
+                    zipOut.putNextEntry(
+                        ZipEntry("feedback/${sanitizeAttachmentEntryName(attachment.entryName, index)}")
+                    )
+                    input.copyTo(zipOut)
+                    zipOut.closeEntry()
+                }
             }
         }
 
@@ -952,6 +1140,66 @@ object HostLogManager {
             bundleFileName = bundleFileName,
             logFileCount = logFiles.size
         )
+    }
+
+    private fun writeCompactUploadLogEntry(context: Context, logFile: File, output: OutputStream) {
+        val content = if (HostLogUploadBundlePolicy.isTavernServerLog(logFile.name)) {
+            HostLogUploadBundlePolicy.compactTavernServerLogContent(logFile, uploadTavernServerHeadLines)
+        } else {
+            readTailContent(
+                context = context,
+                logFile = logFile,
+                maxChars = uploadCompactMaxChars,
+                maxBytes = uploadCompactMaxBytes,
+                maxLines = uploadCompactMaxLines,
+                tailWindowProfile = HostLogTailWindowProfile.COMPACT
+            )
+        }
+        output.write(content.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun sanitizeAttachmentEntryName(requestedEntryName: String, fallbackIndex: Int): String {
+        return HostLogUploadBundlePolicy.sanitizeAttachmentEntryName(requestedEntryName, fallbackIndex)
+    }
+
+    private fun normalizeIncludedPaths(includedRelativePaths: Set<String>?): Set<String>? {
+        return includedRelativePaths
+            ?.map { path -> path.replace('\\', '/').trimStart('/') }
+            ?.toSet()
+    }
+
+    private fun prioritizeCompactUploadLogFiles(logFiles: List<File>): List<File> {
+        return logFiles.sortedWith(
+            compareBy<File> { file -> compactUploadPriority(file.name) }
+                .thenByDescending { file -> file.lastModified() }
+                .thenBy { file -> file.name.lowercase(Locale.ROOT) }
+        )
+    }
+
+    private fun compactUploadPriority(fileName: String): Int {
+        val normalizedName = fileName.lowercase(Locale.ROOT)
+        return when {
+            normalizedName == crashLogFileName -> 0
+            normalizedName == exitInfoLogFileName -> 1
+            normalizedName.startsWith("host-diagnostics-") -> 2
+            normalizedName.startsWith("startup-") -> 3
+            normalizedName.startsWith("js-error-") -> 4
+            normalizedName.startsWith("rootfs-runtime-") -> 5
+            normalizedName.startsWith("extension-") -> 6
+            HostLogUploadBundlePolicy.isTavernServerLog(normalizedName) -> 7
+            else -> 8
+        }
+    }
+
+    private fun countZipLogEntries(zipFile: File): Int {
+        if (!zipFile.isFile) {
+            return 0
+        }
+        return java.util.zip.ZipFile(zipFile).use { zip ->
+            zip.entries().asSequence().count { entry ->
+                entry.name.endsWith(".log", ignoreCase = true)
+            }
+        }
     }
 
     internal fun collectLogFiles(logsDir: File, includedRelativePaths: Set<String>? = null): List<File> {

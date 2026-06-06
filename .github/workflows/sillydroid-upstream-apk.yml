@@ -707,6 +707,8 @@ jobs:
 
       - name: Build Tavern APK
         if: steps.resolve.outputs.source == 'built'
+        env:
+          SILLYDROID_CRASH_LOG_UPLOAD_WRITER_API_KEY: ${{ secrets.SILLYDROID_CRASH_LOG_UPLOAD_WRITER_API_KEY }}
         run: |
           set -euo pipefail
 

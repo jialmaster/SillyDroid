@@ -65,5 +65,8 @@ class SettingsActivityViewModelResultFlagsTest {
         override var floatingLogRefreshIntervalMillis: Int = 1_000
         override var floatingLogBubblePosition: com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition? = null
         override var defaultExtensionsPromptConsumed: Boolean = false
+        override var crashLogUploadEnabled: Boolean = false
+        override var crashLogUploadPromptConsumed: Boolean = false
+        override var lastCrashLogAutoUploadKey: String? = null
     }
 }

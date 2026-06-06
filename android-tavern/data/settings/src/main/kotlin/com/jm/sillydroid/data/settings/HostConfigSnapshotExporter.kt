@@ -22,7 +22,9 @@ data class HostConfigSnapshot(
     val floatingLogBubbleEnabled: Boolean,
     val floatingLogRefreshIntervalMillis: Int,
     val floatingLogBubblePosition: FloatingLogBubblePosition?,
-    val defaultExtensionsPromptConsumed: Boolean
+    val defaultExtensionsPromptConsumed: Boolean,
+    val crashLogUploadEnabled: Boolean,
+    val crashLogUploadPromptConsumed: Boolean
 )
 
 object HostConfigSnapshotExporter {
@@ -53,7 +55,9 @@ object HostConfigSnapshotExporter {
             floatingLogBubbleEnabled = hostPreferences.floatingLogBubbleEnabled,
             floatingLogRefreshIntervalMillis = hostPreferences.floatingLogRefreshIntervalMillis,
             floatingLogBubblePosition = hostPreferences.floatingLogBubblePosition,
-            defaultExtensionsPromptConsumed = hostPreferences.defaultExtensionsPromptConsumed
+            defaultExtensionsPromptConsumed = hostPreferences.defaultExtensionsPromptConsumed,
+            crashLogUploadEnabled = hostPreferences.crashLogUploadEnabled,
+            crashLogUploadPromptConsumed = hostPreferences.crashLogUploadPromptConsumed
         )
     }
 }

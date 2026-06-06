@@ -18,6 +18,14 @@
         <item name="android:textStyle">bold</item>
     </style>
 
+    <style name="TextAppearance.SillyDroid.FeedbackBody" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="TextAppearance.SillyDroid.FeedbackMeta" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:textSize">10sp</item>
+    </style>
+
     <style name="Widget.SillyDroid.FloatingLogsCompactButton" parent="Widget.Material3.Button.OutlinedButton">
         <item name="android:minHeight">@dimen/sillydroid_floating_logs_compact_control_height</item>
         <item name="android:minWidth">@dimen/sillydroid_floating_logs_compact_control_min_width</item>
@@ -32,6 +40,43 @@
         <item name="backgroundTint">@color/floating_logs_panel_background</item>
         <item name="cornerRadius">@dimen/sillydroid_floating_logs_control_corner_radius</item>
         <item name="strokeColor">@color/floating_logs_panel_stroke</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <style name="Widget.SillyDroid.FeedbackTextInputLayout.OutlinedBox" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeWidth">1dp</item>
+        <item name="boxStrokeWidthFocused">2dp</item>
+        <item name="boxCollapsedPaddingTop">2dp</item>
+        <item name="boxCornerRadiusTopStart">@dimen/sillydroid_nested_card_radius</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/sillydroid_nested_card_radius</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/sillydroid_nested_card_radius</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/sillydroid_nested_card_radius</item>
+        <item name="hintTextAppearance">@style/TextAppearance.SillyDroid.FeedbackMeta</item>
+    </style>
+
+    <style name="Widget.SillyDroid.FeedbackTextInputEditText" parent="Widget.Material3.TextInputEditText.OutlinedBox">
+        <item name="android:minHeight">@dimen/sillydroid_input_min_height</item>
+        <item name="android:paddingStart">@dimen/sillydroid_control_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/sillydroid_control_padding_horizontal</item>
+        <item name="android:paddingTop">@dimen/sillydroid_control_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/sillydroid_control_padding_vertical</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="Widget.SillyDroid.FeedbackCompactButton" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:minHeight">@dimen/sillydroid_floating_logs_compact_control_height</item>
+        <item name="android:minWidth">@dimen/sillydroid_feedback_action_min_width</item>
+        <item name="android:paddingStart">@dimen/sillydroid_space_md</item>
+        <item name="android:paddingEnd">@dimen/sillydroid_space_md</item>
+        <item name="android:paddingTop">0dp</item>
+        <item name="android:paddingBottom">0dp</item>
+        <item name="android:textAppearance">@style/TextAppearance.SillyDroid.FloatingLogsCompactButton</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="backgroundTint">?attr/colorSurfaceContainerLow</item>
+        <item name="cornerRadius">@dimen/sillydroid_floating_logs_control_corner_radius</item>
+        <item name="strokeColor">?attr/colorOutlineVariant</item>
         <item name="strokeWidth">1dp</item>
     </style>
 </resources>

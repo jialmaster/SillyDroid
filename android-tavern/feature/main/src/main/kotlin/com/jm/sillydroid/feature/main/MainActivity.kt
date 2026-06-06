@@ -12,6 +12,7 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.annotation.ColorInt
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -20,11 +21,13 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.jm.sillydroid.core.model.logs.HostLogBundleUploadRequestConfig
 import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.core.ui.window.SystemBarAppearanceController
 import com.jm.sillydroid.domain.app.SillyDroidAppGraph
 import com.jm.sillydroid.domain.app.SillyDroidAppGraphProvider
 import com.jm.sillydroid.domain.bootstrap.BootstrapController
+import com.jm.sillydroid.feature.main.diagnostics.formatTrimMemoryLevel
 import com.jm.sillydroid.feature.main.ui.extensions.DefaultExtensionsInstallerLauncher
 import com.jm.sillydroid.feature.main.ui.home.HomeViewModel
 import com.jm.sillydroid.feature.main.ui.home.bootstrap.BootstrapOverlayHost
@@ -37,7 +40,11 @@ import com.jm.sillydroid.feature.main.ui.home.system.resolveMainHostDisplayMode
 import com.jm.sillydroid.feature.main.ui.home.webview.AndroidHostBridge
 import com.jm.sillydroid.feature.main.ui.home.webview.HostDiagnosticSink
 import com.jm.sillydroid.feature.main.ui.home.webview.TavernWebViewHost
+import com.jm.sillydroid.feature.main.ui.home.webview.WebViewRendererGoneInfo
 import com.jm.sillydroid.feature.main.ui.home.webview.WebViewRuntimeCompatibility
+import com.jm.sillydroid.feature.main.ui.home.webview.toDiagnosticText
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /**
@@ -79,9 +86,20 @@ class MainActivity : AppCompatActivity() {
     private var lastWebViewSystemBarsColorHex: String? = null
     private var lastWebViewStatusBarColorHex: String? = null
     private var lastWebViewNavigationBarColorHex: String? = null
+    private var lastRendererGoneAutoUploadKey: String? = null
+
+    private val feedbackImageLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (::floatingLogsHost.isInitialized) {
+            floatingLogsHost.onFeedbackImagesSelected(uris)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        recordActivityLifecycleDiagnostic(
+            event = "on_create",
+            extra = "savedStatePresent=${savedInstanceState != null} savedStateKeys=${savedInstanceState?.keySet()?.sorted()?.joinToString(separator = "|").orEmpty()}"
+        )
         WindowCompat.setDecorFitsSystemWindows(window, false)
         allowMainContentIntoDisplayCutout()
         setContentView(R.layout.activity_main)
@@ -101,6 +119,7 @@ class MainActivity : AppCompatActivity() {
             inspectWebViewRuntimeBeforeBootstrap()
         }
         bootstrapOverlayHost.startBootstrap(false)
+        maybePromptCrashLogUploadConsent()
     }
 
     private fun composeHosts() {
@@ -125,7 +144,17 @@ class MainActivity : AppCompatActivity() {
             canOpenSettings = { snapshot -> bootstrapOverlayHost.canOpenBootstrapSettings(snapshot) },
             openSettings = { bootstrapOverlayHost.openBootstrapSettings() },
             openCurrentPageInBrowser = { webViewHost.openCurrentPageInExternalBrowser() },
-            reloadTavernWebView = { webViewHost.reloadTavernWebView(source = "floating_logs_button") }
+            reloadTavernWebView = { webViewHost.reloadTavernWebView(source = "floating_logs_button") },
+            feedbackImageLauncher = feedbackImageLauncher,
+            feedbackUploadConfig = {
+                HostLogBundleUploadRequestConfig(
+                    uploadUrl = appGraph.appUpdateBuildConfig.crashLogUploadUrl,
+                    writerApiKey = appGraph.appUpdateBuildConfig.crashLogUploadWriterApiKey,
+                    source = "floating-log-feedback",
+                    crashType = "user-feedback"
+                )
+            },
+            recordHostDiagnostic = ::recordDefaultHostDiagnostic
         )
         webViewHost = TavernWebViewHost(
             activity = this,
@@ -148,7 +177,11 @@ class MainActivity : AppCompatActivity() {
             hostDiagnosticSink = HostDiagnosticSink { category, body ->
                 recordDetailedHostDiagnostic(category = category, body = body)
             },
-            refreshApplicationExitInfo = { hostLogRepository.refreshApplicationExitInfoAsync() }
+            criticalHostDiagnosticSink = HostDiagnosticSink { category, body ->
+                recordDefaultHostDiagnostic(category = category, body = body)
+            },
+            refreshApplicationExitInfo = { hostLogRepository.refreshApplicationExitInfoAsync() },
+            uploadRendererGoneLogBundle = ::uploadRendererGoneLogBundle
         )
         bootstrapOverlayHost = BootstrapOverlayHost(
             activity = this,
@@ -206,12 +239,20 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        recordActivityLifecycleDiagnostic(
+            event = "on_save_instance_state",
+            extra = "webViewSurface=${shouldUseWebViewSurface()}"
+        )
         if (shouldUseWebViewSurface()) {
             webViewHost.saveState(outState)
         }
     }
 
     override fun onDestroy() {
+        recordActivityLifecycleDiagnostic(
+            event = "on_destroy",
+            extra = "webViewHostInitialized=${::webViewHost.isInitialized} changingConfigMask=$changingConfigurations"
+        )
         webViewHost.onDestroy()
         hostIo.cancelPendingFileChooser()
         hostIo.blobDownloadController.close()
@@ -220,6 +261,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
+        recordActivityLifecycleDiagnostic(
+            event = "on_trim_memory",
+            extra = "level=${formatTrimMemoryLevel(level)} rawLevel=$level"
+        )
         if (::webViewHost.isInitialized) {
             webViewHost.onTrimMemory(level)
         }
@@ -227,6 +272,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onLowMemory() {
         super.onLowMemory()
+        recordActivityLifecycleDiagnostic(event = "on_low_memory")
         if (::webViewHost.isInitialized) {
             webViewHost.onLowMemory()
         }
@@ -248,6 +294,140 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun shouldUseWebViewSurface(): Boolean = hostConfigStore.launchWebViewOnReady
+
+    private fun maybePromptCrashLogUploadConsent() {
+        if (hostConfigStore.crashLogUploadPromptConsumed) {
+            uploadPendingCrashLogBundle(trigger = "app_start")
+            return
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.crash_log_upload_consent_title)
+            .setMessage(R.string.crash_log_upload_consent_message)
+            .setCancelable(false)
+            .setNegativeButton(R.string.crash_log_upload_consent_decline) { _, _ ->
+                hostConfigStore.crashLogUploadEnabled = false
+                // 授权提示只打扰用户一次；拒绝后后续升级也不再弹窗，仍可在“关于”页手动开启。
+                hostConfigStore.crashLogUploadPromptConsumed = true
+                recordDefaultHostDiagnostic(
+                    category = "log_upload",
+                    body = "event=crash_log_upload_consent_decided enabled=false promptConsumed=true"
+                )
+            }
+            .setPositiveButton(R.string.crash_log_upload_consent_accept) { _, _ ->
+                hostConfigStore.crashLogUploadEnabled = true
+                // 授权提示只打扰用户一次；授权状态后续通过“关于”页开关管理。
+                hostConfigStore.crashLogUploadPromptConsumed = true
+                recordDefaultHostDiagnostic(
+                    category = "log_upload",
+                    body = "event=crash_log_upload_consent_decided enabled=true promptConsumed=true"
+                )
+                uploadPendingCrashLogBundle(trigger = "post_consent")
+            }
+            .show()
+    }
+
+    private fun uploadPendingCrashLogBundle(trigger: String) {
+        if (!hostConfigStore.crashLogUploadEnabled) {
+            recordDefaultHostDiagnostic(
+                category = "log_upload",
+                body = "event=auto_upload_skipped reason=consent_disabled trigger=$trigger"
+            )
+            return
+        }
+        val uploadKey = hostLogRepository.currentCrashAutoUploadKey() ?: return
+        if (hostConfigStore.lastCrashLogAutoUploadKey == uploadKey) {
+            return
+        }
+
+        lifecycleScope.launch {
+            val result = withContext(appGraph.dispatchers.io) {
+                runCatching {
+                    hostLogRepository.uploadCrashBundle(
+                        config = HostLogBundleUploadRequestConfig(
+                            uploadUrl = appGraph.appUpdateBuildConfig.crashLogUploadUrl,
+                            writerApiKey = appGraph.appUpdateBuildConfig.crashLogUploadWriterApiKey,
+                            source = "automatic-crash-log-upload",
+                            crashType = "uncaught-exception",
+                            notes = "pending crash log auto upload; trigger=$trigger"
+                        )
+                    )
+                }
+            }
+            result.onSuccess { upload ->
+                hostConfigStore.lastCrashLogAutoUploadKey = uploadKey
+                recordDefaultHostDiagnostic(
+                    category = "log_upload",
+                    body = "event=auto_upload_success trigger=$trigger crashLogId=${upload.crashLogId} archiveSizeBytes=${upload.archiveSizeBytes}"
+                )
+            }.onFailure { error ->
+                recordDefaultHostDiagnostic(
+                    category = "log_upload",
+                    body = "event=auto_upload_failed trigger=$trigger reason=${error.javaClass.simpleName} message=${error.message.orEmpty()}"
+                )
+            }
+        }
+    }
+
+    private fun uploadRendererGoneLogBundle(info: WebViewRendererGoneInfo) {
+        if (!hostConfigStore.crashLogUploadEnabled) {
+            recordDefaultHostDiagnostic(
+                category = "log_upload",
+                body = "event=auto_upload_skipped reason=consent_disabled trigger=webview_renderer_gone didCrash=${info.didCrash}"
+            )
+            return
+        }
+        val uploadKey = rendererGoneAutoUploadKey(info)
+        if (lastRendererGoneAutoUploadKey == uploadKey) {
+            recordDefaultHostDiagnostic(
+                category = "log_upload",
+                body = "event=auto_upload_skipped reason=duplicate trigger=webview_renderer_gone key=$uploadKey"
+            )
+            return
+        }
+
+        lifecycleScope.launch {
+            val result = withContext(appGraph.dispatchers.io) {
+                runCatching {
+                    hostLogRepository.uploadCrashBundle(
+                        config = HostLogBundleUploadRequestConfig(
+                            uploadUrl = appGraph.appUpdateBuildConfig.crashLogUploadUrl,
+                            writerApiKey = appGraph.appUpdateBuildConfig.crashLogUploadWriterApiKey,
+                            source = "webview-renderer-gone",
+                            crashType = if (info.didCrash) {
+                                "webview-renderer-crash"
+                            } else {
+                                "webview-renderer-gone"
+                            },
+                            notes = info.toDiagnosticText()
+                        )
+                    )
+                }
+            }
+            result.onSuccess { upload ->
+                lastRendererGoneAutoUploadKey = uploadKey
+                recordDefaultHostDiagnostic(
+                    category = "log_upload",
+                    body = "event=auto_upload_success trigger=webview_renderer_gone crashLogId=${upload.crashLogId} archiveSizeBytes=${upload.archiveSizeBytes}"
+                )
+            }.onFailure { error ->
+                recordDefaultHostDiagnostic(
+                    category = "log_upload",
+                    body = "event=auto_upload_failed trigger=webview_renderer_gone reason=${error.javaClass.simpleName} message=${error.message.orEmpty()}"
+                )
+            }
+        }
+    }
+
+    private fun rendererGoneAutoUploadKey(info: WebViewRendererGoneInfo): String {
+        // WebView renderer gone 不一定产生 App 闪退文件；这里按当前 Activity 会话内 renderer 退出特征去重，
+        // 避免同一次 WebView 异常恢复链路重复上传同一批日志。
+        return listOf(
+            "webview_renderer_gone",
+            info.didCrash.toString(),
+            info.rendererPriorityAtExit?.toString().orEmpty()
+        ).joinToString(":")
+    }
 
     private fun installWebViewJavascriptInterfaces(targetWebView: WebView) {
         // Tavern 页面里的导出既可能是普通 URL，也可能是 blob/data；宿主在这里统一接管保存到系统下载目录。
@@ -429,12 +609,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildAndroidHostVersionInfoJson(): String {
-        val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
-        } else {
-            @Suppress("DEPRECATION")
-            packageManager.getPackageInfo(packageName, 0)
-        }
+        val packageInfo = currentPackageInfo()
         val webViewPackageInfo = runCatching { WebViewCompat.getCurrentWebViewPackage(this) }.getOrNull()
         val webViewRuntimeCompatibility = if (::webViewHost.isInitialized) {
             webViewHost.currentRuntimeCompatibility()
@@ -472,6 +647,13 @@ class MainActivity : AppCompatActivity() {
             .toString()
     }
 
+    private fun currentPackageInfo() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+    } else {
+        @Suppress("DEPRECATION")
+        packageManager.getPackageInfo(packageName, 0)
+    }
+
     private fun inspectWebViewRuntimeBeforeBootstrap() {
         val compatibility = webViewHost.currentRuntimeCompatibility()
         // 这条日志属于启动前兼容性结论，必须常驻导出日志，避免旧 WebView 导致主题/布局异常时缺少根因证据。
@@ -499,6 +681,76 @@ class MainActivity : AppCompatActivity() {
             )
             .setPositiveButton(R.string.webview_outdated_dialog_continue, null)
             .show()
+    }
+
+    private fun recordActivityLifecycleDiagnostic(event: String, extra: String = "") {
+        // Activity 重建会让 WebView 看起来像“自己刷新”；这些低频生命周期线索默认导出，
+        // 便于客户未开启详细诊断时也能区分配置变化、系统回收和普通页面 reload。
+        recordDefaultHostDiagnostic(
+            category = "activity",
+            body = buildString {
+                append("event=$event")
+                append(" taskId=$taskId")
+                append(" changingConfigurations=$isChangingConfigurations")
+                append(" finishing=$isFinishing")
+                append(" destroyed=$isDestroyed")
+                append(' ')
+                append(currentConfigurationDiagnosticText())
+                if (extra.isNotBlank()) {
+                    append(' ')
+                    append(extra)
+                }
+            }
+        )
+    }
+
+    private fun currentConfigurationDiagnosticText(): String {
+        val configuration = resources.configuration
+        return buildString {
+            append("orientation=${formatOrientation(configuration.orientation)}")
+            append(" uiModeNight=${formatNightMode(configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK)}")
+            append(" screenLayoutSize=${formatScreenLayoutSize(configuration.screenLayout and Configuration.SCREENLAYOUT_SIZE_MASK)}")
+            append(" densityDpi=${configuration.densityDpi}")
+            append(" fontScale=${configuration.fontScale}")
+            append(" keyboard=${configuration.keyboard}")
+            append(" hardKeyboardHidden=${configuration.hardKeyboardHidden}")
+            append(" navigation=${configuration.navigation}")
+        }
+    }
+
+    private fun formatOrientation(orientation: Int): String {
+        @Suppress("DEPRECATION")
+        return when (orientation) {
+            Configuration.ORIENTATION_PORTRAIT -> "portrait"
+            Configuration.ORIENTATION_LANDSCAPE -> "landscape"
+            Configuration.ORIENTATION_SQUARE -> "square"
+            Configuration.ORIENTATION_UNDEFINED -> "undefined"
+            else -> "unknown_$orientation"
+        }
+    }
+
+    private fun formatNightMode(maskedUiMode: Int): String {
+        return when (maskedUiMode) {
+            Configuration.UI_MODE_NIGHT_NO -> "no"
+            Configuration.UI_MODE_NIGHT_YES -> "yes"
+            Configuration.UI_MODE_NIGHT_UNDEFINED -> "undefined"
+            else -> "unknown_$maskedUiMode"
+        }
+    }
+
+    private fun formatScreenLayoutSize(maskedScreenLayout: Int): String {
+        return when (maskedScreenLayout) {
+            Configuration.SCREENLAYOUT_SIZE_SMALL -> "small"
+            Configuration.SCREENLAYOUT_SIZE_NORMAL -> "normal"
+            Configuration.SCREENLAYOUT_SIZE_LARGE -> "large"
+            Configuration.SCREENLAYOUT_SIZE_XLARGE -> "xlarge"
+            Configuration.SCREENLAYOUT_SIZE_UNDEFINED -> "undefined"
+            else -> "unknown_$maskedScreenLayout"
+        }
+    }
+
+    private fun recordDefaultHostDiagnostic(category: String, body: String) {
+        hostLogRepository.recordHostDiagnostic(category = category, body = body)
     }
 
     // 宿主详细诊断日志只在“调试模式”开启时写盘；

@@ -42,6 +42,9 @@ interface HostPreferencesRepository {
     var floatingLogRefreshIntervalMillis: Int
     var floatingLogBubblePosition: FloatingLogBubblePosition?
     var defaultExtensionsPromptConsumed: Boolean
+    var crashLogUploadEnabled: Boolean
+    var crashLogUploadPromptConsumed: Boolean
+    var lastCrashLogAutoUploadKey: String?
 }
 
 interface DataArchiveRepository {

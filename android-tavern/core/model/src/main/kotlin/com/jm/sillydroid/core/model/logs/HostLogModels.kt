@@ -1,5 +1,7 @@
 package com.jm.sillydroid.core.model.logs
 
+import android.net.Uri
+
 data class HostLogSnapshot(
     val fileName: String,
     val displayName: String,
@@ -34,5 +36,27 @@ enum class HostLogTailWindowProfile {
 data class HostLogBundleExportResult(
     val bundleFileName: String,
     val zipPath: String? = null,
-    val logFileCount: Int = 0
+    val logFileCount: Int = 0,
+    val archiveSizeBytes: Long = 0L
+)
+
+data class HostLogBundleUploadRequestConfig(
+    val uploadUrl: String,
+    val writerApiKey: String,
+    val source: String,
+    val crashType: String = "host-log-upload",
+    val notes: String? = null
+)
+
+data class HostLogBundleAttachment(
+    val entryName: String,
+    val sourceUri: Uri
+)
+
+data class HostLogBundleUploadResult(
+    val crashLogId: Long,
+    val projectKey: String,
+    val archiveFileName: String,
+    val archiveSizeBytes: Long,
+    val sha256: String
 )

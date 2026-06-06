@@ -8,11 +8,13 @@ import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.LifecycleOwner
+import com.jm.sillydroid.core.model.logs.HostLogBundleUploadRequestConfig
 import com.jm.sillydroid.core.ui.scroll.DraggableScrollThumbController
 import com.jm.sillydroid.core.ui.logs.HostLogExportSelectionDialogText
 import com.jm.sillydroid.core.ui.logs.showHostLogExportSelectionDialog
 import com.jm.sillydroid.core.model.logs.HostLogEntry
 import com.jm.sillydroid.core.model.logs.HostLogSnapshot
+import com.jm.sillydroid.core.model.update.AppUpdateBuildConfig
 import com.jm.sillydroid.domain.logs.HostLogRepository
 import com.jm.sillydroid.feature.settings.R
 import com.google.android.material.button.MaterialButton
@@ -32,9 +34,11 @@ class BootstrapSettingsLogsCoordinator(
     private val scrollToBottomButton: ImageButton,
     private val selectButton: MaterialButton,
     private val exportButton: MaterialButton,
+    private val uploadButton: MaterialButton,
     private val reloadButton: MaterialButton,
     private val clearButton: MaterialButton,
     private val hostLogRepository: HostLogRepository,
+    private val uploadConfig: AppUpdateBuildConfig,
     private val preferTavernServerLog: () -> Boolean,
     private val setBusy: (Boolean) -> Unit,
     private val showError: (String) -> Unit,
@@ -51,6 +55,9 @@ class BootstrapSettingsLogsCoordinator(
         }
         exportButton.setOnClickListener {
             showExportDialog()
+        }
+        uploadButton.setOnClickListener {
+            showUploadDialog()
         }
         reloadButton.setOnClickListener {
             reloadLatestLog()
@@ -134,6 +141,71 @@ class BootstrapSettingsLogsCoordinator(
         }
     }
 
+    private fun showUploadDialog() {
+        if (busy) {
+            return
+        }
+
+        activity.lifecycleScope.launch {
+            setBusyState(true)
+            val result = withContext(dispatchers.io) {
+                runCatching { hostLogRepository.listExportOptions() }
+            }
+            setBusyState(false)
+
+            result.onSuccess { options ->
+                if (options.isEmpty()) {
+                    showMessage(activity.getString(R.string.bootstrap_settings_logs_export_empty))
+                    return@onSuccess
+                }
+                showHostLogExportSelectionDialog(
+                    activity = activity,
+                    options = options,
+                    text = HostLogExportSelectionDialogText(
+                        title = activity.getString(R.string.bootstrap_settings_logs_upload_dialog_title),
+                        message = activity.getString(R.string.bootstrap_settings_logs_upload_dialog_message),
+                        sensitiveSuffix = activity.getString(R.string.bootstrap_settings_logs_export_sensitive_suffix),
+                        confirmLabel = activity.getString(R.string.bootstrap_settings_logs_upload)
+                    )
+                ) { selectedRelativePaths ->
+                    uploadLogBundle(selectedRelativePaths)
+                }
+            }.onFailure { exception ->
+                showError(exception.message ?: activity.getString(R.string.bootstrap_settings_logs_upload_failed))
+            }
+        }
+    }
+
+    private fun uploadLogBundle(selectedRelativePaths: Set<String>) {
+        activity.lifecycleScope.launch {
+            setBusyState(true)
+            val result = withContext(dispatchers.io) {
+                runCatching {
+                    hostLogRepository.uploadBundle(
+                        config = HostLogBundleUploadRequestConfig(
+                            uploadUrl = uploadConfig.crashLogUploadUrl,
+                            writerApiKey = uploadConfig.crashLogUploadWriterApiKey,
+                            source = "manual-settings-log-upload"
+                        ),
+                        includedRelativePaths = selectedRelativePaths
+                    )
+                }
+            }
+            setBusyState(false)
+
+            result.onSuccess { upload ->
+                showMessage(
+                    activity.getString(
+                        R.string.bootstrap_settings_logs_upload_success,
+                        upload.crashLogId
+                    )
+                )
+            }.onFailure { exception ->
+                showError(exception.message ?: activity.getString(R.string.bootstrap_settings_logs_upload_failed))
+            }
+        }
+    }
+
     fun reloadLatestLog() {
         if (busy) {
             return
@@ -185,6 +257,7 @@ class BootstrapSettingsLogsCoordinator(
     private fun renderSnapshot() {
         selectButton.isEnabled = !busy && currentEntries.isNotEmpty()
         exportButton.isEnabled = !busy
+        uploadButton.isEnabled = !busy
         reloadButton.isEnabled = !busy
         clearButton.isEnabled = !busy
         val snapshot = currentSnapshot

@@ -75,7 +75,14 @@ fun resolveDebugSigningValue(
 
 val requestedTasks = gradle.startParameter.taskNames.map { it.lowercase() }
 val requiresReleaseSigning = requestedTasks.any { taskName ->
-    taskName.contains("release") || taskName.contains("bundle")
+    val normalizedTaskName = taskName.substringAfterLast(':')
+    normalizedTaskName.contains("release") &&
+        (
+            normalizedTaskName.startsWith("assemble") ||
+                normalizedTaskName.startsWith("bundle") ||
+                normalizedTaskName.startsWith("package") ||
+                normalizedTaskName.startsWith("install")
+            )
 }
 val debugSigningProperties = loadSigningProperties("signing/debug-signing.properties")
 val debugSigningKeystorePath = resolveDebugSigningValue(
@@ -247,7 +254,17 @@ android {
         buildConfigField(
             "String",
             "SILLYDROID_LATEST_RELEASE_METADATA_URL",
-            quoteBuildConfigString("https://sd.jlmaster.online/api/releases/latest.json")
+            quoteBuildConfigString("https://sd.jlmaster.online/api/projects/sillydroid/releases/latest.json")
+        )
+        buildConfigField(
+            "String",
+            "SILLYDROID_CRASH_LOG_UPLOAD_URL",
+            quoteBuildConfigString("https://sd.jlmaster.online/api/admin/projects/sillydroid/crash-logs")
+        )
+        buildConfigField(
+            "String",
+            "SILLYDROID_CRASH_LOG_UPLOAD_WRITER_API_KEY",
+            quoteBuildConfigString(System.getenv("SILLYDROID_CRASH_LOG_UPLOAD_WRITER_API_KEY").orEmpty().trim())
         )
     }
 

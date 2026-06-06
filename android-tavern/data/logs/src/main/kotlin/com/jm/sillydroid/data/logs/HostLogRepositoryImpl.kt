@@ -2,7 +2,10 @@ package com.jm.sillydroid.data.logs
 
 import android.content.Context
 import android.net.Uri
+import com.jm.sillydroid.core.model.logs.HostLogBundleAttachment
 import com.jm.sillydroid.core.model.logs.HostLogBundleExportResult
+import com.jm.sillydroid.core.model.logs.HostLogBundleUploadRequestConfig
+import com.jm.sillydroid.core.model.logs.HostLogBundleUploadResult
 import com.jm.sillydroid.core.model.logs.HostLogEntry
 import com.jm.sillydroid.core.model.logs.HostLogExportOption
 import com.jm.sillydroid.core.model.logs.HostLogSnapshot
@@ -20,6 +23,9 @@ class HostLogRepositoryImpl(context: Context) : HostLogRepository {
     private val hostDiagnosticsWriter = SessionScopedAsyncLogWriter {
         HostLogManager.currentHostDiagnosticsLogFile(appContext)
     }
+    private val hostLogBundleUploader by lazy {
+        HostLogBundleUploader(appContext)
+    }
 
     override fun initializeForAppStart() {
         HostLogManager.initializeForAppStart(appContext)
@@ -30,7 +36,7 @@ class HostLogRepositoryImpl(context: Context) : HostLogRepository {
     }
 
     override fun refreshApplicationExitInfoAsync() {
-        ApplicationExitInfoLogStore.refreshAsync(appContext)
+        ApplicationExitInfoLogStore.refreshBlocking(appContext)
     }
 
     override fun buildBundleFileName(): String {
@@ -79,12 +85,76 @@ class HostLogRepositoryImpl(context: Context) : HostLogRepository {
         HostLogManager.clearAllLogs(appContext)
     }
 
+    override fun currentCrashAutoUploadKey(): String? {
+        return HostLogManager.crashAutoUploadKey(appContext)
+    }
+
     override fun exportToUri(targetUri: Uri, includedRelativePaths: Set<String>?): HostLogBundleExportResult {
         return HostLogManager.exportToUri(appContext, targetUri, includedRelativePaths = includedRelativePaths)
     }
 
     override fun exportToPublicDownloads(includedRelativePaths: Set<String>?): HostLogBundleExportResult {
         return HostLogManager.exportToPublicDownloads(appContext, includedRelativePaths = includedRelativePaths)
+    }
+
+    override suspend fun uploadBundle(
+        config: HostLogBundleUploadRequestConfig,
+        includedRelativePaths: Set<String>?
+    ): HostLogBundleUploadResult {
+        // 上传前刷新一次系统进程退出记录，让 WebView sandbox / App 进程退出线索尽量进入同一份证据包。
+        ApplicationExitInfoLogStore.refreshAsync(appContext)
+        val (archiveFile, _) = HostLogManager.exportCompactUploadBundleToCacheFile(
+            context = appContext,
+            includedRelativePaths = includedRelativePaths
+        )
+        return try {
+            hostLogBundleUploader.upload(
+                archiveFile = archiveFile,
+                config = config
+            )
+        } finally {
+            archiveFile.delete()
+        }
+    }
+
+    override suspend fun uploadCrashBundle(config: HostLogBundleUploadRequestConfig): HostLogBundleUploadResult {
+        // 自动崩溃上传只带默认非敏感日志集合，避免未经用户逐项确认时把酒馆聊天相关日志放进包里。
+        ApplicationExitInfoLogStore.refreshAsync(appContext)
+        val (archiveFile, _) = HostLogManager.exportCompactUploadBundleToCacheFile(
+            context = appContext,
+            includedRelativePaths = HostLogManager.defaultUploadRelativePaths(appContext)
+        )
+        return try {
+            hostLogBundleUploader.upload(
+                archiveFile = archiveFile,
+                config = config
+            )
+        } finally {
+            archiveFile.delete()
+        }
+    }
+
+    override suspend fun uploadFeedbackBundle(
+        config: HostLogBundleUploadRequestConfig,
+        feedbackText: String?,
+        attachments: List<HostLogBundleAttachment>
+    ): HostLogBundleUploadResult {
+        // 用户反馈和自动崩溃共用同一个轻量上传包策略：默认不包含酒馆服务日志，并把图片放到 feedback/ 下。
+        ApplicationExitInfoLogStore.refreshAsync(appContext)
+        val (archiveFile, _) = HostLogManager.exportCompactUploadBundleToCacheFile(
+            context = appContext,
+            includedRelativePaths = HostLogManager.defaultUploadRelativePaths(appContext),
+            feedbackText = feedbackText,
+            attachments = attachments
+        )
+        return try {
+            hostLogBundleUploader.upload(
+                archiveFile = archiveFile,
+                config = config
+            )
+        } finally {
+            archiveFile.delete()
+        }
     }
 
     override fun recordWebViewJsError(line: String) {

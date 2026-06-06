@@ -122,6 +122,8 @@ class AppGraph(private val application: Application) : SillyDroidAppGraph {
         AppUpdateBuildConfig(
             githubRepository = BuildConfig.SILLYDROID_GITHUB_REPOSITORY,
             latestReleaseMetadataUrl = BuildConfig.SILLYDROID_LATEST_RELEASE_METADATA_URL,
+            crashLogUploadUrl = BuildConfig.SILLYDROID_CRASH_LOG_UPLOAD_URL,
+            crashLogUploadWriterApiKey = BuildConfig.SILLYDROID_CRASH_LOG_UPLOAD_WRITER_API_KEY,
             buildType = BuildConfig.BUILD_TYPE,
             hostVersion = BuildConfig.SILLYDROID_HOST_VERSION,
             upstreamVersion = BuildConfig.SILLYDROID_UPSTREAM_VERSION

@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.util.Log
+import android.view.ViewGroup
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebView
@@ -62,7 +63,9 @@ class TavernWebViewHost(
     private val onShowFileChooser: (android.webkit.WebChromeClient.FileChooserParams, android.webkit.ValueCallback<Array<Uri>>) -> Unit,
     private val jsErrorSink: WebViewJsErrorSink = WebViewJsErrorSink { /* no-op */ },
     private val hostDiagnosticSink: HostDiagnosticSink = HostDiagnosticSink { _, _ -> },
+    private val criticalHostDiagnosticSink: HostDiagnosticSink = HostDiagnosticSink { _, _ -> },
     private val refreshApplicationExitInfo: () -> Unit = {},
+    private val uploadRendererGoneLogBundle: (WebViewRendererGoneInfo) -> Unit = {},
 ) {
     companion object {
         private const val LOG_TAG = "SillyDroidMain"
@@ -213,7 +216,7 @@ class TavernWebViewHost(
         }
         val fallbackUrl = currentKnownWebViewUrl()
         outState.putString(LOADED_URL_STATE_KEY, fallbackUrl)
-        recordHostDiagnostic(
+        recordCriticalHostDiagnostic(
             category = "webview",
             body = buildString {
                 append("event=save_state")
@@ -251,7 +254,7 @@ class TavernWebViewHost(
             .ifBlank { persistedLoadedUrl }
 
         if (restoredUrl.isBlank()) {
-            recordHostDiagnostic(
+            recordCriticalHostDiagnostic(
                 category = "webview",
                 body = buildString {
                     append("event=restore_state_no_url")
@@ -271,7 +274,7 @@ class TavernWebViewHost(
         // 若与当前 localUrl 不匹配，则不能复用，避免 WebView 以旧端口发起请求
         // 造成永久 ERR_CONNECTION_REFUSED 白屏。
         if (!isLocalTavernUrl(restoredUrl)) {
-            recordHostDiagnostic(
+            recordCriticalHostDiagnostic(
                 category = "webview",
                 body = buildString {
                     append("event=restore_state_rejected_non_local")
@@ -294,7 +297,7 @@ class TavernWebViewHost(
                 LOG_TAG,
                 "Restored Activity with URL fallback only; WebView state bundle unavailable for url=$restoredUrl"
             )
-            recordHostDiagnostic(
+            recordCriticalHostDiagnostic(
                 category = "webview",
                 body = buildString {
                     append("event=restore_state_url_fallback")
@@ -310,7 +313,7 @@ class TavernWebViewHost(
             )
             return
         }
-        recordHostDiagnostic(
+        recordCriticalHostDiagnostic(
             category = "webview",
             body = buildString {
                 append("event=restore_state_success")
@@ -335,7 +338,7 @@ class TavernWebViewHost(
         if (homeViewModel.hasRestoredWebViewState) {
             // 已恢复出原来的 WebView 会话时，不再重新 load baseUrl，避免把前端状态重置到首页。
             homeViewModel.hasRestoredWebViewState = false
-            recordHostDiagnostic(
+            recordCriticalHostDiagnostic(
                 category = "webview",
                 body = buildString {
                     append("event=show_webview_restored_state")
@@ -358,7 +361,7 @@ class TavernWebViewHost(
             rememberedUrl = homeViewModel.loadedUrl
         )
         homeViewModel.loadedUrl = targetUrl
-        recordHostDiagnostic(
+        recordCriticalHostDiagnostic(
             category = "webview",
             body = buildString {
                 append("event=show_webview_load_url")
@@ -449,14 +452,14 @@ class TavernWebViewHost(
     }
 
     fun onTrimMemory(level: Int) {
-        recordHostDiagnostic(
+        recordCriticalHostDiagnostic(
             category = "memory",
             body = "scope=main_activity_webview event=on_trim_memory level=${formatTrimMemoryLevel(level)} rawLevel=$level ${currentWebViewDiagnosticState()} ${currentHostMemoryDiagnosticState()}"
         )
     }
 
     fun onLowMemory() {
-        recordHostDiagnostic(
+        recordCriticalHostDiagnostic(
             category = "memory",
             body = "scope=main_activity_webview event=on_low_memory ${currentWebViewDiagnosticState()} ${currentHostMemoryDiagnosticState()}"
         )
@@ -468,6 +471,35 @@ class TavernWebViewHost(
         uninstallDebugRendererCrashReceiver()
         webSessionPersistenceController?.close()
         webSessionPersistenceController = null
+        destroyWebViewForActivityTeardown()
+    }
+
+    private fun destroyWebViewForActivityTeardown() {
+        // Activity 重建或 renderer gone 恢复时会创建新的 WebView；旧实例必须主动拆桥、停载并销毁，
+        // 否则大型 Tavern 前端残留的 Chromium 资源会拖高后续沙箱崩溃和内存压力概率。
+        recordCriticalHostDiagnostic(
+            category = "webview",
+            body = "event=destroy_webview_started ${currentWebViewDiagnosticState()} ${currentHostMemoryDiagnosticState()}"
+        )
+        runCatching { webView.stopLoading() }
+        runCatching { webView.loadUrl("about:blank") }
+        runCatching { webView.webChromeClient = null }
+        runCatching { webView.webViewClient = android.webkit.WebViewClient() }
+        runCatching { webView.removeJavascriptInterface(SYSTEM_NOTIFICATION_BRIDGE_NAME) }
+        runCatching { webView.removeJavascriptInterface(ANDROID_HOST_BRIDGE_NAME) }
+        runCatching { (webView.parent as? ViewGroup)?.removeView(webView) }
+        runCatching { webView.destroy() }
+            .onFailure { error ->
+                recordCriticalHostDiagnostic(
+                    category = "webview",
+                    body = "event=destroy_webview_failed error=${normalizeDiagnosticValue(error.message ?: error.javaClass.simpleName)} ${currentHostMemoryDiagnosticState()}"
+                )
+                return
+            }
+        recordCriticalHostDiagnostic(
+            category = "webview",
+            body = "event=destroy_webview_finished ${currentHostMemoryDiagnosticState()}"
+        )
     }
 
     private fun installDebugRendererCrashReceiverIfDebuggable() {
@@ -852,10 +884,21 @@ class TavernWebViewHost(
         )
     }
 
-    private fun handleWebViewRendererGone(didCrash: Boolean) {
+    private fun handleWebViewRendererGone(info: WebViewRendererGoneInfo) {
+        val didCrash = info.didCrash
         val recoveryUrl = currentKnownWebViewUrl()
-        val rendererFailureSnapshot = currentRendererFailureDiagnosticState(didCrash = didCrash)
+        val rendererGoneDetail = info.toDiagnosticText()
+        val rendererFailureSnapshot = currentRendererFailureDiagnosticState(
+            didCrash = didCrash,
+            rendererGoneDetail = rendererGoneDetail
+        )
+        enableDebugDiagnosticsAfterRendererGone(
+            didCrash = didCrash,
+            recoveryUrl = recoveryUrl,
+            rendererGoneDetail = rendererGoneDetail
+        )
         scheduleRendererExitInfoRefresh()
+        uploadRendererGoneLogBundle(info)
         if (recoveryUrl.isNotBlank()) {
             homeViewModel.loadedUrl = recoveryUrl
         }
@@ -870,12 +913,13 @@ class TavernWebViewHost(
                 LOG_TAG,
                 "WebView renderer gone (didCrash=$didCrash) while Activity recreation is already scheduled."
             )
-            recordHostDiagnostic(
+            recordCriticalHostDiagnostic(
                 category = "webview",
                 body = buildString {
                     append("event=renderer_gone_duplicate")
                     append(" didCrash=$didCrash")
                     append(" exitKind=${if (didCrash) "crash" else "non_crash_exit"}")
+                    append(" $rendererGoneDetail")
                     append(" action=skip_duplicate_recreate")
                     append(" recoveryUrl=${normalizeDiagnosticValue(recoveryUrl)}")
                     append(' ')
@@ -892,12 +936,13 @@ class TavernWebViewHost(
             "WebView renderer gone (didCrash=$didCrash). Recreating Activity so Android rebuilds " +
                 "the window and WebView surface instead of only swapping the WebView object."
         )
-        recordHostDiagnostic(
+        recordCriticalHostDiagnostic(
             category = "webview",
             body = buildString {
                 append("event=renderer_gone")
                 append(" didCrash=$didCrash")
                 append(" exitKind=${if (didCrash) "crash" else "non_crash_exit"}")
+                append(" $rendererGoneDetail")
                 append(" action=schedule_activity_recreate")
                 append(" recoveryUrl=${normalizeDiagnosticValue(recoveryUrl)}")
                 append(' ')
@@ -909,7 +954,7 @@ class TavernWebViewHost(
         if (!activity.isFinishing && !activity.isDestroyed) {
             webViewRefreshLayout.post {
                 if (activity.isFinishing || activity.isDestroyed) {
-                    recordHostDiagnostic(
+                    recordCriticalHostDiagnostic(
                         category = "webview",
                         body = "event=renderer_gone_recreate_aborted reason=activity_not_alive ${currentWebViewDiagnosticState()} ${rendererFailureSnapshot}"
                     )
@@ -918,11 +963,34 @@ class TavernWebViewHost(
                 activity.recreate()
             }
         } else {
-            recordHostDiagnostic(
+            recordCriticalHostDiagnostic(
                 category = "webview",
                 body = "event=renderer_gone_recreate_skipped reason=activity_not_alive ${currentWebViewDiagnosticState()} ${rendererFailureSnapshot}"
             )
         }
+    }
+
+    private fun enableDebugDiagnosticsAfterRendererGone(
+        didCrash: Boolean,
+        recoveryUrl: String,
+        rendererGoneDetail: String
+    ) {
+        if (!hostConfigStore.debugDiagnosticsEnabled) {
+            // renderer gone 往往难以在开发机复现；首次命中后自动开启详细诊断，
+            // 让用户下一次导出的日志带上 page/bridge/恢复链路细节，而不依赖手动进设置。
+            hostConfigStore.debugDiagnosticsEnabled = true
+        }
+        recordCriticalHostDiagnostic(
+            category = "webview",
+            body = buildString {
+                append("event=debug_diagnostics_auto_enabled")
+                append(" trigger=renderer_gone")
+                append(" didCrash=$didCrash")
+                append(" $rendererGoneDetail")
+                append(" recoveryUrl=${normalizeDiagnosticValue(recoveryUrl)}")
+                append(" enabled=${hostConfigStore.debugDiagnosticsEnabled}")
+            }
+        )
     }
 
     private fun installWebSessionPersistenceController() {
@@ -1238,7 +1306,7 @@ class TavernWebViewHost(
     private fun scheduleRestoredStateWatchdog(baseUrl: String) {
         val targetUrl = homeViewModel.loadedUrl.ifBlank { buildInitialTavernUrl(baseUrl) }
         val capturedWebView = webView
-        recordHostDiagnostic(
+        recordCriticalHostDiagnostic(
             category = "webview",
             body = buildString {
                 append("event=restored_state_watchdog_started")
@@ -1251,14 +1319,14 @@ class TavernWebViewHost(
         restoredWebViewWatchdog.start(targetUrl) { url ->
             // 任务真正运行时再做一次门控，避免在 destroy 或 webView 被替换后误触发。
             if (activity.isFinishing || activity.isDestroyed) {
-                recordHostDiagnostic(
+                recordCriticalHostDiagnostic(
                     category = "webview",
                     body = "event=restored_state_watchdog_skipped reason=activity_not_alive targetUrl=${normalizeDiagnosticValue(url)} ${currentWebViewDiagnosticState()}"
                 )
                 return@start
             }
             if (capturedWebView !== webView) {
-                recordHostDiagnostic(
+                recordCriticalHostDiagnostic(
                     category = "webview",
                     body = "event=restored_state_watchdog_skipped reason=webview_replaced targetUrl=${normalizeDiagnosticValue(url)} ${currentWebViewDiagnosticState()}"
                 )
@@ -1268,7 +1336,7 @@ class TavernWebViewHost(
                 LOG_TAG,
                 "Restored WebView state did not reach onPageCommitVisible within timeout; reloading url=$url"
             )
-            recordHostDiagnostic(
+            recordCriticalHostDiagnostic(
                 category = "webview",
                 body = "event=restored_state_watchdog_timeout action=load_url targetUrl=${normalizeDiagnosticValue(url)} ${currentWebViewDiagnosticState()}"
             )
@@ -1296,6 +1364,10 @@ class TavernWebViewHost(
     // 诊断写盘不能反向影响宿主主流程；即使磁盘写失败，这里也只吞掉异常保留主功能。
     private fun recordHostDiagnostic(category: String, body: String) {
         runCatching { hostDiagnosticSink.record(category, body) }
+    }
+
+    private fun recordCriticalHostDiagnostic(category: String, body: String) {
+        runCatching { criticalHostDiagnosticSink.record(category, body) }
     }
 
     // 统一收口当前 WebView/UI 关键状态，避免各事件各自拼字段导致 release 现场难以横向对比。
@@ -1327,7 +1399,10 @@ class TavernWebViewHost(
 
     // renderer gone 是否由内存压力触发，单靠 didCrash 不够判断；
     // 这里把系统/进程/WebView 三层快照一次性打出来，便于后续按机型和 provider 归因。
-    private fun currentRendererFailureDiagnosticState(didCrash: Boolean): String {
+    private fun currentRendererFailureDiagnosticState(
+        didCrash: Boolean,
+        rendererGoneDetail: String
+    ): String {
         return buildString {
             append(resolveWebViewProviderSummary())
             append(" appExitInfoRefreshPlanMs=0")
@@ -1336,6 +1411,7 @@ class TavernWebViewHost(
                 append(delayMillis)
             }
             append(" rendererDidCrash=$didCrash")
+            append(" $rendererGoneDetail")
             append(' ')
             append(currentHostMemoryDiagnosticState())
         }

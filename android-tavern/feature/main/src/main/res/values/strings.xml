@@ -34,6 +34,16 @@
     <string name="floating_logs_clear_button">清空日志</string>
     <string name="floating_logs_open_settings_button">打开设置</string>
     <string name="floating_logs_open_browser_button">在浏览器打开</string>
+    <string name="floating_logs_feedback_button">反馈</string>
+    <string name="floating_logs_feedback_title">提交反馈</string>
+    <string name="floating_logs_feedback_message">可选填问题详情，也可以附截图。只有你手动选择的图片才会随反馈发送 🔒\n提交后会在后台处理，不影响继续使用。</string>
+    <string name="floating_logs_feedback_hint">问题详情（选填）</string>
+    <string name="floating_logs_feedback_choose_image">添加图片</string>
+    <string name="floating_logs_feedback_no_image">未选择图片</string>
+    <string name="floating_logs_feedback_selected_image">已选择 %1$d 张图片</string>
+    <string name="floating_logs_feedback_submit">上传</string>
+    <string name="floating_logs_feedback_started">已开始后台上传反馈。</string>
+    <string name="floating_logs_feedback_failed">反馈上传失败，稍后可重试。</string>
     <string name="floating_logs_panel_auto_select_label">自动</string>
     <string name="floating_logs_panel_select_label">日志</string>
     <string name="floating_logs_panel_interval_label">刷新</string>
@@ -60,6 +70,10 @@
     <string name="bootstrap_settings_logs_clear_failed">清空日志失败。</string>
     <string name="bootstrap_settings_open_stop_timeout">停止本地 Tavern 服务超时，暂时无法打开设置。</string>
     <string name="browser_open_external_failed">无法在系统浏览器中打开该链接。</string>
+    <string name="crash_log_upload_consent_title">帮助改进 SillyDroid</string>
+    <string name="crash_log_upload_consent_message">放心，默认不会主动上传聊天内容、角色卡、相册图片或 API Key 🔒\n\n开启后，遇到闪退、页面突然刷新或卡住时，会帮助我们更快找到原因，让后续版本更稳定一点。\n\n你可以随时在“关于”页关闭；不帮助也完全没关系。谢谢你的小小帮忙 ✨</string>
+    <string name="crash_log_upload_consent_decline">不帮助</string>
+    <string name="crash_log_upload_consent_accept">帮助改进</string>
     <string name="webview_outdated_dialog_title">建议更新 WebView</string>
     <string name="webview_outdated_dialog_message">检测到当前系统 WebView 的真实 Chromium 内核版本较低：%1$s。\n\n旧内核可能导致酒馆布局错位、主题颜色失效、毛玻璃异常或部分按钮显示不正确。\n\n建议在系统应用市场更新“系统 WebView / Android System WebView / 华为 WebView”，或更新系统浏览器后再使用。这个提示不会阻止启动，你也可以先继续使用。</string>
     <string name="webview_outdated_dialog_continue">继续启动</string>

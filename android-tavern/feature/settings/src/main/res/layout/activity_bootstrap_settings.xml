@@ -961,6 +961,49 @@
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="10sp" />
 
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/sillydroid_space_md"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/bootstrap_settings_about_crash_upload_title"
+                                    android:textColor="?attr/colorOnSurface"
+                                    android:textSize="11sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="@dimen/sillydroid_space_xs_half"
+                                    android:lineSpacingExtra="1dp"
+                                    android:text="@string/bootstrap_settings_about_crash_upload_summary"
+                                    android:textColor="?attr/colorOnSurfaceVariant"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
+
+                            <com.google.android.material.materialswitch.MaterialSwitch
+                                android:id="@+id/bootstrapSettingsAboutCrashUploadSwitch"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="@dimen/sillydroid_space_md"
+                                android:minHeight="0dp"
+                                android:minWidth="0dp"
+                                android:scaleX="0.68"
+                                android:scaleY="0.68"
+                                android:showText="false" />
+                        </LinearLayout>
+
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -1094,6 +1137,18 @@
                     android:maxLines="1"
                     android:minHeight="@dimen/sillydroid_control_min_height"
                     android:text="@string/bootstrap_settings_logs_export" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/bootstrapSettingsLogsUploadButton"
+                    style="@style/Widget.SillyDroid.SettingsButton.Outlined"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="@dimen/sillydroid_space_sm"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:minHeight="@dimen/sillydroid_control_min_height"
+                    android:text="@string/bootstrap_settings_logs_upload" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/bootstrapSettingsLogsReloadButton"

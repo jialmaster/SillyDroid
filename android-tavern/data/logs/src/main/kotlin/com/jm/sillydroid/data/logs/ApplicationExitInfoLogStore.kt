@@ -42,6 +42,10 @@ object ApplicationExitInfoLogStore {
         }
     }
 
+    fun refreshBlocking(context: Context) {
+        refresh(context.applicationContext)
+    }
+
     private fun refresh(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             HostLogManager.writeExitInfoLog(context, null)

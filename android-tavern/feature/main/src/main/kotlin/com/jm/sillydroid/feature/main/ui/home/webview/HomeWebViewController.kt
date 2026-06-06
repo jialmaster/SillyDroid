@@ -39,7 +39,7 @@ class HomeWebViewController(
     private val onPageFinished: (WebView, String?) -> Unit,
     private val isLocalTavernUrl: (String) -> Boolean,
     private val onMainFrameLocalLoadError: (String) -> Unit,
-    private val onRendererGone: (didCrash: Boolean) -> Unit,
+    private val onRendererGone: (WebViewRendererGoneInfo) -> Unit,
     private val onDownloadRequested: (BrowserDownloadRequest) -> Unit,
     private val onShowFileChooser: (ValueCallback<Array<Uri>>, WebChromeClient.FileChooserParams) -> Unit,
     private val downloadDiagnosticSink: (String) -> Unit = {},
@@ -179,7 +179,18 @@ class HomeWebViewController(
                 } else {
                     true
                 }
-                onRendererGone(didCrash)
+                // renderer gone 是影响用户会话的关键事件，现场字段必须默认透传给宿主诊断日志。
+                val rendererPriorityAtExit = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    detail?.rendererPriorityAtExit()
+                } else {
+                    null
+                }
+                onRendererGone(
+                    WebViewRendererGoneInfo(
+                        didCrash = didCrash,
+                        rendererPriorityAtExit = rendererPriorityAtExit
+                    )
+                )
                 return true
             }
         }
@@ -275,6 +286,16 @@ class HomeWebViewController(
             }
         }
     }
+}
+
+data class WebViewRendererGoneInfo(
+    val didCrash: Boolean,
+    val rendererPriorityAtExit: Int?
+)
+
+internal fun WebViewRendererGoneInfo.toDiagnosticText(): String {
+    val priorityName = rendererPriorityAtExit?.let(::resolveWebViewRendererPriorityName) ?: "-"
+    return "rendererPriorityAtExit=$priorityName rendererPriorityAtExitRaw=${rendererPriorityAtExit ?: "-"}"
 }
 
 internal fun resolveWebViewRendererPriorityName(priority: Int): String {

@@ -163,6 +163,8 @@ internal object HostLogBundleInfoFormatter {
             appendLine("rootfsManifestIncluded=${baseInfo.rootfsManifestRawJson != null}")
             appendLine("serverManifestIncluded=${baseInfo.serverManifestRawJson != null}")
             appendLine("hostConfigSnapshotPolicy=${baseInfo.hostConfigSnapshot.snapshotPolicy}")
+            appendLine("crashLogUploadEnabled=${baseInfo.hostConfigSnapshot.crashLogUploadEnabled}")
+            appendLine("crashLogUploadPromptConsumed=${baseInfo.hostConfigSnapshot.crashLogUploadPromptConsumed}")
             appendLine("logFileCount=${summary.fileCount}")
             appendLine("includesCrashLog=${summary.includesCrashLog}")
             appendLine("includesExitInfoLog=${summary.includesExitInfoLog}")
@@ -229,6 +231,10 @@ internal object HostLogBundleInfoFormatter {
             appendLine("    \"floatingLogRefreshIntervalMillis\": ${baseInfo.hostConfigSnapshot.floatingLogRefreshIntervalMillis},")
             appendLine(
                 "    \"floatingLogBubblePosition\": ${jsonFloatingLogBubblePositionOrNull(baseInfo.hostConfigSnapshot)}," 
+            )
+            appendLine("    \"crashLogUploadEnabled\": ${baseInfo.hostConfigSnapshot.crashLogUploadEnabled},")
+            appendLine(
+                "    \"crashLogUploadPromptConsumed\": ${baseInfo.hostConfigSnapshot.crashLogUploadPromptConsumed},"
             )
             appendLine(
                 "    \"defaultExtensionsPromptConsumed\": ${baseInfo.hostConfigSnapshot.defaultExtensionsPromptConsumed}"

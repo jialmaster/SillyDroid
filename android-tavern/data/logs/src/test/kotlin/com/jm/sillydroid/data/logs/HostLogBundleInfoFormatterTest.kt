@@ -54,6 +54,8 @@ class HostLogBundleInfoFormatterTest {
         assertTrue(bundleInfo.contains("rootfsManifestIncluded=true"))
         assertTrue(bundleInfo.contains("serverManifestIncluded=true"))
         assertTrue(bundleInfo.contains("hostConfigSnapshotPolicy=explicit-host-preferences-only"))
+        assertTrue(bundleInfo.contains("crashLogUploadEnabled=true"))
+        assertTrue(bundleInfo.contains("crashLogUploadPromptConsumed=true"))
         assertTrue(bundleInfo.contains("logFileCount=2"))
         assertTrue(bundleInfo.contains("includesCrashLog=true"))
         assertTrue(bundleInfo.contains("includesExitInfoLog=false"))
@@ -153,6 +155,8 @@ class HostLogBundleInfoFormatterTest {
         assertTrue(bundleInfoJson.contains("\"terminalCursorBlinkEnabled\": true"))
         assertTrue(bundleInfoJson.contains("\"terminalExtraKeysEnabled\": true"))
         assertTrue(bundleInfoJson.contains("\"debugDiagnosticsEnabled\": false"))
+        assertTrue(bundleInfoJson.contains("\"crashLogUploadEnabled\": true"))
+        assertTrue(bundleInfoJson.contains("\"crashLogUploadPromptConsumed\": true"))
         assertTrue(bundleInfoJson.contains("\"floatingLogBubblePosition\": {\"horizontalFraction\": 0.75, \"verticalFraction\": 0.25}"))
         assertTrue(bundleInfoJson.contains("\"fileCount\": 2"))
         assertTrue(bundleInfoJson.contains("\"files\": [\"startup-20260517.log\", \"${HostLogManager.crashLogFileName}\"]"))
@@ -180,7 +184,9 @@ class HostLogBundleInfoFormatterTest {
                 horizontalFraction = 0.75f,
                 verticalFraction = 0.25f
             ),
-            defaultExtensionsPromptConsumed = true
+            defaultExtensionsPromptConsumed = true,
+            crashLogUploadEnabled = true,
+            crashLogUploadPromptConsumed = true
         )
     }
 }

@@ -6,16 +6,24 @@ import android.net.Uri
 import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.materialswitch.MaterialSwitch
+import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 
 class BootstrapSettingsAboutController(
     private val activity: AppCompatActivity,
     private val githubButton: ImageButton,
+    private val crashUploadSwitch: MaterialSwitch,
+    private val hostPreferencesRepository: HostPreferencesRepository,
     private val githubRepository: String,
     private val externalBrowserFailureMessage: () -> String
 ) {
     fun initialize() {
         githubButton.setOnClickListener {
             openProjectHomePage()
+        }
+        crashUploadSwitch.isChecked = hostPreferencesRepository.crashLogUploadEnabled
+        crashUploadSwitch.setOnCheckedChangeListener { _, isChecked ->
+            hostPreferencesRepository.crashLogUploadEnabled = isChecked
         }
     }
 
