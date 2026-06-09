@@ -41,7 +41,6 @@ import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 import com.jm.sillydroid.domain.settings.SettingsConfigRepository
 import com.jm.sillydroid.domain.update.AppUpdateRepository
 import com.jm.sillydroid.domain.update.AppUpdateStateRepository
-import com.jm.sillydroid.ui.update.R as UpdateR
 
 class AppGraph(private val application: Application) : SillyDroidAppGraph {
     override val dispatchers: DispatcherProvider = AndroidDispatcherProvider
@@ -112,9 +111,7 @@ class AppGraph(private val application: Application) : SillyDroidAppGraph {
     override val appUpdateRepository: AppUpdateRepository by lazy {
         AppUpdateRepositoryImpl(
             context = application,
-            downloadManager = application.getSystemService(DownloadManager::class.java),
-            stateStore = appUpdateStateStore,
-            downloadDescription = application.getString(UpdateR.string.app_update_download_started)
+            stateStore = appUpdateStateStore
         )
     }
 

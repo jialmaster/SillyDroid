@@ -12,6 +12,10 @@ interface AppUpdateRepository {
     fun cacheAvailableRelease(release: AvailableAppRelease?)
     suspend fun fetchLatestAvailableRelease(config: AppUpdateRequestConfig): AvailableAppRelease?
     suspend fun startDownload(release: AvailableAppRelease): AppDownloadState
+    suspend fun startOrResumeDownload(release: AvailableAppRelease): AppDownloadState
+    fun inspectDownloadState(release: AvailableAppRelease, verifyCompleteApk: Boolean = true): AppDownloadRecord
+    fun updateDownloadProgress(record: AppDownloadRecord): AppDownloadState?
+    fun cleanupDownloadCache(currentRelease: AvailableAppRelease?): AppDownloadCacheCleanupResult
     fun queryDownloadRecord(downloadId: Long): AppDownloadRecord
     fun verifyDownloadedApk(downloadState: AppDownloadState): Boolean
     fun markDownloadVerified(downloadState: AppDownloadState): AppDownloadState
@@ -33,3 +37,9 @@ interface AppUpdateStateRepository {
     var downloadState: AppDownloadState?
     var checkErrorMessage: String?
 }
+
+data class AppDownloadCacheCleanupResult(
+    val scannedFileCount: Int,
+    val deletedFileCount: Int,
+    val freedBytes: Long
+)

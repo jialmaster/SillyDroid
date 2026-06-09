@@ -21,22 +21,63 @@ data class AppDownloadState(
     val apkAssetName: String,
     val apkDownloadUrl: String,
     val apkSha256: String,
-    val verifiedReadyToInstall: Boolean
+    val verifiedReadyToInstall: Boolean,
+    val status: AppDownloadStatus = AppDownloadStatus.MISSING,
+    val downloadedBytes: Long = 0L,
+    val totalBytes: Long? = null,
+    val lastProgressAtMillis: Long = 0L,
+    val failureReason: AppDownloadFailureReason? = null,
+    val resumable: Boolean = false
+) {
+    val taskKey: AppDownloadTaskKey
+        get() = AppDownloadTaskKey(
+            releaseTag = releaseTag,
+            versionName = versionName,
+            apkAssetName = apkAssetName,
+            apkDownloadUrl = apkDownloadUrl,
+            apkSha256 = apkSha256
+        )
+}
+
+data class AppDownloadTaskKey(
+    val releaseTag: String,
+    val versionName: String,
+    val apkAssetName: String,
+    val apkDownloadUrl: String,
+    val apkSha256: String
 )
 
 enum class AppDownloadStatus {
-    PENDING,
-    PAUSED,
-    RUNNING,
+    READY_TO_INSTALL,
+    RESUMABLE,
+    DOWNLOADING,
+    STALLED,
     SUCCESSFUL,
     FAILED,
-    MISSING
+    MISSING,
+    PENDING,
+    PAUSED,
+    RUNNING
+}
+
+enum class AppDownloadFailureReason {
+    NETWORK,
+    STALLED,
+    SERVER,
+    STORAGE,
+    CHECKSUM,
+    UNKNOWN
 }
 
 data class AppDownloadRecord(
     val status: AppDownloadStatus,
     val reason: Int? = null,
-    val localUri: String? = null
+    val localUri: String? = null,
+    val downloadedBytes: Long = 0L,
+    val totalBytes: Long? = null,
+    val lastProgressAtMillis: Long = 0L,
+    val failureReason: AppDownloadFailureReason? = null,
+    val resumable: Boolean = false
 )
 
 data class AppUpdateRequestConfig(

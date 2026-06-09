@@ -28,6 +28,7 @@
 
         <activity
             android:name="com.jm.sillydroid.feature.main.MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:exported="true"
             android:launchMode="singleTask">
             <intent-filter>
@@ -58,6 +59,15 @@
                 <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
             </intent-filter>
         </provider>
+
+        <service
+            android:name=".AppUpdateDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Downloads SillyDroid app update packages with resumable progress and user-visible failure notifications." />
+        </service>
 
         <receiver
             android:name=".HostDownloadCompleteReceiver"

@@ -10,7 +10,9 @@ import com.jm.sillydroid.core.model.notification.HostNotificationKind
 import com.jm.sillydroid.core.model.notification.HostNotificationProgress
 import com.jm.sillydroid.core.model.notification.HostNotificationSpec
 import com.jm.sillydroid.core.model.notification.HostNotificationTapSpec
+import com.jm.sillydroid.core.model.update.AppDownloadFailureReason
 import com.jm.sillydroid.core.model.update.AppDownloadState
+import com.jm.sillydroid.core.model.update.AppDownloadStatus
 import com.jm.sillydroid.domain.notification.HostDownloadNotificationCoordinator
 import com.jm.sillydroid.domain.notification.HostNotificationService
 import java.io.File
@@ -183,19 +185,20 @@ class HostDownloadNotificationCoordinatorImpl(
     }
 
     override fun refreshAppUpdateDownload(downloadState: AppDownloadState) {
-        val record = queryRecord(downloadState.downloadId)
-        when (record.status) {
-            DownloadQueryStatus.PENDING,
-            DownloadQueryStatus.PAUSED,
-            DownloadQueryStatus.RUNNING -> {
+        when (downloadState.status) {
+            AppDownloadStatus.DOWNLOADING,
+            AppDownloadStatus.RESUMABLE,
+            AppDownloadStatus.PENDING,
+            AppDownloadStatus.PAUSED,
+            AppDownloadStatus.RUNNING -> {
                 hostNotificationService.post(
                     HostNotificationSpec(
                         notificationKey = updateDownloadKey,
                         kind = HostNotificationKind.APP_UPDATE_DOWNLOAD,
                         channel = HostNotificationChannel.DOWNLOADS_INSTALL,
                         title = "应用更新下载中",
-                        body = buildUpdateDownloadProgressBody(downloadState.versionName, record),
-                        progress = record.progress,
+                        body = buildUpdateDownloadProgressBody(downloadState),
+                        progress = buildUpdateDownloadProgress(downloadState),
                         ongoing = true,
                         autoCancel = false,
                         tapSpec = HostNotificationTapSpec(HostNotificationAction.OPEN_MAIN),
@@ -204,7 +207,7 @@ class HostDownloadNotificationCoordinatorImpl(
                 )
             }
 
-            DownloadQueryStatus.SUCCESSFUL -> {
+            AppDownloadStatus.SUCCESSFUL -> {
                 hostNotificationService.post(
                     HostNotificationSpec(
                         notificationKey = updateDownloadKey,
@@ -221,9 +224,14 @@ class HostDownloadNotificationCoordinatorImpl(
                 )
             }
 
-            DownloadQueryStatus.FAILED,
-            DownloadQueryStatus.MISSING -> {
-                postAppUpdateDownloadFailed(downloadState.versionName)
+            AppDownloadStatus.READY_TO_INSTALL -> {
+                hostNotificationService.remove(updateDownloadKey)
+            }
+
+            AppDownloadStatus.STALLED,
+            AppDownloadStatus.FAILED,
+            AppDownloadStatus.MISSING -> {
+                postAppUpdateDownloadFailed(downloadState.versionName, downloadState.failureReason)
             }
         }
     }
@@ -254,7 +262,7 @@ class HostDownloadNotificationCoordinatorImpl(
         )
     }
 
-    override fun postAppUpdateDownloadFailed(versionName: String) {
+    override fun postAppUpdateDownloadFailed(versionName: String, failureReason: AppDownloadFailureReason?) {
         hostNotificationService.remove(updateInstallReadyKey)
         hostNotificationService.post(
             HostNotificationSpec(
@@ -262,7 +270,7 @@ class HostDownloadNotificationCoordinatorImpl(
                 kind = HostNotificationKind.APP_UPDATE_DOWNLOAD,
                 channel = HostNotificationChannel.DOWNLOADS_INSTALL,
                 title = "更新下载失败",
-                body = "更新“$versionName”下载失败，请重试。",
+                body = buildUpdateDownloadFailedBody(versionName, failureReason),
                 progress = HostNotificationProgress.None,
                 ongoing = false,
                 autoCancel = true,
@@ -321,15 +329,47 @@ class HostDownloadNotificationCoordinatorImpl(
         }
     }
 
-    private fun buildUpdateDownloadProgressBody(
-        versionName: String,
-        record: DownloadQueryRecord
-    ): String {
-        val percent = record.progressPercent
-        return if (percent != null) {
-            "正在下载更新“$versionName” ($percent%)。"
+    private fun buildUpdateDownloadProgress(downloadState: AppDownloadState): HostNotificationProgress {
+        val totalBytes = downloadState.totalBytes
+        val downloadedBytes = downloadState.downloadedBytes
+        return if (totalBytes != null && totalBytes > 0L && downloadedBytes >= 0L) {
+            HostNotificationProgress.Determinate(
+                current = downloadedBytes.coerceAtMost(totalBytes).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                max = totalBytes.coerceAtMost(Int.MAX_VALUE.toLong()).toInt().coerceAtLeast(1)
+            )
         } else {
-            "正在下载更新“$versionName”。"
+            HostNotificationProgress.Indeterminate
+        }
+    }
+
+    private fun buildUpdateDownloadProgressBody(downloadState: AppDownloadState): String {
+        val percent = if (downloadState.totalBytes != null && downloadState.totalBytes!! > 0L) {
+            ((downloadState.downloadedBytes.coerceAtMost(downloadState.totalBytes!!) * 100L) / downloadState.totalBytes!!)
+                .toInt()
+                .coerceIn(0, 100)
+        } else {
+            null
+        }
+        val action = if (downloadState.resumable && downloadState.downloadedBytes > 0L) "继续下载" else "正在下载"
+        return if (percent != null) {
+            "$action 更新“${downloadState.versionName}” ($percent%)。"
+        } else {
+            "$action 更新“${downloadState.versionName}”。"
+        }
+    }
+
+    private fun buildUpdateDownloadFailedBody(
+        versionName: String,
+        failureReason: AppDownloadFailureReason?
+    ): String {
+        return when (failureReason) {
+            AppDownloadFailureReason.STALLED -> "更新“$versionName”长时间没有下载速度，已暂停，请稍后继续下载。"
+            AppDownloadFailureReason.CHECKSUM -> "更新“$versionName”校验失败，已删除损坏文件，请重新下载。"
+            AppDownloadFailureReason.STORAGE -> "更新“$versionName”保存失败，请检查存储空间后重试。"
+            AppDownloadFailureReason.SERVER -> "更新“$versionName”服务器响应异常，请稍后重试。"
+            AppDownloadFailureReason.NETWORK -> "更新“$versionName”网络中断，已保留进度，可稍后继续下载。"
+            AppDownloadFailureReason.UNKNOWN,
+            null -> "更新“$versionName”下载失败，请重试。"
         }
     }
 

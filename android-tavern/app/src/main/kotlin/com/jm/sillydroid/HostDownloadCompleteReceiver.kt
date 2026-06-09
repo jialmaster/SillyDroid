@@ -22,9 +22,5 @@ class HostDownloadCompleteReceiver : BroadcastReceiver() {
 
         val appGraph = (context.applicationContext as? SillyDroidAppGraphProvider)?.sillyDroidAppGraph ?: return
         appGraph.hostDownloadNotificationCoordinator.refreshBrowserDownload(completedId)
-        val updateState = appGraph.appUpdateRepository.cachedDownloadState()
-        if (updateState?.downloadId == completedId) {
-            appGraph.hostDownloadNotificationCoordinator.refreshAppUpdateDownload(updateState)
-        }
     }
 }

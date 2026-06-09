@@ -1,7 +1,9 @@
 package com.jm.sillydroid.data.update
 
 import android.content.Context
+import com.jm.sillydroid.core.model.update.AppDownloadFailureReason
 import com.jm.sillydroid.core.model.update.AppDownloadState
+import com.jm.sillydroid.core.model.update.AppDownloadStatus
 import com.jm.sillydroid.core.model.update.AvailableAppRelease
 import com.jm.sillydroid.domain.update.AppUpdateStateRepository
 import org.json.JSONObject
@@ -113,6 +115,12 @@ class AppUpdateStateStore(context: Context) : AppUpdateStateRepository {
             .put("apkDownloadUrl", value.apkDownloadUrl)
             .put("apkSha256", value.apkSha256)
             .put("verifiedReadyToInstall", value.verifiedReadyToInstall)
+            .put("status", value.status.name)
+            .put("downloadedBytes", value.downloadedBytes)
+            .put("totalBytes", value.totalBytes)
+            .put("lastProgressAtMillis", value.lastProgressAtMillis)
+            .put("failureReason", value.failureReason?.name)
+            .put("resumable", value.resumable)
             .toString()
     }
 
@@ -151,12 +159,30 @@ class AppUpdateStateStore(context: Context) : AppUpdateStateRepository {
                 apkAssetName = apkAssetName,
                 apkDownloadUrl = apkDownloadUrl,
                 apkSha256 = apkSha256,
-                verifiedReadyToInstall = json.optBoolean("verifiedReadyToInstall", false)
+                verifiedReadyToInstall = json.optBoolean("verifiedReadyToInstall", false),
+                status = json.optEnumOrNull<AppDownloadStatus>("status") ?: AppDownloadStatus.MISSING,
+                downloadedBytes = json.optLong("downloadedBytes", 0L).coerceAtLeast(0L),
+                totalBytes = json.optLongOrNull("totalBytes")?.takeIf { value -> value > 0L },
+                lastProgressAtMillis = json.optLong("lastProgressAtMillis", 0L).coerceAtLeast(0L),
+                failureReason = json.optEnumOrNull<AppDownloadFailureReason>("failureReason"),
+                resumable = json.optBoolean("resumable", false)
             )
         }.getOrNull()
     }
 
     private fun JSONObject.optTrimmedStringOrNull(name: String): String? {
         return (opt(name) as? String)?.trim()?.ifBlank { null }
+    }
+
+    private fun JSONObject.optLongOrNull(name: String): Long? {
+        return if (has(name) && !isNull(name)) optLong(name) else null
+    }
+
+    private inline fun <reified T : Enum<T>> JSONObject.optEnumOrNull(name: String): T? {
+        val rawValue = optString(name).trim()
+        if (rawValue.isBlank()) {
+            return null
+        }
+        return enumValues<T>().firstOrNull { value -> value.name == rawValue }
     }
 }

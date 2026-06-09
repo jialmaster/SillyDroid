@@ -1,9 +1,6 @@
 package com.jm.sillydroid.ui.update
 
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -12,7 +9,6 @@ import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.isVisible
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -23,6 +19,7 @@ import com.jm.sillydroid.core.model.update.AppDownloadState
 import com.jm.sillydroid.core.model.update.AppDownloadStatus
 import com.jm.sillydroid.core.model.update.AppUpdateBuildConfig
 import com.jm.sillydroid.core.model.update.AppUpdateRequestConfig
+import com.jm.sillydroid.core.model.update.AvailableAppRelease
 import com.jm.sillydroid.domain.bootstrap.RuntimeMetadataRepository
 import com.jm.sillydroid.domain.notification.HostDownloadNotificationCoordinator
 import com.jm.sillydroid.domain.update.AppUpdateRepository
@@ -68,21 +65,7 @@ class AppUpdateCoordinator(
         private const val apkMimeType = "application/vnd.android.package-archive"
     }
 
-    private var receiverRegistered = false
     private var syncJob: Job? = null
-
-    private val downloadCompleteReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context?, intent: Intent?) {
-            val completedId = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) ?: return
-            if (completedId != appUpdateRepository.cachedDownloadState()?.downloadId) {
-                return
-            }
-
-            activity.lifecycleScope.launch {
-                syncDownloadState(showErrors = true, openInstallerIfReady = true)
-            }
-        }
-    }
 
     fun initialize() {
         clearInstalledVersionState()
@@ -101,16 +84,15 @@ class AppUpdateCoordinator(
     }
 
     override fun onStart(owner: LifecycleOwner) {
-        registerDownloadReceiver()
         syncJob?.cancel()
         syncJob = activity.lifecycleScope.launch {
             syncDownloadState(showErrors = false, openInstallerIfReady = false)
+            syncCachedReleaseDownloadStateOnIo(verifyCompleteApk = true)
             checkForUpdatesOnStart()
         }
     }
 
     override fun onStop(owner: LifecycleOwner) {
-        unregisterDownloadReceiver()
     }
 
     override fun onDestroy(owner: LifecycleOwner) {
@@ -119,9 +101,11 @@ class AppUpdateCoordinator(
     }
 
     private suspend fun handleUpdateAction() {
+        syncCachedReleaseDownloadState(verifyCompleteApk = false)
         val currentDownload = appUpdateRepository.cachedDownloadState()
         if (currentDownload != null) {
-            when (queryDownloadStatus(currentDownload.downloadId)) {
+            when (currentDownload.status) {
+                AppDownloadStatus.DOWNLOADING,
                 AppDownloadStatus.PENDING,
                 AppDownloadStatus.PAUSED,
                 AppDownloadStatus.RUNNING -> {
@@ -129,16 +113,21 @@ class AppUpdateCoordinator(
                     return
                 }
 
+                AppDownloadStatus.READY_TO_INSTALL,
                 AppDownloadStatus.SUCCESSFUL -> {
                     verifyAndMaybeOpenDownload(currentDownload, openInstallerIfReady = true, showErrors = true)
                     return
                 }
 
+                AppDownloadStatus.RESUMABLE,
+                AppDownloadStatus.STALLED,
                 AppDownloadStatus.FAILED,
                 AppDownloadStatus.MISSING -> Unit
             }
 
-            clearDownloadState(removeDownload = true)
+            if (currentDownload.status == AppDownloadStatus.MISSING) {
+                clearDownloadState(removeDownload = false)
+            }
         }
 
         val cachedRelease = appUpdateRepository.cachedAvailableRelease()
@@ -153,11 +142,17 @@ class AppUpdateCoordinator(
         }
 
         withContext(dispatchers.io) {
-            appUpdateRepository.startDownload(cachedRelease)
+            appUpdateRepository.cleanupDownloadCache(cachedRelease)
+            appUpdateRepository.inspectDownloadState(cachedRelease, verifyCompleteApk = true)
+                .let(appUpdateRepository::updateDownloadProgress)
         }.also { downloadState ->
-            hostDownloadNotificationCoordinator.postAppUpdateDownloadStarted(downloadState)
+            if (downloadState?.verifiedReadyToInstall == true) {
+                verifyAndMaybeOpenDownload(downloadState, openInstallerIfReady = true, showErrors = true)
+                return
+            }
         }
         renderState()
+        startAppUpdateDownloadService()
         showMessage(R.string.app_update_download_started)
     }
 
@@ -182,6 +177,11 @@ class AppUpdateCoordinator(
                 }
             } else {
                 appUpdateRepository.cacheAvailableRelease(release)
+            }
+            if (release != null) {
+                appUpdateRepository.cleanupDownloadCache(release)
+                appUpdateRepository.inspectDownloadState(release, verifyCompleteApk = true)
+                    .let(appUpdateRepository::updateDownloadProgress)
             }
             renderState()
         }.onFailure { exception ->
@@ -212,6 +212,8 @@ class AppUpdateCoordinator(
         }
 
         when (queryDownloadStatus(currentDownload.downloadId)) {
+            AppDownloadStatus.DOWNLOADING,
+            AppDownloadStatus.RESUMABLE,
             AppDownloadStatus.PENDING,
             AppDownloadStatus.PAUSED,
             AppDownloadStatus.RUNNING -> {
@@ -219,15 +221,22 @@ class AppUpdateCoordinator(
                 renderState()
             }
 
+            AppDownloadStatus.READY_TO_INSTALL,
             AppDownloadStatus.SUCCESSFUL -> {
                 hostDownloadNotificationCoordinator.refreshAppUpdateDownload(currentDownload)
                 verifyAndMaybeOpenDownload(currentDownload, openInstallerIfReady, showErrors)
             }
 
+            AppDownloadStatus.STALLED,
             AppDownloadStatus.FAILED,
             AppDownloadStatus.MISSING -> {
-                hostDownloadNotificationCoordinator.postAppUpdateDownloadFailed(currentDownload.versionName)
-                clearDownloadState(removeDownload = true)
+                hostDownloadNotificationCoordinator.postAppUpdateDownloadFailed(
+                    currentDownload.versionName,
+                    currentDownload.failureReason
+                )
+                if (!currentDownload.resumable) {
+                    clearDownloadState(removeDownload = false)
+                }
                 if (showErrors) {
                     showMessage(R.string.app_update_download_failed)
                 }
@@ -336,30 +345,8 @@ class AppUpdateCoordinator(
         hostDownloadNotificationCoordinator.clearAppUpdateNotifications()
     }
 
-    private fun registerDownloadReceiver() {
-        if (receiverRegistered) {
-            return
-        }
-
-        ContextCompat.registerReceiver(
-            activity,
-            downloadCompleteReceiver,
-            IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-        receiverRegistered = true
-    }
-
-    private fun unregisterDownloadReceiver() {
-        if (!receiverRegistered) {
-            return
-        }
-
-        activity.unregisterReceiver(downloadCompleteReceiver)
-        receiverRegistered = false
-    }
-
     private fun renderState() {
+        syncCachedReleaseDownloadState(verifyCompleteApk = false)
         val currentDownload = appUpdateRepository.cachedDownloadState()
         val availableRelease = appUpdateRepository.cachedAvailableRelease()
         val showOverlayUpdateEntry = currentDownload != null || availableRelease != null
@@ -406,11 +393,30 @@ class AppUpdateCoordinator(
 
                 currentDownload != null -> {
                     statusText = activity.getString(
-                        R.string.bootstrap_settings_about_update_status_downloading,
+                        if (currentDownload.resumable &&
+                            (currentDownload.status == AppDownloadStatus.RESUMABLE ||
+                                currentDownload.status == AppDownloadStatus.FAILED ||
+                                currentDownload.status == AppDownloadStatus.STALLED)
+                        ) {
+                            R.string.bootstrap_settings_about_update_status_resumable
+                        } else {
+                            R.string.bootstrap_settings_about_update_status_downloading
+                        },
                         currentDownload.versionName
                     )
-                    actionText = activity.getString(R.string.bootstrap_settings_about_update_action_downloading)
-                    actionEnabled = false
+                    actionText = if (currentDownload.resumable &&
+                        (currentDownload.status == AppDownloadStatus.RESUMABLE ||
+                            currentDownload.status == AppDownloadStatus.FAILED ||
+                            currentDownload.status == AppDownloadStatus.STALLED)
+                    ) {
+                        activity.getString(R.string.bootstrap_settings_about_update_action_resume_download)
+                    } else {
+                        activity.getString(R.string.bootstrap_settings_about_update_action_downloading)
+                    }
+                    actionEnabled = currentDownload.resumable &&
+                        (currentDownload.status == AppDownloadStatus.RESUMABLE ||
+                            currentDownload.status == AppDownloadStatus.FAILED ||
+                            currentDownload.status == AppDownloadStatus.STALLED)
                 }
 
                 availableRelease != null -> {
@@ -463,6 +469,48 @@ class AppUpdateCoordinator(
         return withContext(dispatchers.io) {
             appUpdateRepository.queryDownloadRecord(downloadId).status
         }
+    }
+
+    private fun syncCachedReleaseDownloadState(verifyCompleteApk: Boolean) {
+        val release = appUpdateRepository.cachedAvailableRelease() ?: return
+        val currentDownload = appUpdateRepository.cachedDownloadState()
+        if (currentDownload != null && currentDownload.taskKey != release.taskKey()) {
+            clearDownloadState(removeDownload = false)
+        }
+        if (currentDownload?.status == AppDownloadStatus.DOWNLOADING ||
+            currentDownload?.status == AppDownloadStatus.PENDING ||
+            currentDownload?.status == AppDownloadStatus.PAUSED ||
+            currentDownload?.status == AppDownloadStatus.RUNNING
+        ) {
+            return
+        }
+        if (!verifyCompleteApk && currentDownload?.verifiedReadyToInstall == true) {
+            return
+        }
+        val record = appUpdateRepository.inspectDownloadState(release, verifyCompleteApk = verifyCompleteApk)
+        if (record.status != AppDownloadStatus.MISSING) {
+            appUpdateRepository.updateDownloadProgress(record)
+        }
+    }
+
+    private fun AvailableAppRelease.taskKey(): com.jm.sillydroid.core.model.update.AppDownloadTaskKey {
+        return com.jm.sillydroid.core.model.update.AppDownloadTaskKey(
+            releaseTag = releaseTag,
+            versionName = versionName,
+            apkAssetName = apkAssetName,
+            apkDownloadUrl = apkDownloadUrl,
+            apkSha256 = apkSha256
+        )
+    }
+
+    private suspend fun syncCachedReleaseDownloadStateOnIo(verifyCompleteApk: Boolean) {
+        withContext(dispatchers.io) {
+            val release = appUpdateRepository.cachedAvailableRelease() ?: return@withContext
+            appUpdateRepository.cleanupDownloadCache(release)
+            appUpdateRepository.inspectDownloadState(release, verifyCompleteApk = verifyCompleteApk)
+                .let(appUpdateRepository::updateDownloadProgress)
+        }
+        renderState()
     }
 
     private fun resolveAboutVersionInfo(): AboutVersionInfo {
@@ -527,5 +575,15 @@ class AppUpdateCoordinator(
 
     private fun showMessage(message: String) {
         Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
+    }
+
+    private fun startAppUpdateDownloadService() {
+        val intent = Intent().setClassName(activity, "com.jm.sillydroid.AppUpdateDownloadService")
+            .setAction("com.jm.sillydroid.action.UPDATE_DOWNLOAD_START")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            activity.startForegroundService(intent)
+        } else {
+            activity.startService(intent)
+        }
     }
 }

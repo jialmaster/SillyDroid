@@ -266,6 +266,24 @@ class MainActivity : AppCompatActivity() {
         setIntent(intent)
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // 旋转屏幕只刷新宿主安全区与悬浮控件边界，避免销毁 MainActivity 后重建 WebView 导致酒馆页面重新加载。
+        recordActivityLifecycleDiagnostic(
+            event = "on_configuration_changed",
+            extra = "orientation=${newConfig.orientation} screenLayout=${newConfig.screenLayout}"
+        )
+        if (::systemBarInsetsController.isInitialized) {
+            systemBarInsetsController.refresh()
+        }
+        if (::floatingLogsHost.isInitialized) {
+            floatingLogsHost.onContentBoundsChanged()
+        }
+        if (::browserHost.isInitialized) {
+            browserHost.updateRefreshLayoutEnabled()
+        }
+    }
+
     private fun registerBackPressHandler() {
         backPressCallback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
