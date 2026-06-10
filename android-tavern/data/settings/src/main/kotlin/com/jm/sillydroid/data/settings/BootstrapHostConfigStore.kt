@@ -7,18 +7,27 @@ import com.jm.sillydroid.core.model.settings.BrowserZoomOptions
 import com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition
 import com.jm.sillydroid.core.model.settings.FloatingLogRefreshIntervals
 import com.jm.sillydroid.core.model.settings.HostDisplayMode
+import com.jm.sillydroid.core.model.settings.NodeHeapLimitOptions
+import com.jm.sillydroid.core.model.settings.NodeNewSpaceLimitOptions
 import com.jm.sillydroid.core.model.settings.TerminalFontSizeOptions
+import com.jm.sillydroid.domain.bootstrap.RuntimePatchSettingOverrides
+import com.jm.sillydroid.domain.bootstrap.RuntimePatchSettingOverridesCodec
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 
 class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
     companion object {
         internal const val preferencesName = "bootstrap-host-config"
         private const val servicePortKey = "service-port"
+        private const val nodeMaxOldSpaceMbKey = "node-max-old-space-mb"
+        private const val nodeMaxSemiSpaceMbKey = "node-max-semi-space-mb"
         private const val hostDisplayModeKey = "host-display-mode"
         private const val browserEngineKey = "browser-engine"
         private const val browserZoomPercentKey = "browser-zoom-percent"
         private const val launchWebViewOnReadyKey = "launch-webview-on-ready"
         private const val backgroundHealthCheckEnabledKey = "background-health-check-enabled"
+        private const val tavernRuntimePatchEnabledKey = "tavern-runtime-patch-enabled"
+        private const val tavernRuntimePatchDisabledModuleIdsKey = "tavern-runtime-patch-disabled-module-ids"
+        private const val tavernRuntimePatchSettingOverridesKey = "tavern-runtime-patch-setting-overrides"
         private const val webViewPullRefreshEnabledKey = "webview-pull-refresh-enabled"
         private const val debugDiagnosticsEnabledKey = "debug-diagnostics-enabled"
         private const val unrestrictedFileImportSelectionEnabledKey = "unrestricted-file-import-selection-enabled"
@@ -74,6 +83,26 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
                 .apply()
         }
 
+    override var nodeMaxOldSpaceMb: Int
+        get() = NodeHeapLimitOptions.sanitize(
+            preferences.getInt(nodeMaxOldSpaceMbKey, NodeHeapLimitOptions.DEFAULT_MB)
+        )
+        set(value) {
+            preferences.edit()
+                .putInt(nodeMaxOldSpaceMbKey, NodeHeapLimitOptions.sanitize(value))
+                .apply()
+        }
+
+    override var nodeMaxSemiSpaceMb: Int
+        get() = NodeNewSpaceLimitOptions.sanitize(
+            preferences.getInt(nodeMaxSemiSpaceMbKey, NodeNewSpaceLimitOptions.DEFAULT_MB)
+        )
+        set(value) {
+            preferences.edit()
+                .putInt(nodeMaxSemiSpaceMbKey, NodeNewSpaceLimitOptions.sanitize(value))
+                .apply()
+        }
+
     override var hostDisplayMode: HostDisplayMode
         get() = HostDisplayMode.fromStorageValue(preferences.getString(hostDisplayModeKey, HostDisplayMode.NORMAL.name))
         set(value) {
@@ -114,6 +143,46 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
             preferences.edit()
                 .putBoolean(backgroundHealthCheckEnabledKey, value)
                 .apply()
+        }
+
+    override var tavernRuntimePatchEnabled: Boolean
+        get() = preferences.getBoolean(tavernRuntimePatchEnabledKey, false)
+        set(value) {
+            preferences.edit()
+                .putBoolean(tavernRuntimePatchEnabledKey, value)
+                .apply()
+        }
+
+    override var tavernRuntimePatchDisabledModuleIds: Set<String>
+        get() = preferences.getStringSet(tavernRuntimePatchDisabledModuleIdsKey, emptySet())
+            .orEmpty()
+            .map { id -> id.trim() }
+            .filter { id -> id.isNotBlank() }
+            .toSet()
+        set(value) {
+            preferences.edit()
+                .putStringSet(
+                    tavernRuntimePatchDisabledModuleIdsKey,
+                    value.map { id -> id.trim() }
+                        .filter { id -> id.isNotBlank() }
+                        .toSet()
+                )
+                .apply()
+        }
+
+    override var tavernRuntimePatchSettingOverrides: RuntimePatchSettingOverrides
+        get() = RuntimePatchSettingOverridesCodec.decode(
+            preferences.getString(tavernRuntimePatchSettingOverridesKey, null)
+        )
+        set(value) {
+            preferences.edit().apply {
+                val encoded = RuntimePatchSettingOverridesCodec.encode(value)
+                if (encoded.isBlank()) {
+                    remove(tavernRuntimePatchSettingOverridesKey)
+                } else {
+                    putString(tavernRuntimePatchSettingOverridesKey, encoded)
+                }
+            }.apply()
         }
 
     override var webViewPullRefreshEnabled: Boolean

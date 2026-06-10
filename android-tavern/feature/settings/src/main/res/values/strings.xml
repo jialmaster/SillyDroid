@@ -1,14 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="bootstrap_settings_title">酒馆启动设置</string>
+    <string name="bootstrap_settings_title">SillyDroid设置</string>
     <string name="bootstrap_settings_actions_title">常用操作</string>
-    <string name="bootstrap_settings_tab_data">数据</string>
+    <string name="bootstrap_settings_tab_data">APP设置</string>
     <string name="bootstrap_settings_tab_settings">酒馆设置</string>
-    <string name="bootstrap_settings_tab_extensions">扩展</string>
+    <string name="bootstrap_settings_tab_extensions">扩展管理</string>
     <string name="bootstrap_settings_tab_logs">日志</string>
     <string name="bootstrap_settings_tab_terminal">终端</string>
     <string name="bootstrap_settings_about_entry">关于</string>
-    <string name="bootstrap_settings_data_summary">导入、导出和恢复默认放在这里。导入会自动识别官方用户备份 ZIP，以及 Docker 四目录 ZIP、Linux/Termux public 结构 ZIP。</string>
+    <string name="bootstrap_settings_data_summary">宿主界面、浏览器、运行性能和数据维护集中在这里；调整后按提示重启服务或返回主界面生效。</string>
+    <string name="bootstrap_settings_app_section_experience_title">界面与诊断</string>
+    <string name="bootstrap_settings_app_section_runtime_title">浏览器、服务与性能</string>
+    <string name="bootstrap_settings_app_section_data_title">数据与维护</string>
     <string name="bootstrap_settings_host_pull_refresh_title">下拉刷新</string>
     <string name="bootstrap_settings_host_pull_refresh_summary">提供屏幕上半部分快捷下拉刷新功能。</string>
     <string name="bootstrap_settings_host_browser_engine_title">浏览器引擎</string>
@@ -16,10 +19,36 @@
     <string name="bootstrap_settings_host_browser_engine_dialog_title">选择浏览器引擎</string>
     <string name="bootstrap_settings_host_browser_engine_system_webview">系统 WebView</string>
     <string name="bootstrap_settings_host_browser_engine_geckoview">GeckoView（实验）</string>
+    <string name="bootstrap_settings_host_runtime_patch_title">酒馆性能优化（实验）</string>
+    <string name="bootstrap_settings_host_runtime_patch_summary">这是酒馆补丁，非官方功能，且未经过验证，酒馆更新后可能失效，请谨慎开启。</string>
+    <string name="bootstrap_settings_host_runtime_patch_restart_hint">酒馆性能优化已更新，重启服务后生效。</string>
+    <string name="bootstrap_settings_host_runtime_patch_sheet_title">酒馆优化 Patch</string>
+    <string name="bootstrap_settings_host_runtime_patch_sheet_summary">这是酒馆补丁，非官方功能，且未经过验证，酒馆更新后可能失效，请谨慎开启。</string>
+    <string name="bootstrap_settings_host_runtime_patch_sheet_warning">此功能为实验版本，可能会导致数据丢失、损坏等，请备份数据之后使用！</string>
+    <string name="bootstrap_settings_host_runtime_patch_sheet_empty">当前 APK 没有内置可配置 Patch。</string>
+    <string name="bootstrap_settings_host_runtime_patch_framework_version">框架版本：%1$s</string>
+    <string name="bootstrap_settings_host_runtime_patch_module_version">Patch 版本：%1$s</string>
+    <string name="bootstrap_settings_host_runtime_patch_supported_versions">兼容酒馆：%1$s</string>
+    <string name="bootstrap_settings_host_runtime_patch_supported_versions_unknown">兼容酒馆：未声明</string>
+    <string name="bootstrap_settings_host_runtime_patch_manifest_missing">manifest 缺失</string>
+    <string name="bootstrap_settings_host_runtime_patch_settings_action">设置</string>
+    <string name="bootstrap_settings_host_runtime_patch_settings_empty">这个 Patch 暂无可配置参数。</string>
+    <string name="bootstrap_settings_host_runtime_patch_close">关闭</string>
+    <string name="bootstrap_settings_host_runtime_patch_restart_service">重启服务</string>
+    <string name="bootstrap_settings_host_node_memory_limit_title">Node 内存上限</string>
+    <string name="bootstrap_settings_host_node_memory_limit_summary">--max-old-space-size 的 V8 内存。</string>
+    <string name="bootstrap_settings_host_node_memory_limit_dialog_title">选择 Node 内存上限</string>
+    <string name="bootstrap_settings_host_node_memory_limit_automatic">自动</string>
+    <string name="bootstrap_settings_host_node_memory_limit_megabytes">%1$d MB</string>
+    <string name="bootstrap_settings_host_node_memory_limit_restart_hint">Node 内存上限已更新，重启服务后生效。</string>
+    <string name="bootstrap_settings_host_node_new_space_limit_title">Node semi-space</string>
+    <string name="bootstrap_settings_host_node_new_space_limit_summary">--max-semi-space-size，控制 V8 新生代单个 semi-space 大小；影响短生命周期对象 GC 频率和瞬时内存峰值。</string>
+    <string name="bootstrap_settings_host_node_new_space_limit_dialog_title">选择 Node 新生代上限</string>
+    <string name="bootstrap_settings_host_node_new_space_limit_automatic">自动</string>
+    <string name="bootstrap_settings_host_node_new_space_limit_megabytes">%1$d MB</string>
+    <string name="bootstrap_settings_host_node_new_space_limit_restart_hint">Node 新生代上限已更新，重启服务后生效。</string>
     <string name="bootstrap_settings_host_display_mode_title">显示模式</string>
-    <string name="bootstrap_settings_host_display_mode_summary">普通模式：显示系统状态栏和导航栏。
-只隐藏顶部通知栏：保留底部导航栏。
-沉浸式全屏：隐藏顶部和底部系统栏。</string>
+    <string name="bootstrap_settings_host_display_mode_summary">普通模式：显示系统状态栏和导航栏。\n只隐藏顶部通知栏：保留底部导航栏。\n沉浸式全屏：隐藏顶部和底部系统栏。</string>
     <string name="bootstrap_settings_host_display_mode_dialog_title">选择显示模式</string>
     <string name="bootstrap_settings_host_display_mode_normal">普通模式</string>
     <string name="bootstrap_settings_host_display_mode_status_bar_hidden">只隐藏顶部通知栏</string>

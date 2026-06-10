@@ -14,8 +14,15 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">?attr/colorSurfaceContainerLowest</item>
+        <!-- 设置页默认组件外观统一从主题下发，页面只显式声明 OutlinedButton / PanelCard 等语义变体。 -->
+        <item name="minTouchTargetSize">@dimen/sillydroid_control_min_height</item>
         <item name="materialButtonStyle">@style/Widget.SillyDroid.SettingsButton</item>
         <item name="materialButtonOutlinedStyle">@style/Widget.SillyDroid.SettingsButton.Outlined</item>
+        <item name="materialCardViewStyle">@style/Widget.SillyDroid.SettingsNestedCard</item>
+        <item name="materialSwitchStyle">@style/Widget.SillyDroid.SettingsSwitch</item>
+        <item name="textInputStyle">@style/Widget.SillyDroid.SettingsTextInputLayout.OutlinedBox</item>
+        <item name="android:editTextStyle">@style/Widget.SillyDroid.SettingsTextInputEditText</item>
+        <item name="editTextStyle">@style/Widget.SillyDroid.SettingsTextInputEditText</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.SillyDroid.MaterialAlertDialog.Material3</item>
     </style>
 

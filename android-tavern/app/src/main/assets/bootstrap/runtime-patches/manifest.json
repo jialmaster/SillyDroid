@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "frameworkId": "sillydroid-runtime-patches",
+  "frameworkVersion": "0.3.0",
+  "compatibleTavernVersions": [
+    "1.18.0"
+  ],
+  "defaultPreset": "performance",
+  "presets": {
+    "performance": [
+      "character-all-limited-concurrency"
+    ]
+  },
+  "modules": [
+    {
+      "id": "character-all-limited-concurrency",
+      "path": "modules/character-all-limited-concurrency",
+      "manifest": "manifest.json"
+    }
+  ]
+}

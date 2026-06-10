@@ -7,6 +7,8 @@ import android.os.Build
 import android.system.ErrnoException
 import android.system.Os
 import com.jm.sillydroid.core.model.bootstrap.BootstrapStepDetection
+import com.jm.sillydroid.domain.bootstrap.RuntimePatchSettingOverrides
+import com.jm.sillydroid.domain.bootstrap.RuntimePatchSettingOverridesCodec
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -1579,17 +1581,44 @@ class ServerController(
     private val launcher: LinuxRuntimeLauncher,
     private val paths: HostPaths,
     private val servicePort: Int,
+    private val nodeMaxOldSpaceMb: Int,
+    private val nodeMaxSemiSpaceMb: Int,
+    private val tavernRuntimePatchEnabled: Boolean,
+    private val tavernRuntimePatchDisabledModuleIds: Set<String>,
+    private val tavernRuntimePatchSettingOverrides: RuntimePatchSettingOverrides,
     private val logFileName: String
 ) {
     fun start(): ManagedProcess {
+        val environment = mutableMapOf(
+            "APP_DATA_ROOT" to paths.serverDataDir.absolutePath,
+            "TAVERN_PORT" to servicePort.toString(),
+            // 0 表示自动；入口脚本仅在正数时才追加 --max-old-space-size。
+            "TAVERN_NODE_MAX_OLD_SPACE_MB" to nodeMaxOldSpaceMb.toString(),
+            // 0 表示自动；入口脚本仅在正数时才追加 --max-semi-space-size。
+            "TAVERN_NODE_MAX_SEMI_SPACE_MB" to nodeMaxSemiSpaceMb.toString()
+        )
+        if (tavernRuntimePatchEnabled) {
+            // 首版只暴露总开关；内部使用 performance 预设加载模块化 runtime patch。
+            environment["SILLYDROID_TAVERN_PATCH_PRESET"] = "performance"
+            val disabledModules = tavernRuntimePatchDisabledModuleIds
+                .map { id -> id.trim() }
+                .filter { id -> id.isNotBlank() }
+                .sorted()
+            if (disabledModules.isNotEmpty()) {
+                environment["SILLYDROID_TAVERN_PATCH_DISABLED_MODULES"] = disabledModules.joinToString(",")
+            }
+            RuntimePatchSettingOverridesCodec.encode(tavernRuntimePatchSettingOverrides)
+                .takeIf { encodedSettings -> encodedSettings.isNotBlank() }
+                ?.let { encodedSettings ->
+                    environment["SILLYDROID_TAVERN_PATCH_SETTINGS"] = encodedSettings
+                }
+        }
+
         val request = LaunchRequest(
             name = "sillydroid-server",
             scriptFile = File(paths.scriptsDir, "start-server.sh"),
             workingDirectory = paths.serverDir,
-            environment = mapOf(
-                "APP_DATA_ROOT" to paths.serverDataDir.absolutePath,
-                "TAVERN_PORT" to servicePort.toString()
-            ),
+            environment = environment,
             logFileName = logFileName
         )
         return launcher.start(request)

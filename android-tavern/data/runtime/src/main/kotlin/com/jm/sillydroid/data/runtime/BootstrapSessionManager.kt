@@ -460,6 +460,12 @@ class BootstrapSessionManager(
                             "pid=${portOccupancy.process.pid} name=${portOccupancy.process.name} " +
                             "bootstrap=${portOccupancy.recognizedAsBootstrapServer}"
                     )
+                    if (!portOccupancy.recognizedAsBootstrapServer) {
+                        pauseStartupForConfigIntervention(
+                            details = ServerPortOccupancyInspector.portOccupiedByForeignServiceDetails(portOccupancy.port)
+                        )
+                        return
+                    }
                 }
                 is ServerPortOccupancy.OccupiedByOtherProcess -> {
                     pauseStartupForConfigIntervention(
@@ -506,6 +512,11 @@ class BootstrapSessionManager(
                 launcher = launcher,
                 paths = paths,
                 servicePort = servicePort,
+                nodeMaxOldSpaceMb = hostPreferences.nodeMaxOldSpaceMb,
+                nodeMaxSemiSpaceMb = hostPreferences.nodeMaxSemiSpaceMb,
+                tavernRuntimePatchEnabled = hostPreferences.tavernRuntimePatchEnabled,
+                tavernRuntimePatchDisabledModuleIds = hostPreferences.tavernRuntimePatchDisabledModuleIds,
+                tavernRuntimePatchSettingOverrides = hostPreferences.tavernRuntimePatchSettingOverrides,
                 logFileName = runtimeLogs.currentServerLogFileName()
             ).start()
             completeStep(

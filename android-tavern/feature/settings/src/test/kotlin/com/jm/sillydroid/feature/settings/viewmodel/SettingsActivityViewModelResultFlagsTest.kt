@@ -3,6 +3,7 @@ package com.jm.sillydroid.feature.settings.viewmodel
 import com.jm.sillydroid.core.model.settings.BrowserEngine
 import com.jm.sillydroid.core.model.settings.BrowserDataClearTarget
 import com.jm.sillydroid.core.model.settings.HostDisplayMode
+import com.jm.sillydroid.domain.bootstrap.RuntimePatchSettingOverrides
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -63,13 +64,68 @@ class SettingsActivityViewModelResultFlagsTest {
         assertTrue(viewModel.uiState.value.shouldRecreateMainActivity)
     }
 
+    @Test
+    fun `runtime patch defaults off and persists toggle`() {
+        val repository = FakeHostPreferencesRepository()
+        val viewModel = SettingsActivityViewModel(repository)
+
+        assertFalse(viewModel.uiState.value.tavernRuntimePatchEnabled)
+
+        val changed = viewModel.setTavernRuntimePatchEnabled(true)
+
+        assertTrue(changed)
+        assertTrue(repository.tavernRuntimePatchEnabled)
+        assertTrue(viewModel.uiState.value.tavernRuntimePatchEnabled)
+    }
+
+    @Test
+    fun `runtime patch module toggle persists disabled ids`() {
+        val repository = FakeHostPreferencesRepository()
+        val viewModel = SettingsActivityViewModel(repository)
+        val moduleId = "character-all-limited-concurrency"
+
+        val disabledChanged = viewModel.setRuntimePatchModuleEnabled(moduleId, false)
+        assertTrue(disabledChanged)
+        assertFalse(viewModel.isRuntimePatchModuleEnabled(moduleId))
+        assertEquals(setOf(moduleId), repository.tavernRuntimePatchDisabledModuleIds)
+
+        val enabledChanged = viewModel.setRuntimePatchModuleEnabled(moduleId, true)
+        assertTrue(enabledChanged)
+        assertTrue(viewModel.isRuntimePatchModuleEnabled(moduleId))
+        assertTrue(repository.tavernRuntimePatchDisabledModuleIds.isEmpty())
+    }
+
+    @Test
+    fun `runtime patch setting override persists by module and setting key`() {
+        val repository = FakeHostPreferencesRepository()
+        val viewModel = SettingsActivityViewModel(repository)
+        val moduleId = "character-all-limited-concurrency"
+
+        val changed = viewModel.setRuntimePatchSettingOverride(moduleId, "concurrency", "4")
+
+        assertTrue(changed)
+        assertEquals("4", viewModel.resolveRuntimePatchSettingValue(moduleId, "concurrency", "auto"))
+        assertEquals(mapOf(moduleId to mapOf("concurrency" to "4")), repository.tavernRuntimePatchSettingOverrides)
+
+        val removed = viewModel.setRuntimePatchSettingOverride(moduleId, "concurrency", "")
+
+        assertTrue(removed)
+        assertEquals("auto", viewModel.resolveRuntimePatchSettingValue(moduleId, "concurrency", "auto"))
+        assertTrue(repository.tavernRuntimePatchSettingOverrides.isEmpty())
+    }
+
     private class FakeHostPreferencesRepository : HostPreferencesRepository {
         override var servicePort: Int = 8000
+        override var nodeMaxOldSpaceMb: Int = 0
+        override var nodeMaxSemiSpaceMb: Int = 0
         override var hostDisplayMode: HostDisplayMode = HostDisplayMode.NORMAL
         override var browserEngine: BrowserEngine = BrowserEngine.SYSTEM_WEBVIEW
         override var browserZoomPercent: Int = 100
         override var launchWebViewOnReady: Boolean = true
         override var backgroundHealthCheckEnabled: Boolean = false
+        override var tavernRuntimePatchEnabled: Boolean = false
+        override var tavernRuntimePatchDisabledModuleIds: Set<String> = emptySet()
+        override var tavernRuntimePatchSettingOverrides: RuntimePatchSettingOverrides = emptyMap()
         override var webViewPullRefreshEnabled: Boolean = true
         override var debugDiagnosticsEnabled: Boolean = false
         override var unrestrictedFileImportSelectionEnabled: Boolean = false

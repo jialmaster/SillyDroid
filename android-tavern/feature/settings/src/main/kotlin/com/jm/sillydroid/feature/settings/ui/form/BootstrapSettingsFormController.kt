@@ -1,6 +1,5 @@
 package com.jm.sillydroid.feature.settings.ui.form
 
-import android.content.res.ColorStateList
 import android.transition.ChangeBounds
 import android.graphics.Rect
 import android.graphics.Typeface
@@ -8,13 +7,10 @@ import android.graphics.drawable.GradientDrawable
 import android.text.InputType
 import android.transition.TransitionManager
 import android.util.TypedValue
-import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AccelerateDecelerateInterpolator
-import android.widget.ImageButton
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.AttrRes
@@ -29,6 +25,8 @@ import com.jm.sillydroid.core.model.settings.TavernConfigSectionSpec
 import com.jm.sillydroid.domain.settings.SettingsConfigRepository
 import com.jm.sillydroid.feature.settings.R
 import com.jm.sillydroid.feature.settings.model.BootstrapSettingsValidationIssue
+import com.jm.sillydroid.feature.settings.ui.createSettingsEditText
+import com.jm.sillydroid.feature.settings.ui.createSettingsTextInputLayout
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -451,12 +449,7 @@ class BootstrapSettingsFormController(
                     setTextColor(resolveThemeColor(MaterialR.attr.colorOnSurfaceVariant))
                     setPadding(0, dimen(R.dimen.sillydroid_space_xs), dimen(R.dimen.sillydroid_space_lg), 0)
                 })
-                val switch = MaterialSwitch(activity).apply {
-                    showText = false
-                    scaleX = 0.68f
-                    scaleY = 0.68f
-                    minimumHeight = 0
-                    minHeight = 0
+                val switch = MaterialSwitch(activity, null, MaterialR.attr.materialSwitchStyle).apply {
                     isChecked = when (currentValue) {
                         is Boolean -> currentValue
                         is String -> currentValue.equals("true", ignoreCase = true)
@@ -497,14 +490,15 @@ class BootstrapSettingsFormController(
                         topMargin = dimen(R.dimen.sillydroid_field_vertical_spacing)
                     }
                 }
-                val inputLayout = TextInputLayout(
-                    ContextThemeWrapper(activity, R.style.Widget_SillyDroid_SettingsTextInputLayout_OutlinedBox)
+                val inputLayout = activity.createSettingsTextInputLayout(
+                    hintText = field.title,
+                    helperTextValue = field.summary,
+                    endIconMode = if (field.kind == TavernConfigFieldKind.PASSWORD) {
+                        TextInputLayout.END_ICON_PASSWORD_TOGGLE
+                    } else {
+                        TextInputLayout.END_ICON_NONE
+                    }
                 ).apply {
-                    hint = field.title
-                    helperText = field.summary
-                    boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
-                    setBoxCornerRadii(dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius))
-                    setPadding(0, 0, 0, 0)
                     if (field.kind == TavernConfigFieldKind.PASSWORD) {
                         endIconMode = TextInputLayout.END_ICON_PASSWORD_TOGGLE
                     }
@@ -513,9 +507,7 @@ class BootstrapSettingsFormController(
                         LinearLayout.LayoutParams.WRAP_CONTENT
                     )
                 }
-                val editText = TextInputEditText(
-                    ContextThemeWrapper(inputLayout.context, R.style.Widget_SillyDroid_SettingsTextInputEditText)
-                ).apply {
+                val editText = inputLayout.createSettingsEditText().apply {
                     setText(formatFieldValue(field, currentValue))
                     inputType = resolveInputType(field.kind)
                     setHorizontallyScrolling(false)
@@ -590,30 +582,22 @@ class BootstrapSettingsFormController(
             }
         }
 
-        val rowLayout = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.TOP
-        }
-
-        val inputLayout = TextInputLayout(
-            ContextThemeWrapper(activity, R.style.Widget_SillyDroid_SettingsTextInputLayout_OutlinedBox)
+        val inputLayout = activity.createSettingsTextInputLayout(
+            hintText = field.title,
+            helperTextValue = field.summary,
+            endIconMode = TextInputLayout.END_ICON_CUSTOM
         ).apply {
-            hint = field.title
-            helperText = field.summary
-            endIconMode = TextInputLayout.END_ICON_CLEAR_TEXT
-            boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
-            setBoxCornerRadii(dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius))
-            setPadding(0, 0, 0, 0)
             layoutParams = LinearLayout.LayoutParams(
-                0,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                1f
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
             )
+            // 端口随机动作属于输入框 trailing action，避免外部再拼一个按钮导致密度和内边距跑偏。
+            setEndIconDrawable(R.drawable.ic_port_random)
+            setEndIconContentDescription(R.string.bootstrap_settings_port_randomize)
+            isEndIconVisible = enabled
         }
 
-        val editText = TextInputEditText(
-            ContextThemeWrapper(inputLayout.context, R.style.Widget_SillyDroid_SettingsTextInputEditText)
-        ).apply {
+        val editText = inputLayout.createSettingsEditText().apply {
             setText(formatFieldValue(field, currentValue))
             inputType = resolveInputType(field.kind)
             isSingleLine = true
@@ -630,27 +614,7 @@ class BootstrapSettingsFormController(
         }
         inputLayout.addView(editText)
 
-        val randomButton = ImageButton(activity).apply {
-            layoutParams = LinearLayout.LayoutParams(dimen(R.dimen.sillydroid_icon_button_size), dimen(R.dimen.sillydroid_icon_button_size)).apply {
-                marginStart = dimen(R.dimen.sillydroid_space_md)
-                topMargin = dimen(R.dimen.sillydroid_field_vertical_spacing)
-            }
-            minimumWidth = 0
-            minimumHeight = 0
-            setPadding(dimen(R.dimen.sillydroid_icon_button_padding), dimen(R.dimen.sillydroid_icon_button_padding), dimen(R.dimen.sillydroid_icon_button_padding), dimen(R.dimen.sillydroid_icon_button_padding))
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dimenFloat(R.dimen.sillydroid_nested_card_radius)
-                setColor(resolveThemeColor(MaterialR.attr.colorSurfaceContainerHigh))
-                setStroke(dp(1), resolveThemeColor(MaterialR.attr.colorOutlineVariant))
-            }
-            setImageResource(R.drawable.ic_port_random)
-            imageTintList = ColorStateList.valueOf(resolveThemeColor(MaterialR.attr.colorOnSurfaceVariant))
-            contentDescription = activity.getString(R.string.bootstrap_settings_port_randomize)
-            isEnabled = enabled
-        }
-        randomButton.setOnClickListener {
+        inputLayout.setEndIconOnClickListener {
             val currentPort = editText.text?.toString()?.trim()?.toIntOrNull()
             val randomPort = findAvailableRandomPort(currentPort)
             editText.setText(randomPort.toString())
@@ -659,9 +623,7 @@ class BootstrapSettingsFormController(
             ensureViewVisible(editText)
         }
 
-        rowLayout.addView(inputLayout)
-        rowLayout.addView(randomButton)
-        fieldContainer.addView(rowLayout)
+        fieldContainer.addView(inputLayout)
         if (registerBinding) {
             fieldBindings[field.path] = TextBinding(
                 path = field.path,

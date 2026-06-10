@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
@@ -54,6 +55,8 @@ class BootstrapSettingsScreenController(
     private val floatingLogsSwitch: MaterialSwitch,
     private val backgroundOnlyModeSwitch: MaterialSwitch,
     private val backgroundHealthCheckSwitch: MaterialSwitch,
+    private val tavernRuntimePatchRow: View,
+    private val tavernRuntimePatchSwitch: MaterialSwitch,
     private val pullRefreshSwitch: MaterialSwitch,
     private val browserEngineRow: View,
     private val hostDisplayModeRow: View,
@@ -73,6 +76,8 @@ class BootstrapSettingsScreenController(
     private var bannerIsError = false
     private var busy = false
     private var hasUnsavedChanges = false
+    private var restartServicePending = false
+    private var bottomActionBarVisible = false
     private val scrollBottomBasePadding = scrollView.paddingBottom
     private val logsPanelBottomBasePadding = logsPanelView.paddingBottom
     private val terminalPanelBottomBasePadding = terminalPanelView.paddingBottom
@@ -103,6 +108,8 @@ class BootstrapSettingsScreenController(
         floatingLogsSwitch.isEnabled = !busy
         backgroundOnlyModeSwitch.isEnabled = !busy
         backgroundHealthCheckSwitch.isEnabled = !busy
+        tavernRuntimePatchRow.isEnabled = !busy
+        tavernRuntimePatchSwitch.isEnabled = !busy
         pullRefreshSwitch.isEnabled = !busy
         browserEngineRow.isEnabled = !busy
         hostDisplayModeRow.isEnabled = !busy
@@ -126,12 +133,20 @@ class BootstrapSettingsScreenController(
 
     fun updateDirtyState(hasUnsavedChanges: Boolean) {
         this.hasUnsavedChanges = hasUnsavedChanges
-        saveStartButton.text = if (hasUnsavedChanges) {
-            activity.getString(R.string.bootstrap_settings_save_start_dirty)
-        } else {
-            activity.getString(R.string.bootstrap_settings_save_start)
-        }
         syncSaveStartButtonState()
+    }
+
+    fun updateRestartServicePending(pending: Boolean) {
+        restartServicePending = pending
+        syncSaveStartButtonState()
+    }
+
+    fun hasPendingConfigurationChanges(): Boolean {
+        return hasUnsavedChanges
+    }
+
+    fun hasPendingRestartService(): Boolean {
+        return restartServicePending
     }
 
     fun focusValidationTab(isQuickField: Boolean) {
@@ -307,10 +322,10 @@ class BootstrapSettingsScreenController(
     private fun setupTabs() {
         if (tabLayout.tabCount == 0) {
             tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_data))
-            tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_extensions))
-            tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_logs))
-            tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_terminal))
             tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_settings))
+            tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_extensions))
+            tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_terminal))
+            tabLayout.addTab(tabLayout.newTab().setText(R.string.bootstrap_settings_tab_logs))
         }
 
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
@@ -361,8 +376,7 @@ class BootstrapSettingsScreenController(
         aboutPanelView.isVisible = tab == SettingsTab.ABOUT
         searchLayout.isVisible = tab == SettingsTab.SETTINGS
         quickActionsButton.isVisible = tab == SettingsTab.SETTINGS
-        // 保存按钮必须常驻在“酒馆设置”页签底部，不再跟随设置内容滚动。
-        bottomActionBarView.isVisible = tab == SettingsTab.SETTINGS
+        syncBottomActionBarVisibility()
         applyBottomInsets()
         syncPrimaryNavigationSelection()
         renderAboutEntryState()
@@ -407,6 +421,7 @@ class BootstrapSettingsScreenController(
             latestImeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
 
             topShellView.updatePadding(top = topShellTopPadding + systemBars.top)
+            syncBottomActionBarVisibility()
             applyBottomInsets()
 
             if (latestImeVisible) {
@@ -421,7 +436,22 @@ class BootstrapSettingsScreenController(
 
     private fun applyBottomInsets() {
         val settingsActionBarVisible = bottomActionBarView.isVisible
+        val terminalBottomInset = when {
+            latestImeVisible && selectedTab == SettingsTab.TERMINAL -> {
+                (latestImeBottomInset - latestSystemBarsBottomInset).coerceAtLeast(0)
+            }
+
+            latestImeVisible -> latestImeBottomInset
+            else -> latestSystemBarsBottomInset
+        }
+        val bottomActionBarInset = when {
+            latestImeVisible && selectedTab == SettingsTab.TERMINAL -> latestSystemBarsBottomInset
+            latestImeVisible -> latestImeBottomInset
+            else -> latestSystemBarsBottomInset
+        }
         // 设置页底部操作条可见时，由操作条自己承接底部 inset，避免滚动区再把按钮一起卷走。
+        // 终端页例外：TerminalView 已经按 IME 高度保留输入区，底部操作条不能再吃一份 IME，
+        // 否则有未保存修改时会把终端区域挤压到反复失焦，输入法表现成“闪一下又收回去”。
         scrollView.updatePadding(
             bottom = scrollBottomBasePadding + when {
                 latestImeVisible -> dimen(R.dimen.sillydroid_scroll_focus_spacing_top)
@@ -433,10 +463,10 @@ class BootstrapSettingsScreenController(
             bottom = logsPanelBottomBasePadding + if (latestImeVisible) latestImeBottomInset else latestSystemBarsBottomInset
         )
         terminalPanelView.updatePadding(
-            bottom = terminalPanelBottomBasePadding + if (latestImeVisible) latestImeBottomInset else latestSystemBarsBottomInset
+            bottom = terminalPanelBottomBasePadding + terminalBottomInset
         )
         bottomActionBarView.updatePadding(
-            bottom = bottomActionBarBottomBasePadding + if (latestImeVisible) latestImeBottomInset else latestSystemBarsBottomInset
+            bottom = bottomActionBarBottomBasePadding + bottomActionBarInset
         )
     }
 
@@ -544,8 +574,66 @@ class BootstrapSettingsScreenController(
     }
 
     private fun syncSaveStartButtonState() {
-        // 保存并启动现在只在“设置”页签内承担提交动作；没有脏数据时保持禁用，避免误触。
-        saveStartButton.isEnabled = !busy && hasUnsavedChanges
+        saveStartButton.text = activity.getString(
+            when {
+                hasUnsavedChanges -> R.string.bootstrap_settings_save_start_dirty
+                restartServicePending -> R.string.bootstrap_settings_host_runtime_patch_restart_service
+                else -> R.string.bootstrap_settings_save_start
+            }
+        )
+        saveStartButton.isEnabled = !busy && (hasUnsavedChanges || restartServicePending)
+        syncBottomActionBarVisibility()
+    }
+
+    private fun syncBottomActionBarVisibility() {
+        val hasPendingAction = hasUnsavedChanges || restartServicePending
+        // 终端页键盘打开时，底部保存/重启条如果继续占位，会和 IME 避让叠加出一大段空白；
+        // 用户收起键盘后它会按原 pending 状态恢复显示，不丢失“需要保存/重启”的入口。
+        val hideForTerminalIme = selectedTab == SettingsTab.TERMINAL && latestImeVisible
+        val shouldShow = hasPendingAction && !hideForTerminalIme
+        if (bottomActionBarVisible == shouldShow) {
+            return
+        }
+        bottomActionBarVisible = shouldShow
+        bottomActionBarView.animate().cancel()
+        if (!shouldShow && hideForTerminalIme) {
+            // IME 动画期间 WindowInsets 会逐帧派发；这里不能再叠加底部条隐藏动画，
+            // 否则每帧重启 alpha/translation 会拖慢键盘弹出并让终端输入区发卡。
+            bottomActionBarView.isVisible = false
+            bottomActionBarView.alpha = 0f
+            bottomActionBarView.translationY = 0f
+            applyBottomInsets()
+            return
+        }
+        if (shouldShow) {
+            bottomActionBarView.isVisible = true
+            bottomActionBarView.alpha = 0f
+            bottomActionBarView.post {
+                bottomActionBarView.translationY = bottomActionBarView.height.coerceAtLeast(1).toFloat()
+                bottomActionBarView.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(bottomActionBarAnimationMs)
+                    .setInterpolator(DecelerateInterpolator())
+                    .start()
+            }
+        } else {
+            val targetTranslationY = bottomActionBarView.height.coerceAtLeast(1).toFloat()
+            bottomActionBarView.animate()
+                .alpha(0f)
+                .translationY(targetTranslationY)
+                .setDuration(bottomActionBarAnimationMs)
+                .setInterpolator(DecelerateInterpolator())
+                .withEndAction {
+                    if (!bottomActionBarVisible) {
+                        bottomActionBarView.isVisible = false
+                        bottomActionBarView.translationY = 0f
+                        applyBottomInsets()
+                    }
+                }
+                .start()
+        }
+        applyBottomInsets()
     }
 
     private fun dimen(resId: Int): Int {
@@ -554,5 +642,9 @@ class BootstrapSettingsScreenController(
 
     private fun dp(value: Int): Int {
         return (value * activity.resources.displayMetrics.density).toInt()
+    }
+
+    private companion object {
+        private const val bottomActionBarAnimationMs = 180L
     }
 }

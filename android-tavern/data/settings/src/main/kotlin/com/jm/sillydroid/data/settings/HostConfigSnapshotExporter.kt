@@ -4,6 +4,7 @@ import android.content.Context
 import com.jm.sillydroid.core.model.settings.BrowserEngine
 import com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition
 import com.jm.sillydroid.core.model.settings.HostDisplayMode
+import com.jm.sillydroid.domain.bootstrap.RuntimePatchSettingOverrides
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 
 data class HostConfigSnapshot(
@@ -11,11 +12,16 @@ data class HostConfigSnapshot(
     val storageName: String,
     val snapshotPolicy: String,
     val servicePort: Int,
+    val nodeMaxOldSpaceMb: Int,
+    val nodeMaxSemiSpaceMb: Int,
     val hostDisplayMode: HostDisplayMode,
     val browserEngine: BrowserEngine,
     val browserZoomPercent: Int,
     val launchWebViewOnReady: Boolean,
     val backgroundHealthCheckEnabled: Boolean,
+    val tavernRuntimePatchEnabled: Boolean,
+    val tavernRuntimePatchDisabledModuleIds: Set<String>,
+    val tavernRuntimePatchSettingOverrides: RuntimePatchSettingOverrides,
     val webViewPullRefreshEnabled: Boolean,
     val debugDiagnosticsEnabled: Boolean,
     val unrestrictedFileImportSelectionEnabled: Boolean,
@@ -46,11 +52,16 @@ object HostConfigSnapshotExporter {
             storageName = BootstrapHostConfigStore.preferencesName,
             snapshotPolicy = explicitSnapshotPolicy,
             servicePort = hostPreferences.servicePort,
+            nodeMaxOldSpaceMb = hostPreferences.nodeMaxOldSpaceMb,
+            nodeMaxSemiSpaceMb = hostPreferences.nodeMaxSemiSpaceMb,
             hostDisplayMode = hostPreferences.hostDisplayMode,
             browserEngine = hostPreferences.browserEngine,
             browserZoomPercent = hostPreferences.browserZoomPercent,
             launchWebViewOnReady = hostPreferences.launchWebViewOnReady,
             backgroundHealthCheckEnabled = hostPreferences.backgroundHealthCheckEnabled,
+            tavernRuntimePatchEnabled = hostPreferences.tavernRuntimePatchEnabled,
+            tavernRuntimePatchDisabledModuleIds = hostPreferences.tavernRuntimePatchDisabledModuleIds,
+            tavernRuntimePatchSettingOverrides = hostPreferences.tavernRuntimePatchSettingOverrides,
             webViewPullRefreshEnabled = hostPreferences.webViewPullRefreshEnabled,
             debugDiagnosticsEnabled = hostPreferences.debugDiagnosticsEnabled,
             unrestrictedFileImportSelectionEnabled = hostPreferences.unrestrictedFileImportSelectionEnabled,

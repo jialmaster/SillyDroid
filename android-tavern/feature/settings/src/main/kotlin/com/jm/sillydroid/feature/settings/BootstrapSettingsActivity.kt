@@ -41,6 +41,7 @@ import com.jm.sillydroid.feature.settings.ui.extensions.BootstrapSettingsExtensi
 import com.jm.sillydroid.feature.settings.ui.form.BootstrapSettingsFormController
 import com.jm.sillydroid.feature.settings.ui.logs.BootstrapSettingsLogsCoordinator
 import com.jm.sillydroid.feature.settings.ui.screen.BootstrapSettingsScreenController
+import com.jm.sillydroid.feature.settings.ui.screen.RuntimePatchBottomSheetController
 import com.jm.sillydroid.feature.settings.ui.screen.SettingsActivityStateController
 import com.jm.sillydroid.feature.settings.ui.settings.BootstrapSettingsSettingsCoordinator
 import com.jm.sillydroid.feature.settings.ui.settings.BootstrapSettingsQuickActionsController
@@ -117,9 +118,15 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var floatingLogsSwitch: MaterialSwitch
     private lateinit var backgroundOnlyModeSwitch: MaterialSwitch
     private lateinit var backgroundHealthCheckSwitch: MaterialSwitch
+    private lateinit var tavernRuntimePatchRow: View
+    private lateinit var tavernRuntimePatchSwitch: MaterialSwitch
     private lateinit var pullRefreshSwitch: MaterialSwitch
     private lateinit var browserEngineRow: View
     private lateinit var browserEngineValueView: TextView
+    private lateinit var nodeMemoryLimitRow: View
+    private lateinit var nodeMemoryLimitValueView: TextView
+    private lateinit var nodeNewSpaceLimitRow: View
+    private lateinit var nodeNewSpaceLimitValueView: TextView
     private lateinit var displayModeRow: View
     private lateinit var displayModeValueView: TextView
     private lateinit var debugDiagnosticsSwitch: MaterialSwitch
@@ -185,11 +192,15 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private val settingsActivityViewModel by lazy {
         ViewModelProvider(
             this,
-            SettingsActivityViewModelFactory(hostConfigStore)
+            SettingsActivityViewModelFactory(
+                hostPreferencesRepository = hostConfigStore,
+                runtimeMetadataRepository = appGraph.runtimeMetadataRepository
+            )
         )[SettingsActivityViewModel::class.java]
     }
     private lateinit var screenController: BootstrapSettingsScreenController
     private lateinit var stateController: SettingsActivityStateController
+    private lateinit var runtimePatchBottomSheetController: RuntimePatchBottomSheetController
     private lateinit var aboutController: BootstrapSettingsAboutController
     private lateinit var formController: BootstrapSettingsFormController
     private lateinit var settingsCoordinator: BootstrapSettingsSettingsCoordinator
@@ -351,9 +362,15 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         floatingLogsSwitch = findViewById(R.id.bootstrapSettingsFloatingLogsSwitch)
         backgroundOnlyModeSwitch = findViewById(R.id.bootstrapSettingsBackgroundOnlyModeSwitch)
         backgroundHealthCheckSwitch = findViewById(R.id.bootstrapSettingsBackgroundHealthCheckSwitch)
+        tavernRuntimePatchRow = findViewById(R.id.bootstrapSettingsRuntimePatchRow)
+        tavernRuntimePatchSwitch = findViewById(R.id.bootstrapSettingsRuntimePatchSwitch)
         pullRefreshSwitch = findViewById(R.id.bootstrapSettingsPullRefreshSwitch)
         browserEngineRow = findViewById(R.id.bootstrapSettingsBrowserEngineRow)
         browserEngineValueView = findViewById(R.id.bootstrapSettingsBrowserEngineValue)
+        nodeMemoryLimitRow = findViewById(R.id.bootstrapSettingsNodeMemoryLimitRow)
+        nodeMemoryLimitValueView = findViewById(R.id.bootstrapSettingsNodeMemoryLimitValue)
+        nodeNewSpaceLimitRow = findViewById(R.id.bootstrapSettingsNodeNewSpaceLimitRow)
+        nodeNewSpaceLimitValueView = findViewById(R.id.bootstrapSettingsNodeNewSpaceLimitValue)
         displayModeRow = findViewById(R.id.bootstrapSettingsDisplayModeRow)
         displayModeValueView = findViewById(R.id.bootstrapSettingsDisplayModeValue)
         debugDiagnosticsSwitch = findViewById(R.id.bootstrapSettingsDebugDiagnosticsSwitch)
@@ -433,6 +450,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             floatingLogsSwitch = floatingLogsSwitch,
             backgroundOnlyModeSwitch = backgroundOnlyModeSwitch,
             backgroundHealthCheckSwitch = backgroundHealthCheckSwitch,
+            tavernRuntimePatchRow = tavernRuntimePatchRow,
+            tavernRuntimePatchSwitch = tavernRuntimePatchSwitch,
             pullRefreshSwitch = pullRefreshSwitch,
             browserEngineRow = browserEngineRow,
             hostDisplayModeRow = displayModeRow,
@@ -446,6 +465,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             clearBrowserDataButton = clearBrowserDataButton,
             saveStartButton = saveStartButton,
             busyLockedControls = listOf(
+                nodeMemoryLimitRow,
+                nodeNewSpaceLimitRow,
                 extensionsInstallButton,
                 extensionsBatchDeleteButton,
                 extensionsReloadButton,
@@ -476,19 +497,34 @@ class BootstrapSettingsActivity : AppCompatActivity() {
                 }
             }
         )
+        runtimePatchBottomSheetController = RuntimePatchBottomSheetController(
+            activity = this,
+            viewModel = settingsActivityViewModel,
+            onRestartServiceRequested = {
+                updateResultFlags(shouldStartBootstrap = true)
+                finish()
+            }
+        )
         stateController = SettingsActivityStateController(
             activity = this,
             viewModel = settingsActivityViewModel,
             floatingLogsSwitch = floatingLogsSwitch,
             backgroundOnlyModeSwitch = backgroundOnlyModeSwitch,
             backgroundHealthCheckSwitch = backgroundHealthCheckSwitch,
+            tavernRuntimePatchRow = tavernRuntimePatchRow,
+            tavernRuntimePatchSwitch = tavernRuntimePatchSwitch,
             pullRefreshSwitch = pullRefreshSwitch,
             browserEngineRow = browserEngineRow,
             browserEngineValueView = browserEngineValueView,
+            nodeMemoryLimitRow = nodeMemoryLimitRow,
+            nodeMemoryLimitValueView = nodeMemoryLimitValueView,
+            nodeNewSpaceLimitRow = nodeNewSpaceLimitRow,
+            nodeNewSpaceLimitValueView = nodeNewSpaceLimitValueView,
             hostDisplayModeRow = displayModeRow,
             hostDisplayModeValueView = displayModeValueView,
             debugDiagnosticsSwitch = debugDiagnosticsSwitch,
             unrestrictedFileImportSelectionSwitch = unrestrictedFileImportSelectionSwitch,
+            showRuntimePatchBottomSheet = runtimePatchBottomSheetController::show,
             applyHostDisplayMode = ::applySettingsSurfaceSystemBars,
             renderResultFlags = ::renderResultFlags
         )

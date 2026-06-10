@@ -44,7 +44,10 @@ internal class SettingsTerminalViewClient(
                 refreshInputConnection()
                 showKeyboardIfRequested()
             } else {
-                hideSoftKeyboard()
+                // 终端页下方的保存/重启操作条出现时会触发一次布局和焦点检查；
+                // 若这里立刻 hide IME，会把刚 show 的键盘抵消成“闪一下又收回去”。
+                // 真正离开终端页、销毁页面或主动 detach 时仍由 detachFromTerminalPage() 统一隐藏。
+                terminalView.removeCallbacks(showKeyboardRunnable)
             }
         }
     }

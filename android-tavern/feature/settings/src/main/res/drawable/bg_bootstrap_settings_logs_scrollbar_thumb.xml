@@ -4,7 +4,7 @@
     android:insetRight="@dimen/sillydroid_logs_scrollbar_visual_inset">
 
     <shape android:shape="rectangle">
-        <solid android:color="?attr/colorOutlineVariant" />
+        <solid android:color="#66828A96" />
         <corners android:radius="@dimen/sillydroid_logs_scrollbar_radius" />
     </shape>
 </inset>

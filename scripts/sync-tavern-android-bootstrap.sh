@@ -320,6 +320,61 @@ if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
     exit 1
 fi
 
+# V8 老生代堆上限由宿主设置页注入：TAVERN_NODE_MAX_OLD_SPACE_MB 为正数时才追加
+# --max-old-space-size，0/未设表示交给 V8 自适应（保持历史默认行为）。
+# 必须在这里显式拼进 NODE_OPTIONS，否则宿主 ProcessBuilder 之外 export 的环境进不到本进程，
+# 用户在别处设置的内存上限会“看起来没反应”。
+case "${TAVERN_NODE_MAX_OLD_SPACE_MB:-0}" in
+    ''|*[!0-9]*)
+        ;;
+    0)
+        ;;
+    *)
+        NODE_OPTIONS="--max-old-space-size=${TAVERN_NODE_MAX_OLD_SPACE_MB} ${NODE_OPTIONS:-}"
+        export NODE_OPTIONS
+        ;;
+esac
+
+# V8 新生代 semi-space 上限同样由宿主设置页注入：TAVERN_NODE_MAX_SEMI_SPACE_MB 为正数时
+# 才追加 --max-semi-space-size，0/未设表示交给 V8 自适应。调大新生代可降低 Scavenge（小 GC）
+# 频率，长聊天/大列表场景用内存换 GC 频率缓解周期性卡顿。
+case "${TAVERN_NODE_MAX_SEMI_SPACE_MB:-0}" in
+    ''|*[!0-9]*)
+        ;;
+    0)
+        ;;
+    *)
+        NODE_OPTIONS="--max-semi-space-size=${TAVERN_NODE_MAX_SEMI_SPACE_MB} ${NODE_OPTIONS:-}"
+        export NODE_OPTIONS
+        ;;
+esac
+
+# libuv 线程池（fs/dns/crypto/zlib 等阻塞型 IO）默认固定为 4，不随 CPU 核数变化。
+# SillyTavern 冷启动要批量读取角色卡 PNG、扫描扩展目录，4 个线程容易排队拖慢吞吐。
+# 这里仅在用户未显式设置 UV_THREADPOOL_SIZE 时，按设备 CPU 核数自动取一个更合理的值；
+# clamp 到 4..16，避免单核机器退化到比默认更小、巨核机器设过大反而多占内存。
+if [ -z "${UV_THREADPOOL_SIZE:-}" ]; then
+    uv_cpu_count="$(nproc 2>/dev/null || true)"
+    case "$uv_cpu_count" in
+        ''|*[!0-9]*)
+            uv_cpu_count="$(grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 0)"
+            ;;
+    esac
+    case "$uv_cpu_count" in
+        ''|*[!0-9]*|0)
+            # 探测不到核数就不设，沿用 Node 默认 4。
+            ;;
+        *)
+            if [ "$uv_cpu_count" -lt 4 ]; then
+                uv_cpu_count=4
+            elif [ "$uv_cpu_count" -gt 16 ]; then
+                uv_cpu_count=16
+            fi
+            export UV_THREADPOOL_SIZE="$uv_cpu_count"
+            ;;
+    esac
+fi
+
 # 监听开关与监听地址必须交由用户 config.yaml 决定，不能在宿主入口里写死；
 # 否则“启用外部访问”会被 CLI 参数覆盖，最终只能监听 127.0.0.1。
 exec "$NODE_BIN" server.js \

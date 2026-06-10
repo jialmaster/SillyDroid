@@ -1,0 +1,54 @@
+{
+  "id": "character-all-limited-concurrency",
+  "title": "角色索引并发限制",
+  "version": "0.1.6",
+  "description": "限制角色列表首次索引的并发数量，降低大量角色卡场景下的内存峰值。",
+  "entrypoint": "index.cjs",
+  "supportedTavernVersions": [
+    "1.18.0"
+  ],
+  "defaultPresets": [
+    "performance"
+  ],
+  "settings": [
+    {
+      "key": "concurrency",
+      "type": "select",
+      "title": "角色索引并发",
+      "description": "控制 /api/characters/all 首次索引角色卡时同时处理的数量。auto 会按 CPU 线程自动选择并限制上限；数值越高越快但内存峰值越高。",
+      "defaultValue": "auto",
+      "unit": "tasks",
+      "version": "1",
+      "restartRequired": true,
+      "important": true,
+      "options": [
+        {
+          "value": "auto",
+          "label": "自动",
+          "description": "按设备可用 CPU 线程自动选择。"
+        },
+        {
+          "value": "2",
+          "label": "2",
+          "description": "更保守，适合低内存或容易 OOM 的设备。"
+        },
+        {
+          "value": "4",
+          "label": "4",
+          "description": "平衡速度和内存，适合大多数中端设备。"
+        },
+        {
+          "value": "8",
+          "label": "8",
+          "description": "更激进，适合内存充足和 CPU 较强的设备。"
+        }
+      ]
+    }
+  ],
+  "targetFiles": [
+    {
+      "path": "src/endpoints/characters.js",
+      "sha256": "255751D3BE5FE42FAA993882514A3D3DA9A19CB5E9C1B7E9883311D84F870B70"
+    }
+  ]
+}

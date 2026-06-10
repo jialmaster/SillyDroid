@@ -1,6 +1,5 @@
 package com.jm.sillydroid.feature.settings.ui.extensions
 
-import android.content.res.ColorStateList
 import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
@@ -8,7 +7,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageButton
-import android.widget.ImageView
 import android.widget.LinearLayout.LayoutParams
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -38,9 +36,10 @@ import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
-import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import com.jm.sillydroid.core.common.DispatcherProvider
+import com.jm.sillydroid.feature.settings.ui.createSettingsEditText
+import com.jm.sillydroid.feature.settings.ui.createSettingsDenseIconButton
+import com.jm.sillydroid.feature.settings.ui.createSettingsTextInputLayout
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.google.android.material.R as MaterialR
@@ -569,25 +568,12 @@ class BootstrapSettingsExtensionsCoordinator(
         tintAttr: Int = MaterialR.attr.colorOnSurfaceVariant,
         onClick: () -> Unit
     ): ImageButton {
-        val size = dimen(R.dimen.sillydroid_settings_dense_icon_button_size)
-        val padding = dimen(R.dimen.sillydroid_settings_dense_icon_button_padding)
-        val backgroundAttr = TypedValue()
-        activity.theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, backgroundAttr, true)
-
-        return ImageButton(activity).apply {
-            layoutParams = LinearLayout.LayoutParams(size, size)
-            minimumWidth = 0
-            minimumHeight = 0
-            setPadding(padding, padding, padding, padding)
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            setBackgroundResource(backgroundAttr.resourceId)
-            setImageResource(iconResId)
-            imageTintList = ColorStateList.valueOf(resolveColor(tintAttr))
-            contentDescription = activity.getString(contentDescriptionResId)
-            setOnClickListener {
-                onClick()
-            }
-        }
+        return activity.createSettingsDenseIconButton(
+            iconResId = iconResId,
+            contentDescriptionResId = contentDescriptionResId,
+            tintAttr = tintAttr,
+            onClick = onClick
+        )
     }
 
     private fun deleteExtension(extension: ManagedExtension) {
@@ -1037,16 +1023,16 @@ class BootstrapSettingsExtensionsCoordinator(
             return
         }
 
-        val inputLayout = TextInputLayout(activity).apply {
-            hint = activity.getString(R.string.bootstrap_settings_extensions_install_prompt_hint)
-            boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
-            setBoxCornerRadii(dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius), dimenFloat(R.dimen.sillydroid_nested_card_radius))
+        val inputLayout = activity.createSettingsTextInputLayout(
+            hintText = activity.getString(R.string.bootstrap_settings_extensions_install_prompt_hint),
+            helperTextValue = null
+        ).apply {
             layoutParams = LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
-        val inputView = TextInputEditText(activity).apply {
+        val inputView = inputLayout.createSettingsEditText().apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_TEXT_FLAG_MULTI_LINE
             setSingleLine(false)
             gravity = android.view.Gravity.TOP or android.view.Gravity.START
@@ -1054,9 +1040,6 @@ class BootstrapSettingsExtensionsCoordinator(
             isVerticalScrollBarEnabled = false
             minLines = 5
             maxLines = 10
-            textSize = 13f
-            minHeight = dimen(R.dimen.sillydroid_input_min_height)
-            setPadding(dimen(R.dimen.sillydroid_control_padding_horizontal), dimen(R.dimen.sillydroid_control_padding_vertical), dimen(R.dimen.sillydroid_control_padding_horizontal), dimen(R.dimen.sillydroid_control_padding_vertical))
         }
         inputLayout.addView(inputView)
 

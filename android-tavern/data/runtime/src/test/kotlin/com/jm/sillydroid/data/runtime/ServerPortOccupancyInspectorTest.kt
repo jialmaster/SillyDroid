@@ -93,6 +93,7 @@ class ServerPortOccupancyInspectorTest {
         )
 
         assertTrue(result is ServerPortOccupancy.OccupiedByOtherProcess)
-        assertTrue((result as ServerPortOccupancy.OccupiedByOtherProcess).details.contains("其他应用或系统进程"))
+        assertTrue((result as ServerPortOccupancy.OccupiedByOtherProcess).details.contains("不是本 App 启动"))
+        assertTrue(result.details.contains("修改端口"))
     }
 }

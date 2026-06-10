@@ -140,14 +140,9 @@ class BootstrapSettingsQuickActionsController(
                                 }
                             )
                             addView(
-                                MaterialSwitch(activity).apply {
+                                MaterialSwitch(activity, null, MaterialR.attr.materialSwitchStyle).apply {
                                     lanAccessSwitch = this
                                     isChecked = listenEnabled
-                                    showText = false
-                                    minWidth = 0
-                                    minHeight = 0
-                                    scaleX = 0.68f
-                                    scaleY = 0.68f
                                 }
                             )
                         }

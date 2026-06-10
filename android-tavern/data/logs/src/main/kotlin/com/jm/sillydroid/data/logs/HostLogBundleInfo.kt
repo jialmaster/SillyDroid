@@ -7,6 +7,8 @@ import android.webkit.WebView
 import com.jm.sillydroid.data.runtime.AssetRuntimeMetadataRepository
 import com.jm.sillydroid.data.settings.HostConfigSnapshot
 import com.jm.sillydroid.data.settings.HostConfigSnapshotExporter
+import com.jm.sillydroid.domain.bootstrap.RuntimePatchMetadataSnapshot
+import com.jm.sillydroid.domain.bootstrap.RuntimePatchModuleMetadataSnapshot
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -34,6 +36,7 @@ internal data class HostLogBundleBaseInfo(
     val webViewVersionCode: String,
     val rootfsManifestRawJson: String?,
     val serverManifestRawJson: String?,
+    val runtimePatchMetadataSnapshot: RuntimePatchMetadataSnapshot?,
     val hostConfigSnapshot: HostConfigSnapshot,
     val rootfsVersion: String,
     val serverPayloadVersion: String
@@ -95,6 +98,7 @@ internal object HostLogBundleBaseInfoResolver {
             webViewVersionCode = webViewPackageInfo?.longVersionCode?.toString().orEmpty().ifBlank { unknownValue },
             rootfsManifestRawJson = runtimeMetadataRepository.readRootfsManifestRawJson(),
             serverManifestRawJson = runtimeMetadataRepository.readServerManifestRawJson(),
+            runtimePatchMetadataSnapshot = runtimeMetadataRepository.resolveRuntimePatchMetadataSnapshot(),
             hostConfigSnapshot = hostConfigSnapshot,
             rootfsVersion = normalizeOrUnknown(runtimeMetadataRepository.resolveRuntimeVersionLabel()),
             serverPayloadVersion = normalizeOrUnknown(
@@ -164,9 +168,15 @@ internal object HostLogBundleInfoFormatter {
             appendLine("serverPayloadVersion=${baseInfo.serverPayloadVersion}")
             appendLine("rootfsManifestIncluded=${baseInfo.rootfsManifestRawJson != null}")
             appendLine("serverManifestIncluded=${baseInfo.serverManifestRawJson != null}")
+            appendRuntimePatchText(baseInfo.runtimePatchMetadataSnapshot)
             appendLine("hostConfigSnapshotPolicy=${baseInfo.hostConfigSnapshot.snapshotPolicy}")
+            appendLine("nodeMaxOldSpaceMb=${baseInfo.hostConfigSnapshot.nodeMaxOldSpaceMb}")
+            appendLine("nodeMaxSemiSpaceMb=${baseInfo.hostConfigSnapshot.nodeMaxSemiSpaceMb}")
             appendLine("browserEngine=${baseInfo.hostConfigSnapshot.browserEngine.name}")
             appendLine("browserZoomPercent=${baseInfo.hostConfigSnapshot.browserZoomPercent}")
+            appendLine("tavernRuntimePatchEnabled=${baseInfo.hostConfigSnapshot.tavernRuntimePatchEnabled}")
+            appendLine("tavernRuntimePatchDisabledModuleIds=${baseInfo.hostConfigSnapshot.tavernRuntimePatchDisabledModuleIds.sorted().joinToString(",")}")
+            appendLine("tavernRuntimePatchSettingOverrides=${formatRuntimePatchSettingOverrides(baseInfo.hostConfigSnapshot.tavernRuntimePatchSettingOverrides)}")
             appendLine("crashLogUploadEnabled=${baseInfo.hostConfigSnapshot.crashLogUploadEnabled}")
             appendLine("crashLogUploadPromptConsumed=${baseInfo.hostConfigSnapshot.crashLogUploadPromptConsumed}")
             appendLine("logFileCount=${summary.fileCount}")
@@ -219,17 +229,23 @@ internal object HostLogBundleInfoFormatter {
             appendLine("    \"rootfsVersion\": ${jsonString(baseInfo.rootfsVersion)},")
             appendLine("    \"serverPayloadVersion\": ${jsonString(baseInfo.serverPayloadVersion)},")
             appendLine("    \"rootfsManifest\": ${jsonRawOrNull(baseInfo.rootfsManifestRawJson)},")
-            appendLine("    \"serverManifest\": ${jsonRawOrNull(baseInfo.serverManifestRawJson)}")
+            appendLine("    \"serverManifest\": ${jsonRawOrNull(baseInfo.serverManifestRawJson)},")
+            appendLine("    \"runtimePatch\": ${jsonRuntimePatchMetadata(baseInfo.runtimePatchMetadataSnapshot)}")
             appendLine("  },")
             appendLine("  \"hostConfig\": {")
             appendLine("    \"storageBackend\": ${jsonString(baseInfo.hostConfigSnapshot.storageBackend)},")
             appendLine("    \"storageName\": ${jsonString(baseInfo.hostConfigSnapshot.storageName)},")
             appendLine("    \"snapshotPolicy\": ${jsonString(baseInfo.hostConfigSnapshot.snapshotPolicy)},")
             appendLine("    \"servicePort\": ${baseInfo.hostConfigSnapshot.servicePort},")
+            appendLine("    \"nodeMaxOldSpaceMb\": ${baseInfo.hostConfigSnapshot.nodeMaxOldSpaceMb},")
+            appendLine("    \"nodeMaxSemiSpaceMb\": ${baseInfo.hostConfigSnapshot.nodeMaxSemiSpaceMb},")
             appendLine("    \"browserEngine\": ${jsonString(baseInfo.hostConfigSnapshot.browserEngine.name)},")
             appendLine("    \"browserZoomPercent\": ${baseInfo.hostConfigSnapshot.browserZoomPercent},")
             appendLine("    \"launchWebViewOnReady\": ${baseInfo.hostConfigSnapshot.launchWebViewOnReady},")
             appendLine("    \"backgroundHealthCheckEnabled\": ${baseInfo.hostConfigSnapshot.backgroundHealthCheckEnabled},")
+            appendLine("    \"tavernRuntimePatchEnabled\": ${baseInfo.hostConfigSnapshot.tavernRuntimePatchEnabled},")
+            appendLine("    \"tavernRuntimePatchDisabledModuleIds\": ${jsonStringArray(baseInfo.hostConfigSnapshot.tavernRuntimePatchDisabledModuleIds.sorted())},")
+            appendLine("    \"tavernRuntimePatchSettingOverrides\": ${jsonRuntimePatchSettingOverrides(baseInfo.hostConfigSnapshot.tavernRuntimePatchSettingOverrides)},")
             appendLine("    \"webViewPullRefreshEnabled\": ${baseInfo.hostConfigSnapshot.webViewPullRefreshEnabled},")
             appendLine("    \"debugDiagnosticsEnabled\": ${baseInfo.hostConfigSnapshot.debugDiagnosticsEnabled},")
             appendLine("    \"terminalFontSizePx\": ${baseInfo.hostConfigSnapshot.terminalFontSizePx},")
@@ -280,8 +296,188 @@ internal object HostLogBundleInfoFormatter {
         )
     }
 
+    private fun StringBuilder.appendRuntimePatchText(metadata: RuntimePatchMetadataSnapshot?) {
+        appendLine("runtimePatchManifestIncluded=${metadata != null}")
+        if (metadata == null) {
+            return
+        }
+        appendLine("runtimePatchSchemaVersion=${metadata.schemaVersion ?: unknownValue}")
+        appendLine("runtimePatchFrameworkId=${metadata.frameworkId.ifBlank { unknownValue }}")
+        appendLine("runtimePatchFrameworkVersion=${metadata.frameworkVersion.ifBlank { unknownValue }}")
+        appendLine("runtimePatchCompatibleTavernVersions=${metadata.compatibleTavernVersions.joinToString(",")}")
+        appendLine("runtimePatchDefaultPreset=${metadata.defaultPreset.ifBlank { unknownValue }}")
+        appendLine("runtimePatchModuleCount=${metadata.modules.size}")
+        metadata.modules.forEach { module ->
+            appendLine(
+                buildString {
+                    append("runtimePatchModule=")
+                    append(module.id.ifBlank { unknownValue })
+                    append(" title=")
+                    append(module.title.ifBlank { unknownValue })
+                    append(" version=")
+                    append(module.version.ifBlank { unknownValue })
+                    append(" supportedTavernVersions=")
+                    append(module.supportedTavernVersions.joinToString(","))
+                    append(" defaultPresets=")
+                    append(module.defaultPresets.joinToString(","))
+                    append(" targetFiles=")
+                    append(module.targetFiles.joinToString(";") { targetFile ->
+                        listOf(targetFile.path, targetFile.sha256)
+                            .filter { value -> value.isNotBlank() }
+                            .joinToString("@")
+                    })
+                    append(" settings=")
+                    append(module.settings.joinToString(";") { setting ->
+                        listOf(setting.key, setting.type, setting.version, "default=${setting.defaultValue}", "important=${setting.important}")
+                            .filter { value -> value.isNotBlank() }
+                            .joinToString(":")
+                    })
+                    append(" manifestIncluded=")
+                    append(module.manifestIncluded)
+                }
+            )
+        }
+    }
+
     private fun jsonStringArray(values: List<String>): String {
         return values.joinToString(prefix = "[", postfix = "]") { value -> jsonString(value) }
+    }
+
+    private fun jsonRuntimePatchMetadata(metadata: RuntimePatchMetadataSnapshot?): String {
+        if (metadata == null) {
+            return """{"manifestIncluded": false}"""
+        }
+        return buildString {
+            append('{')
+            append("\"manifestIncluded\": true, ")
+            append("\"schemaVersion\": ")
+            append(metadata.schemaVersion?.toString() ?: "null")
+            append(", \"frameworkId\": ")
+            append(jsonString(metadata.frameworkId))
+            append(", \"frameworkVersion\": ")
+            append(jsonString(metadata.frameworkVersion))
+            append(", \"compatibleTavernVersions\": ")
+            append(jsonStringArray(metadata.compatibleTavernVersions))
+            append(", \"defaultPreset\": ")
+            append(jsonString(metadata.defaultPreset))
+            append(", \"modules\": ")
+            append(jsonRuntimePatchModules(metadata.modules))
+            append('}')
+        }
+    }
+
+    private fun jsonRuntimePatchModules(modules: List<RuntimePatchModuleMetadataSnapshot>): String {
+        return modules.joinToString(prefix = "[", postfix = "]") { module ->
+            buildString {
+                append('{')
+                append("\"id\": ")
+                append(jsonString(module.id))
+                append(", \"title\": ")
+                append(jsonString(module.title))
+                append(", \"version\": ")
+                append(jsonString(module.version))
+                append(", \"description\": ")
+                append(jsonString(module.description))
+                append(", \"supportedTavernVersions\": ")
+                append(jsonStringArray(module.supportedTavernVersions))
+                append(", \"defaultPresets\": ")
+                append(jsonStringArray(module.defaultPresets))
+                append(", \"targetFiles\": ")
+                append(jsonRuntimePatchTargetFiles(module.targetFiles))
+                append(", \"settings\": ")
+                append(jsonRuntimePatchSettings(module.settings))
+                append(", \"manifestIncluded\": ")
+                append(module.manifestIncluded)
+                append('}')
+            }
+        }
+    }
+
+    private fun jsonRuntimePatchSettings(
+        settings: List<com.jm.sillydroid.domain.bootstrap.RuntimePatchSettingMetadataSnapshot>
+    ): String {
+        return settings.joinToString(prefix = "[", postfix = "]") { setting ->
+            buildString {
+                append('{')
+                append("\"key\": ")
+                append(jsonString(setting.key))
+                append(", \"type\": ")
+                append(jsonString(setting.type))
+                append(", \"title\": ")
+                append(jsonString(setting.title))
+                append(", \"description\": ")
+                append(jsonString(setting.description))
+                append(", \"defaultValue\": ")
+                append(jsonString(setting.defaultValue))
+                append(", \"unit\": ")
+                append(jsonString(setting.unit))
+                append(", \"version\": ")
+                append(jsonString(setting.version))
+                append(", \"restartRequired\": ")
+                append(setting.restartRequired)
+                append(", \"important\": ")
+                append(setting.important)
+                append(", \"min\": ")
+                append(setting.min?.toString() ?: "null")
+                append(", \"max\": ")
+                append(setting.max?.toString() ?: "null")
+                append(", \"step\": ")
+                append(setting.step?.toString() ?: "null")
+                append(", \"options\": ")
+                append(jsonRuntimePatchSettingOptions(setting.options))
+                append('}')
+            }
+        }
+    }
+
+    private fun jsonRuntimePatchSettingOptions(
+        options: List<com.jm.sillydroid.domain.bootstrap.RuntimePatchSettingOptionSnapshot>
+    ): String {
+        return options.joinToString(prefix = "[", postfix = "]") { option ->
+            buildString {
+                append('{')
+                append("\"value\": ")
+                append(jsonString(option.value))
+                append(", \"label\": ")
+                append(jsonString(option.label))
+                append(", \"description\": ")
+                append(jsonString(option.description))
+                append('}')
+            }
+        }
+    }
+
+    private fun jsonRuntimePatchTargetFiles(targetFiles: List<com.jm.sillydroid.domain.bootstrap.RuntimePatchTargetFileSnapshot>): String {
+        return targetFiles.joinToString(prefix = "[", postfix = "]") { targetFile ->
+            buildString {
+                append('{')
+                append("\"path\": ")
+                append(jsonString(targetFile.path))
+                append(", \"sha256\": ")
+                append(jsonString(targetFile.sha256))
+                append('}')
+            }
+        }
+    }
+
+    private fun formatRuntimePatchSettingOverrides(overrides: Map<String, Map<String, String>>): String {
+        return overrides.toSortedMap()
+            .flatMap { (moduleId, settings) ->
+                settings.toSortedMap().map { (settingKey, value) -> "$moduleId.$settingKey=$value" }
+            }
+            .joinToString(",")
+    }
+
+    private fun jsonRuntimePatchSettingOverrides(overrides: Map<String, Map<String, String>>): String {
+        return overrides.toSortedMap().entries.joinToString(prefix = "{", postfix = "}") { (moduleId, settings) ->
+            buildString {
+                append(jsonString(moduleId))
+                append(": ")
+                append(settings.toSortedMap().entries.joinToString(prefix = "{", postfix = "}") { (settingKey, value) ->
+                    "${jsonString(settingKey)}: ${jsonString(value)}"
+                })
+            }
+        }
     }
 
     private fun jsonRawOrNull(value: String?): String {

@@ -22,7 +22,6 @@
 
         <!-- 终端设置项沿用启动设置页的嵌套卡片规格，避免弹窗里混入原生控件默认高度后看起来一块大一块小。 -->
         <com.google.android.material.card.MaterialCardView
-            style="@style/Widget.SillyDroid.SettingsNestedCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/sillydroid_space_md">
@@ -70,7 +69,6 @@
         </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.card.MaterialCardView
-            style="@style/Widget.SillyDroid.SettingsNestedCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/sillydroid_space_md">
@@ -98,17 +96,11 @@
                     android:id="@+id/terminalSettingsCursorBlinkSwitch"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/sillydroid_space_md"
-                    android:minHeight="0dp"
-                    android:minWidth="0dp"
-                    android:scaleX="0.68"
-                    android:scaleY="0.68"
-                    android:showText="false" />
+                    android:layout_marginStart="@dimen/sillydroid_space_md" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.card.MaterialCardView
-            style="@style/Widget.SillyDroid.SettingsNestedCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/sillydroid_space_md">
@@ -136,12 +128,7 @@
                     android:id="@+id/terminalSettingsExtraKeysSwitch"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/sillydroid_space_md"
-                    android:minHeight="0dp"
-                    android:minWidth="0dp"
-                    android:scaleX="0.68"
-                    android:scaleY="0.68"
-                    android:showText="false" />
+                    android:layout_marginStart="@dimen/sillydroid_space_md" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -155,7 +142,6 @@
             android:textStyle="bold" />
 
         <com.google.android.material.card.MaterialCardView
-            style="@style/Widget.SillyDroid.SettingsNestedCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/sillydroid_space_xs_half">

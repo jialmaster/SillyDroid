@@ -44,14 +44,25 @@
         <item name="android:textStyle">bold</item>
     </style>
 
-    <style name="Widget.SillyDroid.SettingsTextInputLayout.OutlinedBox" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+    <style name="ThemeOverlay.SillyDroid.SettingsTextInputEditText" parent="ThemeOverlay.Material3.TextInputEditText.OutlinedBox.Dense">
+        <item name="android:editTextStyle">@style/Widget.SillyDroid.SettingsTextInputEditText</item>
+        <item name="editTextStyle">@style/Widget.SillyDroid.SettingsTextInputEditText</item>
+    </style>
+
+    <style name="Widget.SillyDroid.SettingsTextInputLayout.OutlinedBox" parent="Widget.Material3.TextInputLayout.OutlinedBox.Dense">
+        <item name="android:minHeight">@dimen/sillydroid_control_min_height</item>
+        <item name="materialThemeOverlay">@style/ThemeOverlay.SillyDroid.SettingsTextInputEditText</item>
         <item name="boxStrokeWidth">1dp</item>
         <item name="boxStrokeWidthFocused">2dp</item>
-        <item name="boxCollapsedPaddingTop">2dp</item>
+        <item name="boxCollapsedPaddingTop">0dp</item>
         <item name="boxCornerRadiusTopStart">@dimen/sillydroid_nested_card_radius</item>
         <item name="boxCornerRadiusTopEnd">@dimen/sillydroid_nested_card_radius</item>
         <item name="boxCornerRadiusBottomStart">@dimen/sillydroid_nested_card_radius</item>
         <item name="boxCornerRadiusBottomEnd">@dimen/sillydroid_nested_card_radius</item>
+        <item name="endIconMinSize">@dimen/sillydroid_settings_dense_icon_button_size</item>
+        <item name="endIconScaleType">centerInside</item>
+        <item name="startIconMinSize">@dimen/sillydroid_settings_dense_icon_button_size</item>
+        <item name="startIconScaleType">centerInside</item>
         <item name="helperTextTextAppearance">@style/TextAppearance.SillyDroid.SettingsMeta</item>
         <item name="hintTextAppearance">@style/TextAppearance.SillyDroid.SettingsMeta</item>
     </style>
@@ -70,6 +81,20 @@
         <item name="cardElevation">0dp</item>
         <item name="strokeColor">?attr/colorOutlineVariant</item>
         <item name="strokeWidth">1dp</item>
+    </style>
+
+    <style name="Widget.SillyDroid.SettingsLinkCard" parent="Widget.SillyDroid.SettingsNestedCard">
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="rippleColor">?attr/colorPrimary</item>
+    </style>
+
+    <style name="Widget.SillyDroid.SettingsSwitch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:scaleX">0.62</item>
+        <item name="android:scaleY">0.62</item>
+        <item name="showText">false</item>
     </style>
 
     <style name="Widget.SillyDroid.SettingsButton" parent="Widget.Material3.Button">
@@ -96,10 +121,10 @@
 
     <style name="Widget.SillyDroid.SettingsTextInputEditText" parent="Widget.Material3.TextInputEditText.OutlinedBox">
         <item name="android:minHeight">@dimen/sillydroid_input_min_height</item>
-        <item name="android:paddingStart">@dimen/sillydroid_control_padding_horizontal</item>
-        <item name="android:paddingEnd">@dimen/sillydroid_control_padding_horizontal</item>
-        <item name="android:paddingTop">@dimen/sillydroid_control_padding_vertical</item>
-        <item name="android:paddingBottom">@dimen/sillydroid_control_padding_vertical</item>
+        <item name="android:paddingStart">@dimen/sillydroid_input_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/sillydroid_input_padding_horizontal</item>
+        <item name="android:paddingTop">@dimen/sillydroid_input_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/sillydroid_input_padding_vertical</item>
         <item name="android:textSize">12sp</item>
     </style>
 </resources>

@@ -108,8 +108,12 @@ internal class ServerPortOccupancyInspector(
 
             return ServerPortOccupancy.OccupiedByOtherProcess(
                 port = port,
-                details = "Tavern 配置端口 $port 已处于监听状态，但当前未识别到属于本应用的 Tavern 监听进程，通常表示被其他应用或系统进程占用。"
+                details = portOccupiedByForeignServiceDetails(port)
             )
+        }
+
+        fun portOccupiedByForeignServiceDetails(port: Int): String {
+            return "当前端口 $port 已启用服务，但不是本 App 启动的 Tavern 服务。若想正常使用，请在设置中修改端口，或关闭其他占用相同端口的 Tavern 服务。"
         }
     }
 }
