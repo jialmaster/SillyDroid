@@ -136,6 +136,7 @@ class TavernGeckoViewHost(
 
     private var currentUrl: String = ""
     private var configured = false
+    private var waitingForInitialPagePaint = false
 
     override val browserContainer: View
         get() = browserFrame
@@ -203,21 +204,27 @@ class TavernGeckoViewHost(
     }
 
     override fun showBrowser(baseUrl: String) {
-        bootstrapOverlay.isVisible = false
         browserFrame.isVisible = true
         geckoView.isVisible = true
         session.setActive(true)
         session.setFocused(true)
         homeViewModel.isPullGestureRefreshing = false
         if (homeViewModel.shouldForceFreshWebViewLoad) {
+            showInitialPagePaintCover(reason = "force_fresh_load")
             forceFreshGeckoViewLoad(baseUrl)
             return
         }
 
         val targetUrl = buildInitialTavernUrl(baseUrl)
         if (isCurrentPageFor(baseUrl)) {
+            if (waitingForInitialPagePaint) {
+                return
+            }
+            bootstrapOverlay.isVisible = false
+            updateRefreshLayoutEnabled()
             return
         }
+        showInitialPagePaintCover(reason = "initial_load")
         currentUrl = targetUrl
         homeViewModel.loadedUrl = targetUrl
         bridgeInstaller.install(buildBridgeTarget()) {
@@ -231,6 +238,7 @@ class TavernGeckoViewHost(
 
     override fun hideForBootstrapRestart() {
         homeViewModel.isPullGestureRefreshing = false
+        waitingForInitialPagePaint = false
         session.setActive(false)
         session.setFocused(false)
         browserFrame.isVisible = false
@@ -393,6 +401,7 @@ class TavernGeckoViewHost(
                 if (success) {
                     homeViewModel.pendingLocalRetryAttempts = 0
                 }
+                hideInitialPagePaintCover(reason = "page_stop")
                 bridgeInstaller.installAfterPageFinished(buildBridgeTarget())
                 setBrowserZoomPercent(hostConfigStore.browserZoomPercent)
                 recordHostDiagnostic(
@@ -438,6 +447,17 @@ class TavernGeckoViewHost(
 
             override fun onKill(session: GeckoSession) {
                 recordGeckoRendererGone(didCrash = false, source = "content_delegate_kill")
+            }
+
+            override fun onFirstComposite(session: GeckoSession) {
+                recordHostDiagnostic(
+                    category = "geckoview",
+                    body = "event=first_composite ${currentGeckoDiagnosticState()}"
+                )
+            }
+
+            override fun onFirstContentfulPaint(session: GeckoSession) {
+                hideInitialPagePaintCover(reason = "first_contentful_paint")
             }
         }
 
@@ -994,6 +1014,33 @@ class TavernGeckoViewHost(
                 loadTavernUri(targetUrl, replaceHistory = true, bypassCache = true)
             }
         }
+    }
+
+    private fun showInitialPagePaintCover(reason: String) {
+        if (waitingForInitialPagePaint) {
+            return
+        }
+        waitingForInitialPagePaint = true
+        // GeckoView 在页面内容绘制前可能短暂露出白色 compositor surface；保留深色启动遮罩挡住空白帧。
+        bootstrapOverlay.isVisible = true
+        bootstrapOverlay.bringToFront()
+        recordHostDiagnostic(
+            category = "geckoview",
+            body = "event=initial_paint_cover_show reason=$reason ${currentGeckoDiagnosticState()}"
+        )
+    }
+
+    private fun hideInitialPagePaintCover(reason: String) {
+        if (!waitingForInitialPagePaint) {
+            return
+        }
+        waitingForInitialPagePaint = false
+        bootstrapOverlay.isVisible = false
+        updateRefreshLayoutEnabled()
+        recordHostDiagnostic(
+            category = "geckoview",
+            body = "event=initial_paint_cover_hide reason=$reason ${currentGeckoDiagnosticState()}"
+        )
     }
 
     private fun clearCurrentGeckoPageSessionState(clearMask: Int) {

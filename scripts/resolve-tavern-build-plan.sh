@@ -375,7 +375,7 @@ apk_changed='false'
 if [[ -n "$compare_base" && "$compare_base" != '0000000000000000000000000000000000000000' ]]; then
     changed_files="$(git -C "$workspace_root" diff --name-only "$compare_base" "$compare_head")"
 
-    if printf '%s\n' "$changed_files" | grep -E '^(scripts/(android-build-common\.sh|build-tavern-android-runtime-image\.sh|sync-android-rootfs\.sh)|android-tavern/app/src/main/assets/bootstrap/scripts/)' >/dev/null 2>&1; then
+    if printf '%s\n' "$changed_files" | grep -E '^(scripts/(android-build-common\.sh|build-tavern-android-runtime-image\.sh|sync-android-rootfs\.sh))' >/dev/null 2>&1; then
         rootfs_changed='true'
     fi
 

@@ -14,7 +14,7 @@ const worldInfoSelect2ObserverId = 'sillydroidWorldInfoSelect2Observed';
 const popupTitle = '安卓宿主';
 const webViewSafeAutoMajorVersion = 121;
 const huaweiWebViewSafeAutoMajorVersion = 120;
-const defaultTavernSystemBarColor = '#111827';
+const defaultTavernSystemBarColor = '#141414';
 const oldDefaultThemeAccentColor = '#2f7dff';
 const oldDefaultThemeSecondaryColor = '#24d6b5';
 
@@ -458,7 +458,7 @@ function resolveGlassNativeSystemBarColor(settings, resolvedMode, effectivePerfo
 
 function resolveNativeSystemBarColors(settings, resolvedMode, effectivePerformanceMode = 'quality') {
     if (settings.theme === 'default') {
-        // 默认主题也只同步系统栏纯色，避免从毛玻璃切回默认后状态栏/手势条残留上一套主题色。
+        // 默认主题固定使用酒馆 Dark Lite 主背景灰，关闭宿主主题时避免残留上一套 glass 主题色。
         return {
             statusBarColor: defaultTavernSystemBarColor,
             navigationBarColor: defaultTavernSystemBarColor,

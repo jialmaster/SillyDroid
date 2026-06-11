@@ -391,9 +391,9 @@ class BootstrapSessionManager(
                     stepId = BootstrapStepId.PREPARE_SERVER_ASSETS,
                     detection = serverInspection.detection,
                     statusMessage = "Tavern 资产已是最新。",
-                    statusDetails = "Tavern payload 已是最新，仅同步 APK 内置 host 扩展资产。"
+                    statusDetails = "Tavern server source 与依赖包已是最新，仅同步 APK 内置 host 扩展资产。"
                 )
-                // server payload 不需要重解包时，仍必须同步轻量 host 扩展资产，保证 APK 内置 JS/CSS 能覆盖旧运行目录。
+                // server source 不需要重解包时，仍必须同步轻量 host 扩展资产，保证 APK 内置 JS/CSS 能覆盖旧运行目录。
                 extractor.prepareHostExtensionAssets(paths) { details, progressPercent ->
                     heartbeatStep(
                         stepId = BootstrapStepId.PREPARE_SERVER_ASSETS,
@@ -405,7 +405,7 @@ class BootstrapSessionManager(
                     stepId = BootstrapStepId.PREPARE_SERVER_ASSETS,
                     detection = serverInspection.detection,
                     result = BootstrapStepResult.SUCCESS,
-                    details = "Tavern payload 已是最新，APK 内置 host 扩展已同步到运行目录。"
+                    details = "Tavern server source 与依赖包已是最新，APK 内置 host 扩展已同步到运行目录。"
                 )
             } else {
                 startStep(
@@ -425,7 +425,7 @@ class BootstrapSessionManager(
                     stepId = BootstrapStepId.PREPARE_SERVER_ASSETS,
                     detection = serverInspection.detection,
                     result = BootstrapStepResult.SUCCESS,
-                    details = "Tavern payload、脚本与内置扩展已同步完成。"
+                    details = "Tavern server source、依赖包、脚本与内置扩展已同步完成。"
                 )
             }
 

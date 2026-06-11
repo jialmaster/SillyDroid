@@ -8,7 +8,7 @@ set -euo pipefail
 # Must not:
 # - Build dependency packs.
 # - Inject Android host launcher scripts, runtime patches, or mutable host bootstrap behavior.
-# - Compose the final server-payload.
+# - Compose final server assets.
 # - Assemble the APK or mutate stage-1/stage-2 outputs.
 
 runtime_rid="linux-arm64"
@@ -76,7 +76,7 @@ Usage: sync-tavern-android-bootstrap.sh [--tag <sillytavern-tag>] [--runtime-rid
 - 未传 --tag 时优先读取仓库根目录 sillydroid-build-config.json 的 build.tavernVersion。
 - build.tavernVersion 为 latest 或 auto 时，会自动解析上游最新 GitHub Release tag。
 - 默认输出目录为 artifacts/releases/server-source/<rid>/<tag>。
-- 该脚本只生成 Tavern server source；其中包含指定上游 tag 的 Tavern 源码与 npm 运行依赖，不包含宿主启动脚本、runtime patch、node/git dependency packs，也不生成最终 server-payload。
+- 该脚本只生成 Tavern server source；其中包含指定上游 tag 的 Tavern 源码与 npm 运行依赖，不包含宿主启动脚本、runtime patch、node/git dependency packs，也不生成最终 APK server assets。
 EOF
 }
 

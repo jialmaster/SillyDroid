@@ -697,7 +697,7 @@ jobs:
           name: ${{ needs.plan.outputs.dependency_release_tag }}
           path: ${{ needs.plan.outputs.dependency_release_dir }}
 
-      - name: Download server artifact
+      - name: Download server source artifact
         if: steps.resolve.outputs.source == 'built'
         uses: actions/download-artifact@v4
         with:

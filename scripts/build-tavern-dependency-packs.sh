@@ -8,7 +8,7 @@ set -euo pipefail
 # Must not:
 # - Build the runtime image/rootfs.
 # - Sync Tavern server source.
-# - Compose final server-payload or assemble the APK.
+# - Compose final server assets or assemble the APK.
 
 runtime_rid='linux-arm64'
 include_packs='node,git'
@@ -47,18 +47,6 @@ apt_repo_bases=(
     "$ubuntu_ports_base_url"
     "$ubuntu_ports_base_url"
 )
-
-read_build_config_value() {
-    local key_path="$1"
-    local default_value="$2"
-
-    if ! command -v python3 >/dev/null 2>&1; then
-        printf '%s\n' "$default_value"
-        return
-    fi
-
-    python3 "$workspace_root/scripts/read-sillydroid-build-config.py" "$build_config_path" "$key_path" "$default_value"
-}
 
 source_android_build_common() {
     local common_script="$workspace_root/scripts/android-build-common.sh"

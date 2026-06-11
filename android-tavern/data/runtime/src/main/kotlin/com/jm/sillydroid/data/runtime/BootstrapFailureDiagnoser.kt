@@ -116,7 +116,7 @@ internal object BootstrapFailureDiagnoser {
             return DiagnosisReason(
                 title = "当前启动阶段缺少必要的 runtime/server 关键文件。",
                 solutions = listOf(
-                    "重新同步 android-tavern 的离线运行时与 server payload 资产后再启动。",
+                    "重新同步 android-tavern 的离线运行时、server source 与依赖包资产后再启动。",
                     "若资产可能因上次解压中断而不完整，在系统设置里清除本应用数据后重新打开，让宿主重新完整解压。",
                     "如果设备上曾手动删除 android-tavern 目录，重新安装应用或清空后让宿主完整解压。"
                 )
@@ -148,10 +148,10 @@ internal object BootstrapFailureDiagnoser {
 
         if (containsAny(evidence, "cannot find module", "err_module_not_found", "module_not_found")) {
             return DiagnosisReason(
-                title = "Tavern 服务依赖或 server payload 不完整，Node 启动时找不到模块。",
+                title = "Tavern 服务依赖或 server source 不完整，Node 启动时找不到模块。",
                 solutions = listOf(
                     "重新同步或重新安装当前 APK 内置 Tavern 资产。",
-                    "导出日志后检查 server payload 是否被手动删除或被清理工具移除。"
+                    "导出日志后检查 server source 或 dependency pack 是否被手动删除或被清理工具移除。"
                 )
             )
         }
@@ -200,7 +200,7 @@ internal object BootstrapFailureDiagnoser {
                 title = "bootstrap 资产包损坏或不完整。",
                 solutions = listOf(
                     "重新安装应用或重新同步对应资产包。",
-                    "导出日志确认损坏的是 runtime、dependency pack 还是 server payload。"
+                    "导出日志确认损坏的是 runtime、dependency pack 还是 server source。"
                 )
             )
 

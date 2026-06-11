@@ -251,7 +251,7 @@ fun describeHostRuntimeSelection(context: Context, paths: HostPaths): String {
         append("sdk=${Build.VERSION.SDK_INT} ")
         append("release=${Build.VERSION.RELEASE.orEmpty()} ")
         append("supportedAbis=${Build.SUPPORTED_ABIS?.joinToString(separator = ",").orEmpty()} ")
-        append("selinux=${readFirstCommandLine("getenforce").ifBlank { "unknown" }} ")
+        append("selinux=${normalizeSelinuxDiagnosticState(readFirstCommandLine("getenforce"))} ")
         append("nativeLibraryDir=${context.applicationInfo.nativeLibraryDir} ")
         append("selected=${describeRuntimeDirectory(paths.hostLibDir, selectedPath)} ")
         append("packageCandidates=[$packageCandidates]")
@@ -307,6 +307,19 @@ private fun readFileMode(file: File): String {
         val mode = Os.stat(file.absolutePath).st_mode and 0x1FF
         mode.toString(radix = 8).padStart(3, '0')
     }.getOrDefault("")
+}
+
+internal fun normalizeSelinuxDiagnosticState(rawState: String): String {
+    val firstLine = rawState
+        .lineSequence()
+        .map { line -> line.trim() }
+        .firstOrNull { line -> line.isNotBlank() }
+        .orEmpty()
+
+    // Some Android sandboxes deny getenforce even though startup can continue normally.
+    return listOf("Enforcing", "Permissive", "Disabled")
+        .firstOrNull { state -> state.equals(firstLine, ignoreCase = true) }
+        ?: "unavailable"
 }
 
 private fun readFirstCommandLine(command: String): String {
@@ -402,6 +415,15 @@ data class AssetPreparationInspection(
     val details: String
 )
 
+private data class ServerAssetRefreshPlan(
+    val sourceChanged: Boolean,
+    val dependenciesChanged: Boolean,
+    val detection: BootstrapStepDetection
+) {
+    val anyChanged: Boolean
+        get() = sourceChanged || dependenciesChanged
+}
+
 class AssetExtractor(private val context: Context) {
     companion object {
         private val rootfsRequiredRelativePaths = listOf(
@@ -411,7 +433,9 @@ class AssetExtractor(private val context: Context) {
         )
         private val serverRequiredRelativePaths = listOf(
             "bootstrap-manifest.json",
+            "server-source-manifest.json",
             "default/config.yaml",
+            "dependency-env.sh",
             "dependency-post-extract.sh",
             "server.js",
             "package.json",
@@ -506,12 +530,18 @@ class AssetExtractor(private val context: Context) {
 
     fun inspectServerAssets(paths: HostPaths): AssetPreparationInspection {
         return synchronized(extractLock) {
-            inspectAssetDirectory(
-                manifestAssetPath = "${BootConfig.bootstrapAssetRoot}/server/bootstrap-manifest.json",
-                installedManifestFile = File(paths.serverDir, "bootstrap-manifest.json"),
-                targetDirectory = paths.serverDir,
-                requiredRelativePaths = serverRequiredRelativePaths
-            )
+            val plan = inspectServerAssetRefreshPlan(paths)
+            if (plan.anyChanged) {
+                AssetPreparationInspection(
+                    detection = plan.detection,
+                    details = "Tavern source 或 dependency pack 需要覆盖同步。"
+                )
+            } else {
+                AssetPreparationInspection(
+                    detection = BootstrapStepDetection.UP_TO_DATE,
+                    details = "Tavern source 与 dependency pack 均已是最新。"
+                )
+            }
         }
     }
 
@@ -525,38 +555,20 @@ class AssetExtractor(private val context: Context) {
             "${BootConfig.bootstrapAssetRoot}/rootfs",
             "${BootConfig.bootstrapAssetRoot}/server"
         )
-        val serverDirectoryRefreshed = refreshAssetDirectoryIfNeeded(
-            manifestAssetPath = "${BootConfig.bootstrapAssetRoot}/server/bootstrap-manifest.json",
-            installedManifestFile = File(paths.serverDir, "bootstrap-manifest.json"),
-            targetDirectory = paths.serverDir,
-            replaceOnIncomplete = true,
-            requiredRelativePaths = serverRequiredRelativePaths
-        )
-        if (serverDirectoryRefreshed) {
+        val serverRefreshPlan = inspectServerAssetRefreshPlan(paths)
+        if (serverRefreshPlan.anyChanged) {
             onProgress("首次启动时这里会继续占用一些时间。", 10)
             var lastProgress = 10
-            val serverArchiveAssetPath = resolveServerArchiveAssetPath()
-            extractArchiveAsset(
-                assetPath = serverArchiveAssetPath,
-                targetDirectory = paths.serverDir,
-                shouldSetExecutable = { relativePath -> relativePath.endsWith(".sh", ignoreCase = true) },
-                onProgress = { processedEntries, totalEntries ->
-                    val nextProgress = (10 + ((processedEntries.toDouble() / totalEntries.toDouble()) * 55.0).toInt())
-                        .coerceIn(lastProgress, 65)
-                    if (nextProgress > lastProgress || processedEntries == totalEntries) {
-                        lastProgress = nextProgress
-                        onProgress("已处理 $processedEntries/$totalEntries 个 Tavern 条目。", nextProgress)
-                    }
+            prepareServerArchives(paths, serverRefreshPlan) { processedEntries, totalEntries ->
+                val nextProgress = (10 + ((processedEntries.toDouble() / totalEntries.toDouble()) * 55.0).toInt())
+                    .coerceIn(lastProgress, 65)
+                if (nextProgress > lastProgress || processedEntries == totalEntries) {
+                    lastProgress = nextProgress
+                    onProgress("已处理 $processedEntries/$totalEntries 个 Tavern 条目。", nextProgress)
                 }
-            )
-            copyFile(
-                AssetCopySpec(
-                    assetPath = "${BootConfig.bootstrapAssetRoot}/server/bootstrap-manifest.json",
-                    targetPath = File(paths.serverDir, "bootstrap-manifest.json")
-                )
-            )
+            }
         } else {
-            onProgress("Tavern payload 已是最新，继续校正依赖包权限。", 65)
+            onProgress("Tavern source 与 dependency pack 已是最新，继续校正依赖包权限。", 65)
         }
 
         onProgress("正在执行通用 dependency post-extract hook。", 72)
@@ -572,8 +584,8 @@ class AssetExtractor(private val context: Context) {
             targetDirectory = paths.serverDir,
             requiredRelativePaths = serverRequiredRelativePaths
         )
-        onProgress("server payload、内置扩展与宿主目录已同步完成。", 100)
-        serverDirectoryRefreshed
+        onProgress("server source、依赖包、内置扩展与宿主目录已同步完成。", 100)
+        serverRefreshPlan.anyChanged
     }
 
     /**
@@ -605,13 +617,13 @@ class AssetExtractor(private val context: Context) {
         }
 
         onProgress(
-            "正在检查 Tavern payload 资产。",
-            "终端默认工作目录固定为 /tavern/server，需要先保证 server payload 就绪。",
+            "正在检查 Tavern server 资产。",
+            "终端默认工作目录固定为 /tavern/server，需要先保证 server source 与依赖包就绪。",
             44
         )
         prepareServerAssets(paths, rootfsDirectoryRefreshed) { details, progressPercent ->
             onProgress(
-                "正在准备 Tavern payload。",
+                "正在准备 Tavern server 资产。",
                 details,
                 44 + ((progressPercent.coerceIn(0, 100) * 44) / 100)
             )
@@ -621,7 +633,7 @@ class AssetExtractor(private val context: Context) {
         AndroidDnsConfigWriter(context).write(paths)
         onProgress(
             "终端运行时已准备完成。",
-            "rootfs、payload、host prefix 与 DNS 配置已经同步完成。",
+            "rootfs、server source、host prefix 与 DNS 配置已经同步完成。",
             100
         )
     }
@@ -697,51 +709,33 @@ class AssetExtractor(private val context: Context) {
 
         onProgress(
             "正在检查 Tavern server 资产。",
-            "正在比较当前设备上的 Tavern payload manifest。",
+            "正在分别比较当前设备上的 Tavern source 与 dependency manifest。",
             45
         )
-        val serverDirectoryRefreshed = refreshAssetDirectoryIfNeeded(
-            manifestAssetPath = "${BootConfig.bootstrapAssetRoot}/server/bootstrap-manifest.json",
-            installedManifestFile = File(paths.serverDir, "bootstrap-manifest.json"),
-            targetDirectory = paths.serverDir,
-            replaceOnIncomplete = true,
-            requiredRelativePaths = serverRequiredRelativePaths
-        )
-        if (serverDirectoryRefreshed) {
+        val serverRefreshPlan = inspectServerAssetRefreshPlan(paths)
+        if (serverRefreshPlan.anyChanged) {
             onProgress(
                 "正在解包 Tavern server 与 Node runtime。",
                 "首次启动时这里会继续占用一些时间。",
                 48
             )
             var lastServerProgress = 48
-            val serverArchiveAssetPath = resolveServerArchiveAssetPath()
-            extractArchiveAsset(
-                assetPath = serverArchiveAssetPath,
-                targetDirectory = paths.serverDir,
-                shouldSetExecutable = { relativePath -> relativePath.endsWith(".sh", ignoreCase = true) },
-                onProgress = { processedEntries, totalEntries ->
-                    val nextProgress = (48 + ((processedEntries.toDouble() / totalEntries.toDouble()) * 20.0).toInt())
-                        .coerceIn(lastServerProgress, 68)
-                    if (nextProgress > lastServerProgress || processedEntries == totalEntries) {
-                        lastServerProgress = nextProgress
-                        onProgress(
-                            "正在解包 Tavern server 与 Node runtime。",
-                            "已处理 $processedEntries/$totalEntries 个 Tavern 条目。",
-                            nextProgress
-                        )
-                    }
+            prepareServerArchives(paths, serverRefreshPlan) { processedEntries, totalEntries ->
+                val nextProgress = (48 + ((processedEntries.toDouble() / totalEntries.toDouble()) * 20.0).toInt())
+                    .coerceIn(lastServerProgress, 68)
+                if (nextProgress > lastServerProgress || processedEntries == totalEntries) {
+                    lastServerProgress = nextProgress
+                    onProgress(
+                        "正在解包 Tavern server 与 Node runtime。",
+                        "已处理 $processedEntries/$totalEntries 个 Tavern 条目。",
+                        nextProgress
+                    )
                 }
-            )
-            copyFile(
-                AssetCopySpec(
-                    assetPath = "${BootConfig.bootstrapAssetRoot}/server/bootstrap-manifest.json",
-                    targetPath = File(paths.serverDir, "bootstrap-manifest.json")
-                )
-            )
+            }
         } else {
             onProgress(
                 "Tavern server 资产已是最新。",
-                "跳过 Tavern payload 解包，继续校正依赖包权限。",
+                "跳过 Tavern source 与 dependency pack 解包，继续校正依赖包权限。",
                 68
             )
         }
@@ -754,7 +748,7 @@ class AssetExtractor(private val context: Context) {
         runServerPostExtractHook(paths)
         onProgress(
             "Tavern server 资产已准备完成。",
-            "server payload manifest 与依赖包权限已同步完成。",
+            "server source manifest 与依赖包权限已同步完成。",
             72
         )
 
@@ -856,6 +850,103 @@ class AssetExtractor(private val context: Context) {
         return true
     }
 
+    private fun inspectServerAssetRefreshPlan(paths: HostPaths): ServerAssetRefreshPlan {
+        val sourceManifestAssetPath = "${BootConfig.bootstrapAssetRoot}/server/server-source-manifest.json"
+        val dependencySelectionAssetPath = "${BootConfig.bootstrapAssetRoot}/server/dependency-selection.json"
+        val installedSourceManifestFile = File(paths.serverDir, "server-source-manifest.json")
+        val installedDependencySelectionFile = File(paths.serverDir, "dependency-selection.json")
+        val sourceMissing = !installedSourceManifestFile.isFile
+        val dependencyMissing = !installedDependencySelectionFile.isFile
+        val sourceChanged = sourceMissing || !assetContentMatchesFile(sourceManifestAssetPath, installedSourceManifestFile)
+        val dependenciesChanged = dependencyMissing ||
+            !assetContentMatchesFile(dependencySelectionAssetPath, installedDependencySelectionFile)
+        val incomplete = !paths.serverDir.containsRequiredFiles(serverRequiredRelativePaths)
+        val detection = when {
+            sourceMissing || dependencyMissing -> BootstrapStepDetection.MISSING
+            sourceChanged || dependenciesChanged -> BootstrapStepDetection.OUTDATED
+            incomplete -> BootstrapStepDetection.INCOMPLETE
+            else -> BootstrapStepDetection.UP_TO_DATE
+        }
+
+        return ServerAssetRefreshPlan(
+            sourceChanged = sourceChanged || incomplete,
+            dependenciesChanged = dependenciesChanged || incomplete,
+            detection = detection
+        )
+    }
+
+    private fun prepareServerArchives(
+        paths: HostPaths,
+        refreshPlan: ServerAssetRefreshPlan,
+        onProgress: (processedEntries: Int, totalEntries: Int) -> Unit
+    ) {
+        paths.serverDir.mkdirs()
+        var processedOffset = 0
+        val sourceEntries = if (refreshPlan.sourceChanged) {
+            countArchiveEntries(resolveServerSourceArchiveAssetPath())
+        } else {
+            0
+        }
+        val dependencyArchives = if (refreshPlan.dependenciesChanged) {
+            resolveDependencyPackArchiveAssetPaths()
+        } else {
+            emptyList()
+        }
+        val dependencyEntryCounts = dependencyArchives.associateWith { assetPath -> countArchiveEntries(assetPath) }
+        val totalEntries = (sourceEntries + dependencyEntryCounts.values.sum()).coerceAtLeast(1)
+
+        if (refreshPlan.sourceChanged) {
+            // Tavern 官方升级是覆盖式更新；这里不清 serverDir，避免误删用户缓存、插件自建目录或持久数据入口。
+            extractArchiveAsset(
+                assetPath = resolveServerSourceArchiveAssetPath(),
+                targetDirectory = paths.serverDir,
+                shouldSetExecutable = { relativePath -> relativePath.endsWith(".sh", ignoreCase = true) },
+                clearTargetDirectory = false,
+                onProgress = { processedEntries, _ ->
+                    onProgress(processedOffset + processedEntries, totalEntries)
+                }
+            )
+            processedOffset += sourceEntries
+            patchAndroidDefaultServerConfig(paths.serverDir)
+        }
+
+        dependencyArchives.forEach { assetPath ->
+            extractArchiveAsset(
+                assetPath = assetPath,
+                targetDirectory = paths.serverDir,
+                shouldSetExecutable = { relativePath ->
+                    relativePath.endsWith(".sh", ignoreCase = true) ||
+                        relativePath.startsWith("bin/") ||
+                        relativePath.startsWith("libexec/")
+                },
+                clearTargetDirectory = false,
+                onProgress = { processedEntries, _ ->
+                    onProgress(processedOffset + processedEntries, totalEntries)
+                }
+            )
+            processedOffset += dependencyEntryCounts.getValue(assetPath)
+        }
+
+        copyServerBootstrapFiles(paths)
+    }
+
+    private fun copyServerBootstrapFiles(paths: HostPaths) {
+        listOf(
+            "bootstrap-manifest.json",
+            "server-source-manifest.json",
+            "dependency-selection.json",
+            "dependency-env.sh",
+            "dependency-post-extract.sh"
+        ).forEach { fileName ->
+            copyFile(
+                AssetCopySpec(
+                    assetPath = "${BootConfig.bootstrapAssetRoot}/server/$fileName",
+                    targetPath = File(paths.serverDir, fileName)
+                )
+            )
+        }
+    }
+
     private fun assetContentMatchesFile(assetPath: String, file: File): Boolean {
         return runCatching {
             if (shouldIgnoreVolatileManifestFields(assetPath, file)) {
@@ -912,19 +1003,73 @@ class AssetExtractor(private val context: Context) {
         }
     }
 
-    private fun resolveServerArchiveAssetPath(): String {
+    private fun resolveServerSourceArchiveAssetPath(): String {
         val manifestAssetPath = "${BootConfig.bootstrapAssetRoot}/server/bootstrap-manifest.json"
         val archiveFile = runCatching {
             context.assets.open(manifestAssetPath).bufferedReader().use { reader ->
-                JSONObject(reader.readText()).optString("archiveFile").trim()
+                JSONObject(reader.readText())
+                    .optJSONObject("serverSource")
+                    ?.optString("archiveFile")
+                    ?.trim()
+                    .orEmpty()
             }
         }.getOrDefault("")
 
         return if (archiveFile.isBlank()) {
-            "${BootConfig.bootstrapAssetRoot}/server/server-payload.zip"
+            "${BootConfig.bootstrapAssetRoot}/server/server-source.zip"
         } else {
             "${BootConfig.bootstrapAssetRoot}/server/$archiveFile"
         }
+    }
+
+    private fun resolveDependencyPackArchiveAssetPaths(): List<String> {
+        val selectionAssetPath = "${BootConfig.bootstrapAssetRoot}/server/dependency-selection.json"
+        return runCatching {
+            context.assets.open(selectionAssetPath).bufferedReader().use { reader ->
+                val selected = JSONObject(reader.readText()).optJSONArray("selected") ?: return@use emptyList()
+                buildList {
+                    for (index in 0 until selected.length()) {
+                        val archiveFile = selected.optJSONObject(index)
+                            ?.optString("archiveFile")
+                            ?.trim()
+                            .orEmpty()
+                        if (archiveFile.isNotBlank()) {
+                            add("${BootConfig.bootstrapAssetRoot}/server/dependency-packs/$archiveFile")
+                        }
+                    }
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun patchAndroidDefaultServerConfig(serverDir: File) {
+        val configFile = File(serverDir, "default/config.yaml")
+        if (!configFile.isFile) {
+            return
+        }
+
+        val patchedLines = configFile.readLines().toMutableList()
+        var section: String? = null
+        patchedLines.indices.forEach { index ->
+            val line = patchedLines[index]
+            val stripped = line.trim()
+            when {
+                stripped == "browserLaunch:" -> section = "browserLaunch"
+                stripped == "git:" -> section = "git"
+                section == "browserLaunch" && stripped.matches(Regex("""enabled:\s*(true|false)\b.*""")) -> {
+                    patchedLines[index] = line.replace(Regex("""(enabled:\s*)(true|false)\b"""), "\$1false")
+                    section = null
+                }
+                section == "git" && stripped.matches(Regex("""backend:\s*\S+.*""")) -> {
+                    patchedLines[index] = line.replace(Regex("""(backend:\s*)\S+"""), "\$1builtin")
+                    section = null
+                }
+                stripped.isNotBlank() && !line.startsWith(" ") && !line.startsWith("\t") && !line.startsWith("#") -> {
+                    section = null
+                }
+            }
+        }
+        configFile.writeText(patchedLines.joinToString(separator = "\n", postfix = "\n"))
     }
 
     private fun File.containsExecutableFiles(requiredRelativePaths: List<String>): Boolean {
@@ -938,13 +1083,15 @@ class AssetExtractor(private val context: Context) {
         targetDirectory: File,
         shouldSetExecutable: (String) -> Boolean,
         symlinkManifestRelativePath: String? = null,
+        clearTargetDirectory: Boolean = true,
         onProgress: (processedEntries: Int, totalEntries: Int) -> Unit = { _, _ -> }
     ) {
-        deleteRecursivelyWithoutFollowingSymlinks(targetDirectory)
+        if (clearTargetDirectory) {
+            deleteRecursivelyWithoutFollowingSymlinks(targetDirectory)
+        }
         targetDirectory.mkdirs()
 
-        val canonicalTargetDirectory = targetDirectory.canonicalFile
-        val canonicalTargetPrefix = canonicalTargetDirectory.path + File.separator
+        val targetRootPath = targetDirectory.toPath().toAbsolutePath().normalize()
         val totalEntries = countArchiveEntries(assetPath)
         var processedEntries = 0
 
@@ -958,11 +1105,11 @@ class AssetExtractor(private val context: Context) {
                         continue
                     }
 
-                    val outputFile = File(targetDirectory, relativePath).canonicalFile
-                    val outputPath = outputFile.path
-                    if (outputPath != canonicalTargetDirectory.path && !outputPath.startsWith(canonicalTargetPrefix)) {
+                    val outputPath = targetRootPath.resolve(relativePath).normalize()
+                    if (outputPath != targetRootPath && !outputPath.startsWith(targetRootPath)) {
                         throw BootstrapException(BootstrapError.ArchiveCorrupted("bootstrap 归档包含非法路径：$relativePath"))
                     }
+                    val outputFile = outputPath.toFile()
 
                     if (entry.isDirectory) {
                         if (outputFile.existsWithoutFollowingSymlinks() && !outputFile.isDirectory) {
@@ -1283,7 +1430,7 @@ class BootstrapLayoutVerifier(private val paths: HostPaths) {
 
         if (missingEntries.isNotEmpty()) {
             throw BootstrapException(
-                "bootstrap 资产缺少关键文件：${missingEntries.joinToString()}。请先同步 android-tavern 下的离线运行时与 payload 产物。"
+                "bootstrap 资产缺少关键文件：${missingEntries.joinToString()}。请先同步 android-tavern 下的离线运行时、server source 与依赖包产物。"
             )
         }
     }
@@ -1300,7 +1447,9 @@ class BootstrapLayoutVerifier(private val paths: HostPaths) {
             "hostRuntimeDir/libtermux-git.so" to paths.hostTermuxGitBinary,
             "hostRuntimeDir/libtermux-git-remote-http.so" to paths.hostTermuxGitRemoteHttpBinary,
             "hostRuntimeDir/libtermux-sh.so" to paths.hostTermuxShellBinary,
-            "server/bootstrap-manifest.json" to File(paths.serverDir, "bootstrap-manifest.json")
+            "server/bootstrap-manifest.json" to File(paths.serverDir, "bootstrap-manifest.json"),
+            "server/dependency-env.sh" to File(paths.serverDir, "dependency-env.sh"),
+            "server/dependency-post-extract.sh" to File(paths.serverDir, "dependency-post-extract.sh")
         )
     }
 }

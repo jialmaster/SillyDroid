@@ -386,7 +386,7 @@ sillydroid_ensure_frontend_dist() {
         install_mode="install"
     fi
 
-    # 前端 dist 是 Android server payload 的一部分；缺失时这里直接补齐，避免后续 zip 阶段才报错。
+    # 前端 dist 是 Android server source 的一部分；缺失时这里直接补齐，避免后续归档阶段才报错。
     sillydroid_log "安装前端依赖：$client_root"
     (
         cd "$client_root"

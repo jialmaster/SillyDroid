@@ -8,7 +8,7 @@ set -euo pipefail
 # Must not:
 # - Build dependency packs.
 # - Sync Tavern server source.
-# - Compose final server-payload or assemble the APK.
+# - Compose final server package or assemble the APK.
 
 runtime_rid='linux-arm64'
 output_path=''
@@ -139,13 +139,11 @@ stage_runtime_image() {
     local tavern_rootfs_root="$2"
     local tavern_jni_lib_root="$3"
     local manifest_path="$stage_root/runtime-image-manifest.json"
-    local tavern_bootstrap_root="$android_tavern_root/app/src/main/assets/bootstrap"
     local native_library_path=''
 
     rm -rf "$stage_root"
     mkdir -p "$stage_root/assets/bootstrap" "$stage_root/jniLibs/arm64-v8a"
 
-    sillydroid_assert_path_exists "$tavern_bootstrap_root/scripts" "缺少 Tavern bootstrap scripts：$tavern_bootstrap_root/scripts"
     sillydroid_assert_path_exists "$tavern_rootfs_root/rootfs-fs.zip" "缺少 Tavern rootfs 归档：$tavern_rootfs_root/rootfs-fs.zip"
     sillydroid_assert_path_exists "$tavern_rootfs_root/rootfs-manifest.json" "缺少 Tavern rootfs manifest：$tavern_rootfs_root/rootfs-manifest.json"
     sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-node.so" "缺少 Tavern Termux node 入口：$tavern_jni_lib_root/libtermux-node.so"
@@ -153,7 +151,7 @@ stage_runtime_image() {
     sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-git-remote-http.so" "缺少 Tavern Termux git HTTPS helper 入口：$tavern_jni_lib_root/libtermux-git-remote-http.so"
     sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-sh.so" "缺少 Tavern Termux shell 入口：$tavern_jni_lib_root/libtermux-sh.so"
 
-    cp -R "$tavern_bootstrap_root/scripts" "$stage_root/assets/bootstrap/"
+    # 宿主启动脚本属于 Stage 4/APK 外层轻量资产；runtime image 只包含可复用 rootfs 与 native runtime。
     cp -R "$tavern_rootfs_root" "$stage_root/assets/bootstrap/rootfs"
     shopt -s nullglob
     for native_library_path in "$tavern_jni_lib_root"/lib*.so*; do
