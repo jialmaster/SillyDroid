@@ -79,9 +79,8 @@ class HomeWebViewController(
         webView.settings.javaScriptCanOpenWindowsAutomatically = true
         // SillyTavern 的提示音、TTS 或媒体预览由页面逻辑触发，宿主不额外要求用户先点按 WebView。
         webView.settings.mediaPlaybackRequiresUserGesture = false
-        // 本地 127.0.0.1 服务的静态资源（脚本/样式/字体）优先复用磁盘缓存，减少二次加载时
-        // 对本地 HTTP 的重复条件请求，缓解“切回来重新拉一遍”造成的卡顿；缺缓存时仍回源网络。
-        webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+        // 保持 WebView 默认缓存策略，让扩展 manifest/JS/CSS 每次按 HTTP 规则校验。
+        // 固定 URL 的扩展资源不能使用 LOAD_CACHE_ELSE_NETWORK，否则重装或更新扩展后可能继续命中旧缓存。
         // 把 WebView 渲染进程标记为 IMPORTANT，让系统在内存紧张时优先保活渲染进程，
         // 降低后台被回收后切回前台白屏 / renderer gone 的概率（内置 WebView 与 App 共享内存预算，
         // 不像独立浏览器有单独的进程内存 headroom，这一项能直接缩小体感差距）。
