@@ -4,6 +4,7 @@ set -eu
 TAVERN_PORT="${TAVERN_PORT:?TAVERN_PORT is required}"
 TAVERN_DATA_ROOT="${TAVERN_DATA_ROOT:?TAVERN_DATA_ROOT is required}"
 TAVERN_SERVER_DIR="${TAVERN_SERVER_DIR:?TAVERN_SERVER_DIR is required}"
+BOOTSTRAP_ROOT="${BOOTSTRAP_ROOT:?BOOTSTRAP_ROOT is required}"
 ANDROID_SYSTEM_PATH="/system/bin:/system/xbin"
 SILLYDROID_HOST_COMMAND_PATH="${SILLYDROID_HOST_COMMAND_PATH:-}"
 
@@ -21,6 +22,9 @@ cd "$TAVERN_SERVER_DIR"
 
 # 用户数据必须落到宿主持久目录，避免 APK 覆盖安装后把角色、聊天和配置一起替换掉。
 mkdir -p "$TAVERN_DATA_ROOT/config" "$TAVERN_DATA_ROOT/data" "$TAVERN_DATA_ROOT/plugins" "$TAVERN_DATA_ROOT/extensions"
+
+# 根 config.yaml 是唯一真实配置文件；旧 data/server/config/config.yaml 只在迁移时读取一次，不再维护。
+sh "$BOOTSTRAP_ROOT/scripts/migrate-tavern-root-config.sh"
 
 directory_has_child() {
     find "$1" -mindepth 1 -maxdepth 1 -print 2>/dev/null | read first_child
@@ -120,4 +124,4 @@ exec "$NODE_BIN" server.js \
     --port "$TAVERN_PORT" \
     --browserLaunchEnabled false \
     --dataRoot "$TAVERN_DATA_ROOT/data" \
-    --configPath "$TAVERN_DATA_ROOT/config/config.yaml"
+    --configPath "$TAVERN_SERVER_DIR/config.yaml"

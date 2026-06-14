@@ -1,6 +1,5 @@
 package com.jm.sillydroid.feature.settings.ui.terminal
 
-import android.os.SystemClock
 import android.view.ActionMode
 import android.view.MotionEvent
 import com.termux.view.TerminalView
@@ -17,17 +16,6 @@ internal class TermuxTextSelectionBridge(
     private val terminalView: TerminalView
 ) {
     private val selectorsBuffer = IntArray(4)
-
-    fun startSelectionFromCursor(): Boolean {
-        val anchorEvent = buildSelectionAnchorEvent() ?: return false
-        return try {
-            terminalView.startTextSelectionMode(anchorEvent)
-            dismissSelectionActionMode()
-            terminalView.isSelectingText
-        } finally {
-            anchorEvent.recycle()
-        }
-    }
 
     fun startSelectionFromLongPress(event: MotionEvent): Boolean {
         val eventCopy = MotionEvent.obtain(event)
@@ -80,19 +68,6 @@ internal class TermuxTextSelectionBridge(
         controller.updatePosition(endHandle, targetX, targetY)
         terminalView.onScreenUpdated()
         return true
-    }
-
-    private fun buildSelectionAnchorEvent(): MotionEvent? {
-        val session = terminalView.currentSession ?: return null
-        val emulator = session.emulator
-        val anchorX = emulator?.getCursorCol()?.let { column ->
-            terminalView.getPointX(column).toFloat()
-        } ?: (terminalView.width / 2f)
-        val anchorY = emulator?.getCursorRow()?.let { row ->
-            terminalView.getPointY(row).toFloat() + selectionHandleTouchVerticalOffsetPx
-        } ?: (terminalView.height / 2f)
-        val eventTime = SystemClock.uptimeMillis()
-        return MotionEvent.obtain(eventTime, eventTime, MotionEvent.ACTION_DOWN, anchorX, anchorY, 0)
     }
 
     private fun getCursorController(): TextSelectionCursorController? {

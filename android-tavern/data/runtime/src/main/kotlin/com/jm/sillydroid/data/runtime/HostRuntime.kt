@@ -43,6 +43,7 @@ private val requiredHostRuntimeFileNames = listOf(
     "libtermux-node.so",
     "libtermux-git.so",
     "libtermux-git-remote-http.so",
+    "libtermux-curl.so",
     "libtermux-sh.so"
 )
 private val optionalHostRuntimeFileNames = listOf("libtermux-bash.so")
@@ -50,6 +51,7 @@ private val executableHostRuntimeFileNames = listOf(
     "libtermux-node.so",
     "libtermux-git.so",
     "libtermux-git-remote-http.so",
+    "libtermux-curl.so",
     "libtermux-sh.so",
     "libtermux-bash.so"
 )
@@ -171,6 +173,7 @@ data class HostPaths(
     val hostTermuxNodeBinary: File,
     val hostTermuxGitBinary: File,
     val hostTermuxGitRemoteHttpBinary: File,
+    val hostTermuxCurlBinary: File,
     val hostTermuxShellBinary: File,
     val hostTermuxBashBinary: File,
     val dataRoot: File,
@@ -209,6 +212,7 @@ data class HostPaths(
                 hostTermuxNodeBinary = File(selectedHostLibDir, "libtermux-node.so"),
                 hostTermuxGitBinary = File(selectedHostLibDir, "libtermux-git.so"),
                 hostTermuxGitRemoteHttpBinary = File(selectedHostLibDir, "libtermux-git-remote-http.so"),
+                hostTermuxCurlBinary = File(selectedHostLibDir, "libtermux-curl.so"),
                 hostTermuxShellBinary = File(selectedHostLibDir, "libtermux-sh.so"),
                 hostTermuxBashBinary = File(selectedHostLibDir, "libtermux-bash.so"),
                 dataRoot = dataRoot,
@@ -403,6 +407,7 @@ internal fun buildHostRuntimeEnvironment(paths: HostPaths): Map<String, String> 
         put("TERMUX_NODE_BIN", paths.hostTermuxNodeBinary.absolutePath)
         put("TERMUX_GIT_BIN", paths.hostTermuxGitBinary.absolutePath)
         put("TERMUX_GIT_REMOTE_HTTP_BIN", paths.hostTermuxGitRemoteHttpBinary.absolutePath)
+        put("TERMUX_CURL_BIN", paths.hostTermuxCurlBinary.absolutePath)
         put("TERMUX_SH_BIN", paths.hostTermuxShellBinary.absolutePath)
         if (paths.hostTermuxBashBinary.exists()) {
             put("TERMUX_BASH_BIN", paths.hostTermuxBashBinary.absolutePath)
@@ -531,15 +536,19 @@ class AssetExtractor(private val context: Context) {
     fun inspectServerAssets(paths: HostPaths): AssetPreparationInspection {
         return synchronized(extractLock) {
             val plan = inspectServerAssetRefreshPlan(paths)
-            if (plan.anyChanged) {
+            val rootConfigInspection = inspectRootConfigLayout(paths)
+            if (plan.anyChanged || rootConfigInspection.needsMigration) {
                 AssetPreparationInspection(
-                    detection = plan.detection,
-                    details = "Tavern source 或 dependency pack 需要覆盖同步。"
+                    detection = if (plan.anyChanged) plan.detection else rootConfigInspection.detection,
+                    details = listOf(
+                        if (plan.anyChanged) "Tavern source 或 dependency pack 需要覆盖同步。" else null,
+                        rootConfigInspection.details.takeIf { rootConfigInspection.needsMigration }
+                    ).filterNotNull().joinToString(" ")
                 )
             } else {
                 AssetPreparationInspection(
                     detection = BootstrapStepDetection.UP_TO_DATE,
-                    details = "Tavern source 与 dependency pack 均已是最新。"
+                    details = "Tavern source、dependency pack 与根 config.yaml 均已是最新。"
                 )
             }
         }
@@ -571,6 +580,8 @@ class AssetExtractor(private val context: Context) {
             onProgress("Tavern source 与 dependency pack 已是最新，继续校正依赖包权限。", 65)
         }
 
+        onProgress("正在校正 Tavern 根配置文件。", 68)
+        ensureRootConfigLayout(paths)
         onProgress("正在执行通用 dependency post-extract hook。", 72)
         runServerPostExtractHook(paths)
         onProgress("正在写入 bootstrap 脚本、配置与内置扩展目录。", 80)
@@ -690,6 +701,12 @@ class AssetExtractor(private val context: Context) {
             )
         }
 
+        onProgress(
+            "正在校正 Tavern 根配置文件。",
+            "正在确保 bootstrap/server/config.yaml 是普通文件。",
+            69
+        )
+        ensureRootConfigLayout(paths)
         onProgress(
             "正在校正 Tavern server 权限。",
             "正在执行通用 dependency post-extract hook。",
@@ -851,6 +868,7 @@ class AssetExtractor(private val context: Context) {
                 assetPath = resolveServerSourceArchiveAssetPath(),
                 targetDirectory = paths.serverDir,
                 shouldSetExecutable = { relativePath -> relativePath.endsWith(".sh", ignoreCase = true) },
+                shouldSkipEntry = ::shouldSkipServerArchiveEntry,
                 clearTargetDirectory = false,
                 onProgress = { processedEntries, _ ->
                     onProgress(processedOffset + processedEntries, totalEntries)
@@ -869,6 +887,7 @@ class AssetExtractor(private val context: Context) {
                         relativePath.startsWith("bin/") ||
                         relativePath.startsWith("libexec/")
                 },
+                shouldSkipEntry = ::shouldSkipServerArchiveEntry,
                 clearTargetDirectory = false,
                 onProgress = { processedEntries, _ ->
                     onProgress(processedOffset + processedEntries, totalEntries)
@@ -1032,6 +1051,7 @@ class AssetExtractor(private val context: Context) {
         assetPath: String,
         targetDirectory: File,
         shouldSetExecutable: (String) -> Boolean,
+        shouldSkipEntry: (String) -> Boolean = { false },
         symlinkManifestRelativePath: String? = null,
         clearTargetDirectory: Boolean = true,
         onProgress: (processedEntries: Int, totalEntries: Int) -> Unit = { _, _ -> }
@@ -1051,6 +1071,12 @@ class AssetExtractor(private val context: Context) {
                     val entry = zipInput.nextEntry ?: break
                     val relativePath = entry.name.removePrefix("./").trimStart('/')
                     if (relativePath.isBlank()) {
+                        zipInput.closeEntry()
+                        continue
+                    }
+                    if (shouldSkipEntry(relativePath)) {
+                        processedEntries += 1
+                        onProgress(processedEntries, totalEntries)
                         zipInput.closeEntry()
                         continue
                     }
@@ -1396,6 +1422,7 @@ class BootstrapLayoutVerifier(private val paths: HostPaths) {
             "hostRuntimeDir/libtermux-node.so" to paths.hostTermuxNodeBinary,
             "hostRuntimeDir/libtermux-git.so" to paths.hostTermuxGitBinary,
             "hostRuntimeDir/libtermux-git-remote-http.so" to paths.hostTermuxGitRemoteHttpBinary,
+            "hostRuntimeDir/libtermux-curl.so" to paths.hostTermuxCurlBinary,
             "hostRuntimeDir/libtermux-sh.so" to paths.hostTermuxShellBinary,
             "server/bootstrap-manifest.json" to File(paths.serverDir, "bootstrap-manifest.json"),
             "server/dependency-env.sh" to File(paths.serverDir, "dependency-env.sh"),
@@ -1538,6 +1565,10 @@ open class LinuxRuntimeLauncher(private val paths: HostPaths) {
 
         if (!paths.hostTermuxGitRemoteHttpBinary.exists()) {
             throw BootstrapException("缺少 Termux Git HTTPS helper 入口：${paths.hostTermuxGitRemoteHttpBinary.absolutePath}")
+        }
+
+        if (!paths.hostTermuxCurlBinary.exists()) {
+            throw BootstrapException("缺少 Termux curl 入口：${paths.hostTermuxCurlBinary.absolutePath}")
         }
 
         if (!paths.hostTermuxShellBinary.exists()) {

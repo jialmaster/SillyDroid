@@ -49,6 +49,7 @@ class HostExtensionCommandRunnerTest {
         val script = buildExtensionCommandLaunchScript()
 
         assertTrue(script.contains("""BOOTSTRAP_ROOT="${'$'}{BOOTSTRAP_ROOT:?BOOTSTRAP_ROOT is required}""""))
+        assertTrue(script.contains("""TERMUX_CURL_BIN="${'$'}{TERMUX_CURL_BIN:?TERMUX_CURL_BIN is required}""""))
         assertTrue(script.contains(""". "${'$'}BOOTSTRAP_ROOT/scripts/termux-host-runtime.sh""""))
         assertTrue(script.contains("""prepare_termux_host_runtime"""))
         assertTrue(script.contains("""export GIT_TERMINAL_PROMPT=0"""))
@@ -85,6 +86,7 @@ private fun createExtensionTestHostPaths(rootDirectory: File): HostPaths {
         hostTermuxNodeBinary = File(hostLibDir, "libtermux-node.so"),
         hostTermuxGitBinary = File(hostLibDir, "libtermux-git.so"),
         hostTermuxGitRemoteHttpBinary = File(hostLibDir, "libtermux-git-remote-http.so"),
+        hostTermuxCurlBinary = File(hostLibDir, "libtermux-curl.so"),
         hostTermuxShellBinary = File(hostLibDir, "libtermux-sh.so"),
         hostTermuxBashBinary = File(hostLibDir, "libtermux-bash.so"),
         dataRoot = dataRoot,

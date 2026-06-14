@@ -9,6 +9,7 @@ HOST_RUNTIME_PREFIX="${HOST_RUNTIME_PREFIX:-/data/data/com.termux/files/usr}"
 TERMUX_NODE_BIN="${TERMUX_NODE_BIN:?TERMUX_NODE_BIN is required}"
 TERMUX_GIT_BIN="${TERMUX_GIT_BIN:?TERMUX_GIT_BIN is required}"
 TERMUX_GIT_REMOTE_HTTP_BIN="${TERMUX_GIT_REMOTE_HTTP_BIN:?TERMUX_GIT_REMOTE_HTTP_BIN is required}"
+TERMUX_CURL_BIN="${TERMUX_CURL_BIN:?TERMUX_CURL_BIN is required}"
 TERMUX_SH_BIN="${TERMUX_SH_BIN:?TERMUX_SH_BIN is required}"
 HOST_NATIVE_LIB_DIR="${HOST_NATIVE_LIB_DIR:?HOST_NATIVE_LIB_DIR is required}"
 HOST_TMP_DIR="${HOST_TMP_DIR:?HOST_TMP_DIR is required}"
@@ -28,6 +29,7 @@ export HOME="$HOST_PREFIX_DIR/tmp"
 mkdir -p "$HOME" "$TMPDIR"
 "$TERMUX_NODE_BIN" --version >/dev/null
 "$TERMUX_GIT_BIN" --version >/dev/null
+"$TERMUX_CURL_BIN" --version >/dev/null
 # git-remote-http 是 Git remote helper，不支持 --version；用 capabilities 握手校验 helper 可启动且不触网。
 printf 'capabilities\n\n' | "$TERMUX_GIT_REMOTE_HTTP_BIN" origin https://example.invalid >/dev/null
 "$TERMUX_SH_BIN" -c 'echo runtime-exec-ok' >/dev/null

@@ -135,7 +135,7 @@ resolve_stage4_version_metadata() {
 
 read_termux_packages_from_config() {
     if ! command -v python3 >/dev/null 2>&1; then
-        printf 'git\nnodejs-lts\nnano\nbash\ndash\ncoreutils\nfindutils\ngrep\nsed\ngawk\ntar\ngzip\nxz-utils\nwhich\nca-certificates\n'
+        printf 'git\nnodejs-lts\ncurl\nnano\nbash\ndash\ncoreutils\nfindutils\ngrep\nsed\ngawk\ntar\ngzip\nxz-utils\nwhich\nca-certificates\n'
         return
     fi
 
@@ -148,6 +148,7 @@ config_path = pathlib.Path(sys.argv[1])
 default = [
     "git",
     "nodejs-lts",
+    "curl",
 ]
 
 if not config_path.exists():
@@ -619,6 +620,7 @@ runtime_image_applied_satisfy_request() {
     [[ -f "$jni_lib_root/libtermux-node.so" ]] || return 1
     [[ -f "$jni_lib_root/libtermux-git.so" ]] || return 1
     [[ -f "$jni_lib_root/libtermux-git-remote-http.so" ]] || return 1
+    [[ -f "$jni_lib_root/libtermux-curl.so" ]] || return 1
     [[ -f "$jni_lib_root/libtermux-sh.so" ]] || return 1
     [[ -f "$fingerprint_path" ]] || return 1
 
@@ -751,6 +753,7 @@ apply_runtime_image() {
     sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libtermux-node.so" "runtime image 缺少 Termux node 入口：$image_path"
     sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libtermux-git.so" "runtime image 缺少 Termux git 入口：$image_path"
     sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libtermux-git-remote-http.so" "runtime image 缺少 Termux git HTTPS helper 入口：$image_path"
+    sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libtermux-curl.so" "runtime image 缺少 Termux curl 入口：$image_path"
     sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libtermux-sh.so" "runtime image 缺少 Termux shell 入口：$image_path"
 
     cp -R "$extract_root/assets/bootstrap/rootfs" "$bootstrap_root/"

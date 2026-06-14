@@ -40,9 +40,9 @@ class ConsoleRuntimeRepositoryTest {
             assertEquals(listOf("/system/bin/sh", scriptPath), spec.arguments)
             assertEquals(10_000, spec.transcriptRows)
             assertEquals("/bin/bash", spec.environment["SILLYDROID_GUEST_SHELL_PATH"])
-            assertEquals("/tavern/server", spec.environment["SILLYDROID_CONSOLE_WORKDIR"])
-            assertEquals("/tavern/data/.sillydroid-terminal-home", spec.environment["SILLYDROID_CONSOLE_HOME"])
-            assertEquals("${'$'}(sillydroid_prompt_path) > ", spec.environment["SILLYDROID_CONSOLE_PROMPT"])
+            assertFalse(spec.environment.containsKey("SILLYDROID_CONSOLE_WORKDIR"))
+            assertFalse(spec.environment.containsKey("SILLYDROID_CONSOLE_HOME"))
+            assertFalse(spec.environment.containsKey("SILLYDROID_CONSOLE_PROMPT"))
             assertEquals("xterm-256color", spec.environment["TERM"])
             assertEquals("truecolor", spec.environment["COLORTERM"])
             assertEquals(paths.serverDataDir.absolutePath, spec.environment["APP_DATA_ROOT"])
@@ -56,6 +56,7 @@ class ConsoleRuntimeRepositoryTest {
             assertEquals(paths.hostTermuxNodeBinary.absolutePath, spec.environment["TERMUX_NODE_BIN"])
             assertEquals(paths.hostTermuxGitBinary.absolutePath, spec.environment["TERMUX_GIT_BIN"])
             assertEquals(paths.hostTermuxGitRemoteHttpBinary.absolutePath, spec.environment["TERMUX_GIT_REMOTE_HTTP_BIN"])
+            assertEquals(paths.hostTermuxCurlBinary.absolutePath, spec.environment["TERMUX_CURL_BIN"])
             assertEquals(paths.hostTermuxShellBinary.absolutePath, spec.environment["TERMUX_SH_BIN"])
             assertFalse(spec.environment.containsKey("HOST_PROOT_BIN"))
         } finally {
@@ -125,6 +126,7 @@ class ConsoleRuntimeRepositoryTest {
             assertEquals(paths.hostTermuxNodeBinary.absolutePath, environment["TERMUX_NODE_BIN"])
             assertEquals(paths.hostTermuxGitBinary.absolutePath, environment["TERMUX_GIT_BIN"])
             assertEquals(paths.hostTermuxGitRemoteHttpBinary.absolutePath, environment["TERMUX_GIT_REMOTE_HTTP_BIN"])
+            assertEquals(paths.hostTermuxCurlBinary.absolutePath, environment["TERMUX_CURL_BIN"])
             assertEquals(paths.hostTermuxShellBinary.absolutePath, environment["TERMUX_SH_BIN"])
             assertEquals(paths.hostTermuxBashBinary.absolutePath, environment["TERMUX_BASH_BIN"])
         } finally {
@@ -262,6 +264,10 @@ private fun File.writeHostRuntimeFiles() {
         writeText("git-remote-http")
         setExecutable(true)
     }
+    File(this, "libtermux-curl.so").apply {
+        writeText("curl")
+        setExecutable(true)
+    }
     File(this, "libtermux-sh.so").apply {
         writeText("shell")
         setExecutable(true)
@@ -284,6 +290,7 @@ private fun createHostPaths(rootDirectory: File): HostPaths {
     val hostTermuxGitRemoteHttpBinary = File(hostLibDir, "libtermux-git-remote-http.so").apply {
         writeText("git-remote-http")
     }
+    val hostTermuxCurlBinary = File(hostLibDir, "libtermux-curl.so").apply { writeText("curl") }
     val hostTermuxShellBinary = File(hostLibDir, "libtermux-sh.so").apply { writeText("shell") }
     val hostTermuxBashBinary = File(hostLibDir, "libtermux-bash.so").apply { writeText("bash") }
     File(scriptsDir, "start-console-shell.sh").writeText("#!/system/bin/sh")
@@ -299,6 +306,7 @@ private fun createHostPaths(rootDirectory: File): HostPaths {
         hostTermuxNodeBinary = hostTermuxNodeBinary,
         hostTermuxGitBinary = hostTermuxGitBinary,
         hostTermuxGitRemoteHttpBinary = hostTermuxGitRemoteHttpBinary,
+        hostTermuxCurlBinary = hostTermuxCurlBinary,
         hostTermuxShellBinary = hostTermuxShellBinary,
         hostTermuxBashBinary = hostTermuxBashBinary,
         dataRoot = dataRoot,

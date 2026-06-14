@@ -134,6 +134,7 @@ private fun createServerControllerHostPaths(rootDirectory: File): HostPaths {
         hostTermuxGitRemoteHttpBinary = File(hostLibDir, "libtermux-git-remote-http.so").apply {
             writeText("git-remote-http")
         },
+        hostTermuxCurlBinary = File(hostLibDir, "libtermux-curl.so").apply { writeText("curl") },
         hostTermuxShellBinary = File(hostLibDir, "libtermux-sh.so").apply { writeText("shell") },
         hostTermuxBashBinary = File(hostLibDir, "libtermux-bash.so").apply { writeText("bash") },
         dataRoot = dataRoot,

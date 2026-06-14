@@ -14,6 +14,7 @@ import android.os.Debug
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
@@ -72,6 +73,8 @@ class TavernWebViewHost(
         // ApplicationExitInfo 写入系统历史退出列表存在机型级延迟；renderer gone 后补几次刷新，
         // 提高下一次启动自动上传或用户手动导出时命中“刚刚那次 WebView renderer 退出”的概率。
         private val RENDERER_EXIT_INFO_REFRESH_DELAYS_MS = longArrayOf(1_500L, 5_000L)
+        // trimMemory 可能在压力期间密集触发；内存资源缓存释放需要节流，避免持续清理反而拖慢前台页面。
+        private const val VOLATILE_WEBVIEW_CACHE_CLEAR_MIN_INTERVAL_MS = 30_000L
     }
 
     override val browserEngine: BrowserEngine = BrowserEngine.SYSTEM_WEBVIEW
@@ -108,6 +111,7 @@ class TavernWebViewHost(
     }
 
     private var rendererRecoveryActivityRecreateScheduled = false
+    private var lastVolatileWebViewCacheClearElapsedMs = -1L
     private val webReloadTracer by lazy { WebReloadTracer(LOG_TAG) }
 
     private val homeWebViewController by lazy {
@@ -306,16 +310,24 @@ class TavernWebViewHost(
     }
 
     override fun onTrimMemory(level: Int) {
+        val volatileCacheCleared = clearVolatileWebViewMemoryCache(
+            reason = "trim_memory",
+            trimLevel = level
+        )
         recordCriticalHostDiagnostic(
             category = "memory",
-            body = "scope=main_activity_webview event=on_trim_memory level=${formatTrimMemoryLevel(level)} rawLevel=$level ${currentWebViewDiagnosticState()} ${currentHostMemoryDiagnosticState()}"
+            body = "scope=main_activity_webview event=on_trim_memory level=${formatTrimMemoryLevel(level)} rawLevel=$level volatileCacheCleared=$volatileCacheCleared ${currentWebViewDiagnosticState()} ${currentHostMemoryDiagnosticState()}"
         )
     }
 
     override fun onLowMemory() {
+        val volatileCacheCleared = clearVolatileWebViewMemoryCache(
+            reason = "low_memory",
+            trimLevel = null
+        )
         recordCriticalHostDiagnostic(
             category = "memory",
-            body = "scope=main_activity_webview event=on_low_memory ${currentWebViewDiagnosticState()} ${currentHostMemoryDiagnosticState()}"
+            body = "scope=main_activity_webview event=on_low_memory volatileCacheCleared=$volatileCacheCleared ${currentWebViewDiagnosticState()} ${currentHostMemoryDiagnosticState()}"
         )
     }
 
@@ -355,6 +367,66 @@ class TavernWebViewHost(
         recordCriticalHostDiagnostic(
             category = "webview",
             body = "event=destroy_webview_finished ${currentHostMemoryDiagnosticState()}"
+        )
+    }
+
+    private fun clearVolatileWebViewMemoryCache(reason: String, trimLevel: Int?): Boolean {
+        if (trimLevel != null && !shouldClearVolatileWebViewCacheForTrimMemory(trimLevel)) {
+            return false
+        }
+        val nowElapsedMs = SystemClock.elapsedRealtime()
+        if (
+            shouldThrottleVolatileWebViewCacheClear(
+                nowElapsedMs = nowElapsedMs,
+                lastClearElapsedMs = lastVolatileWebViewCacheClearElapsedMs,
+                minIntervalMs = VOLATILE_WEBVIEW_CACHE_CLEAR_MIN_INTERVAL_MS
+            )
+        ) {
+            recordCriticalHostDiagnostic(
+                category = "memory",
+                body = buildString {
+                    append("scope=main_activity_webview event=clear_volatile_webview_cache_skipped")
+                    append(" reason=$reason skip=throttled")
+                    trimLevel?.let { level ->
+                        append(" level=${formatTrimMemoryLevel(level)} rawLevel=$level")
+                    }
+                    append(" intervalMs=$VOLATILE_WEBVIEW_CACHE_CLEAR_MIN_INTERVAL_MS")
+                    append(" elapsedSinceLastMs=${nowElapsedMs - lastVolatileWebViewCacheClearElapsedMs}")
+                    append(' ')
+                    append(currentHostMemoryDiagnosticState())
+                }
+            )
+            return false
+        }
+        // includeDiskFiles=false 只释放 WebView 内存资源缓存；不能在内存压力回调里清磁盘缓存、
+        // Cookie、IndexedDB、LocalStorage 或 Service Worker 数据，否则会破坏酒馆会话状态。
+        return runCatching {
+            webView.clearCache(false)
+        }.fold(
+            onSuccess = {
+                lastVolatileWebViewCacheClearElapsedMs = nowElapsedMs
+                recordCriticalHostDiagnostic(
+                    category = "memory",
+                    body = buildString {
+                        append("scope=main_activity_webview event=clear_volatile_webview_cache")
+                        append(" reason=$reason")
+                        trimLevel?.let { level ->
+                            append(" level=${formatTrimMemoryLevel(level)} rawLevel=$level")
+                        }
+                        append(" includeDiskFiles=false")
+                        append(' ')
+                        append(currentHostMemoryDiagnosticState())
+                    }
+                )
+                true
+            },
+            onFailure = { error ->
+                recordCriticalHostDiagnostic(
+                    category = "memory",
+                    body = "scope=main_activity_webview event=clear_volatile_webview_cache_failed reason=$reason error=${normalizeDiagnosticValue(error.message ?: error.javaClass.simpleName)} ${currentHostMemoryDiagnosticState()}"
+                )
+                false
+            }
         )
     }
 

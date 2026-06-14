@@ -4,7 +4,8 @@
     "buildType": "release",
     "termuxPackages": [
       "git",
-      "nodejs-lts"
+      "nodejs-lts",
+      "curl"
     ],
     "includeDependencyPacks": [
     ]

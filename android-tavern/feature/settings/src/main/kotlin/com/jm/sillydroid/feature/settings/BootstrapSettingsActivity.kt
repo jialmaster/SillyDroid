@@ -168,7 +168,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var terminalCtrlCButton: MaterialButton
     private lateinit var terminalClearButton: MaterialButton
     private lateinit var terminalResetButton: MaterialButton
-    private lateinit var terminalSelectButton: MaterialButton
     private lateinit var terminalSettingsButton: MaterialButton
     private lateinit var terminalExtraKeysStripView: TerminalExtraKeysStripView
     private lateinit var settingsPanelView: View
@@ -410,7 +409,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         terminalCtrlCButton = findViewById(R.id.bootstrapSettingsTerminalCtrlCButton)
         terminalClearButton = findViewById(R.id.bootstrapSettingsTerminalClearButton)
         terminalResetButton = findViewById(R.id.bootstrapSettingsTerminalResetButton)
-        terminalSelectButton = findViewById(R.id.bootstrapSettingsTerminalSelectButton)
         terminalSettingsButton = findViewById(R.id.bootstrapSettingsTerminalSettingsButton)
         terminalExtraKeysStripView = findViewById(R.id.bootstrapSettingsTerminalExtraKeysStrip)
         settingsPanelView = findViewById(R.id.bootstrapSettingsSettingsPanel)
@@ -487,7 +485,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
                 terminalCtrlCButton,
                 terminalClearButton,
                 terminalResetButton,
-                terminalSelectButton,
                 terminalSettingsButton,
                 aboutUpdateButton,
                 aboutGithubButton
@@ -661,7 +658,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             ctrlCButton = terminalCtrlCButton,
             clearButton = terminalClearButton,
             resetButton = terminalResetButton,
-            selectButton = terminalSelectButton,
             settingsButton = terminalSettingsButton,
             extraKeysStripView = terminalExtraKeysStripView,
             hostPreferencesRepository = hostConfigStore,

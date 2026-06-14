@@ -112,6 +112,7 @@ private fun createRootfsTestHostPaths(rootDirectory: File): HostPaths {
     val hostTermuxGitRemoteHttpBinary = File(hostLibDir, "libtermux-git-remote-http.so").apply {
         writeText("git-remote-http")
     }
+    val hostTermuxCurlBinary = File(hostLibDir, "libtermux-curl.so").apply { writeText("curl") }
     val hostTermuxShellBinary = File(hostLibDir, "libtermux-sh.so").apply { writeText("shell") }
     val hostTermuxBashBinary = File(hostLibDir, "libtermux-bash.so").apply { writeText("bash") }
 
@@ -126,6 +127,7 @@ private fun createRootfsTestHostPaths(rootDirectory: File): HostPaths {
         hostTermuxNodeBinary = hostTermuxNodeBinary,
         hostTermuxGitBinary = hostTermuxGitBinary,
         hostTermuxGitRemoteHttpBinary = hostTermuxGitRemoteHttpBinary,
+        hostTermuxCurlBinary = hostTermuxCurlBinary,
         hostTermuxShellBinary = hostTermuxShellBinary,
         hostTermuxBashBinary = hostTermuxBashBinary,
         dataRoot = dataRoot,

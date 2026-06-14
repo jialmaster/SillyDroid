@@ -70,19 +70,16 @@ class TavernConfigRepository(context: Context) : SettingsConfigRepository {
 
     fun ensureUserConfigFile(): File {
         val paths = TavernStoragePaths.from(appContext)
-        val configDirectory = File(paths.serverDataDir, "config")
-        val configFile = File(configDirectory, "config.yaml")
-        if (!configFile.isFile) {
-            val defaultConfigFile = resolveDefaultConfigFile(paths)
-            if (!defaultConfigFile.isFile) {
+        return try {
+            TavernRootConfigFiles.ensureRootConfigFile(paths)
+        } catch (exception: SettingsDataException) {
+            if (!resolveDefaultConfigFile(paths).isFile) {
                 // 环境尚未初始化（server 尚未解包），不在此处触发 extractBootstrap，
                 // 交由 StartupCoordinatorService 负责初始化流程。
                 throw SettingsDataException("Tavern 环境尚未初始化，请先完成启动流程再打开设置。")
             }
-            configDirectory.mkdirs()
-            defaultConfigFile.copyTo(configFile, overwrite = true)
+            throw exception
         }
-        return configFile
     }
 
     override fun readValue(root: LinkedHashMap<String, Any?>, path: String): Any? {
@@ -132,8 +129,8 @@ class TavernConfigRepository(context: Context) : SettingsConfigRepository {
         if (validationError != null) {
             throw SettingsDataException(validationError)
         }
-        val configFile = ensureUserConfigFile()
-        configFile.writeText(renderConfig(root))
+        ensureUserConfigFile()
+        TavernRootConfigFiles.writeRootConfigText(TavernStoragePaths.from(appContext), renderConfig(root))
         BootstrapHostConfigStore(appContext).servicePort = readConfiguredPort(root)
     }
 
@@ -161,7 +158,7 @@ class TavernConfigRepository(context: Context) : SettingsConfigRepository {
     }
 
     private fun resolveDefaultConfigFile(paths: TavernStoragePaths): File {
-        return File(paths.serverDir, "default/config.yaml")
+        return TavernRootConfigFiles.defaultConfigFile(paths)
     }
 
     private fun parseConfigText(rawText: String): LinkedHashMap<String, Any?> {

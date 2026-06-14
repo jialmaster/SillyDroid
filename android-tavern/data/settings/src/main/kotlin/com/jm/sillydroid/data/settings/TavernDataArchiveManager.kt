@@ -12,6 +12,7 @@ import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.IOException
+import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -42,10 +43,15 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
 
             ArchiveLayout.UPSTREAM_USER_ROOT -> File(sourceRoot, directoryName)
         }
+
+        fun rootConfigSource(): File? {
+            return findImportedRootConfigFile(sourceRoot, managedDirectory("config"))
+        }
     }
 
     companion object {
         private const val defaultUserHandle = "default-user"
+        private const val rootConfigFileName = "config.yaml"
         private const val layoutLabelManaged = "Docker 四目录（根目录为 config,data,plugins,extensions；Android 宿主导出同构）"
         private const val layoutLabelPublic = "Linux/Termux public 结构（根目录为 config,data,plugins,public；第三方扩展位于 public/scripts/extensions/third-party）"
         private val apiPresetDirectoryNames: Set<String> = setOf(
@@ -108,43 +114,7 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
             ?: throw SettingsDataException("无法写入导出目标。")
 
         outputStream.use { rawOutput ->
-            ZipOutputStream(BufferedOutputStream(rawOutput)).use { zipOutput ->
-                for (directoryName in TavernConfigRepository.managedTopLevelDirectories) {
-                    val sourceDirectory = File(paths.serverDataDir, directoryName)
-                    if (!sourceDirectory.exists()) {
-                        zipOutput.putNextEntry(ZipEntry("$directoryName/"))
-                        zipOutput.closeEntry()
-                        continue
-                    }
-
-                    val children = sourceDirectory.walkTopDown().toList().sortedBy { it.absolutePath }
-                    if (children.size == 1) {
-                        zipOutput.putNextEntry(ZipEntry("$directoryName/"))
-                        zipOutput.closeEntry()
-                    }
-
-                    for (file in children) {
-                        if (file == sourceDirectory) {
-                            continue
-                        }
-
-                        val relativePath = file.relativeTo(paths.serverDataDir).invariantSeparatorsPath
-                        if (file.isDirectory) {
-                            if (file.listFiles().isNullOrEmpty()) {
-                                zipOutput.putNextEntry(ZipEntry("$relativePath/"))
-                                zipOutput.closeEntry()
-                            }
-                            continue
-                        }
-
-                        zipOutput.putNextEntry(ZipEntry(relativePath))
-                        file.inputStream().use { input ->
-                            input.copyTo(zipOutput)
-                        }
-                        zipOutput.closeEntry()
-                    }
-                }
-            }
+            writeManagedDataArchive(paths, rawOutput)
         }
     }
 
@@ -162,7 +132,7 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
                     },
                     writeTargets = when (importPlan.layout) {
                         ArchiveLayout.MANAGED_ROOT -> listOf(
-                            "serverDataDir/config",
+                            "serverDir/config.yaml",
                             "serverDataDir/data",
                             "serverDataDir/plugins",
                             "serverDataDir/extensions（第三方扩展）",
@@ -170,7 +140,7 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
                         )
 
                         ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> listOf(
-                            "serverDataDir/config",
+                            "serverDir/config.yaml",
                             "serverDataDir/data",
                             "serverDataDir/plugins",
                             "serverDataDir/extensions（第三方扩展）",
@@ -408,7 +378,9 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
             when (importPlan.layout) {
                 ArchiveLayout.MANAGED_ROOT,
                 ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT -> {
-                    replaceManagedData(paths, importPlan)
+                    replaceWithImportedRootConfig(paths, importPlan) {
+                        replaceManagedData(paths, importPlan)
+                    }
                     TavernConfigRepository(appContext).syncStoredPortFromFile()
                     TavernDataImportResult(
                         importedFileCount = importedFileCount,
@@ -417,7 +389,9 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
                 }
 
                 ArchiveLayout.UPSTREAM_USER_ROOT -> {
-                    replaceUpstreamUserBackup(paths, importPlan.sourceRoot)
+                    replaceWithImportedRootConfig(paths, importPlan) {
+                        replaceUpstreamUserBackup(paths, importPlan.sourceRoot)
+                    }
                     TavernDataImportResult(
                         importedFileCount = importedFileCount,
                         archiveKind = TavernDataArchiveKind.USER_BACKUP
@@ -513,20 +487,21 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
         val topLevelEntries = root.listFiles()
             ?.filterNot { isMetadataEntry(it.name) }
             .orEmpty()
-        if (topLevelEntries.isEmpty()) {
+        val layoutEntries = topLevelEntries.filterNot { it.isFile && it.name == rootConfigFileName }
+        if (layoutEntries.isEmpty()) {
             return null
         }
 
         val managedDirectorySet = TavernConfigRepository.managedTopLevelDirectories.toSet()
-        if (topLevelEntries.all { it.isDirectory && it.name in managedDirectorySet }) {
+        if (layoutEntries.all { it.isDirectory && it.name in managedDirectorySet }) {
             return ArchiveImportPlan(ArchiveLayout.MANAGED_ROOT, root)
         }
 
-        if (isPublicExtensionsDataRoot(root, topLevelEntries)) {
+        if (isPublicExtensionsDataRoot(root, layoutEntries)) {
             return ArchiveImportPlan(ArchiveLayout.PUBLIC_EXTENSIONS_DATA_ROOT, root)
         }
 
-        if (topLevelEntries.all(::isUpstreamUserBackupEntry)) {
+        if (layoutEntries.all(::isUpstreamUserBackupEntry)) {
             return ArchiveImportPlan(ArchiveLayout.UPSTREAM_USER_ROOT, root)
         }
 
@@ -616,6 +591,18 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
             }
     }
 
+    private fun replaceWithImportedRootConfig(
+        paths: TavernStoragePaths,
+        importPlan: ArchiveImportPlan,
+        replaceContent: () -> Unit
+    ) {
+        replaceContentWithImportedRootConfig(
+            paths = paths,
+            importedRootConfig = importPlan.rootConfigSource(),
+            replaceContent = replaceContent
+        )
+    }
+
     private fun replaceManagedData(paths: TavernStoragePaths, importPlan: ArchiveImportPlan) {
         val targetRoot = paths.serverDataDir
         val backupRoot = File(paths.dataRoot, "server-import-backup-${System.currentTimeMillis()}")
@@ -628,6 +615,9 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
 
         try {
             for (directoryName in TavernConfigRepository.managedTopLevelDirectories) {
+                if (directoryName == "config") {
+                    continue
+                }
                 val targetDirectory = File(targetRoot, directoryName)
                 if (targetDirectory.exists()) {
                     movePath(targetDirectory, File(backupRoot, directoryName))
@@ -643,9 +633,15 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
             }
         } catch (exception: Exception) {
             for (directoryName in TavernConfigRepository.managedTopLevelDirectories) {
+                if (directoryName == "config") {
+                    continue
+                }
                 File(targetRoot, directoryName).deleteRecursively()
             }
             for (directoryName in TavernConfigRepository.managedTopLevelDirectories) {
+                if (directoryName == "config") {
+                    continue
+                }
                 val backupDirectory = File(backupRoot, directoryName)
                 if (backupDirectory.exists()) {
                     movePath(backupDirectory, File(targetRoot, directoryName))
@@ -833,5 +829,112 @@ class TavernDataArchiveManager(context: Context) : DataArchiveRepository {
         } finally {
             backupRoot.deleteRecursively()
         }
+    }
+}
+
+internal fun writeManagedDataArchive(paths: TavernStoragePaths, rawOutput: OutputStream) {
+    ZipOutputStream(BufferedOutputStream(rawOutput)).use { zipOutput ->
+        for (directoryName in TavernConfigRepository.managedTopLevelDirectories) {
+            if (directoryName == "config") {
+                writeRootConfigEntry(paths, zipOutput)
+            } else {
+                writeManagedDirectoryEntries(paths, directoryName, zipOutput)
+            }
+        }
+    }
+}
+
+internal fun findImportedRootConfigFile(sourceRoot: File, managedConfigDirectory: File = File(sourceRoot, "config")): File? {
+    val topLevelConfig = File(sourceRoot, "config.yaml")
+    if (topLevelConfig.isFile) {
+        return topLevelConfig
+    }
+    return File(managedConfigDirectory, "config.yaml").takeIf { it.isFile }
+}
+
+internal fun replaceContentWithImportedRootConfig(
+    paths: TavernStoragePaths,
+    importedRootConfig: File?,
+    replaceContent: () -> Unit
+) {
+    val backupFile = backupRootConfig(paths)
+    try {
+        importedRootConfig?.let { TavernRootConfigFiles.replaceRootConfigFrom(paths, it) }
+        replaceContent()
+    } catch (exception: Exception) {
+        restoreRootConfig(paths, backupFile)
+        throw exception
+    } finally {
+        backupFile?.delete()
+    }
+}
+
+private fun backupRootConfig(paths: TavernStoragePaths): File? {
+    val rootConfig = TavernRootConfigFiles.rootConfigFile(paths)
+    if (!rootConfig.isFile) {
+        return null
+    }
+    val backupFile = File(paths.dataRoot, "root-config-import-backup-${System.currentTimeMillis()}.yaml")
+    backupFile.parentFile?.mkdirs()
+    rootConfig.copyTo(backupFile, overwrite = true)
+    return backupFile
+}
+
+private fun restoreRootConfig(paths: TavernStoragePaths, backupFile: File?) {
+    if (backupFile?.isFile == true) {
+        TavernRootConfigFiles.replaceRootConfigFrom(paths, backupFile)
+    } else {
+        TavernRootConfigFiles.rootConfigFile(paths).delete()
+    }
+}
+
+private fun writeRootConfigEntry(paths: TavernStoragePaths, zipOutput: ZipOutputStream) {
+    val rootConfigFile = TavernRootConfigFiles.ensureRootConfigFile(paths)
+    zipOutput.putNextEntry(ZipEntry("config/"))
+    zipOutput.closeEntry()
+    zipOutput.putNextEntry(ZipEntry("config/config.yaml"))
+    rootConfigFile.inputStream().use { input ->
+        input.copyTo(zipOutput)
+    }
+    zipOutput.closeEntry()
+}
+
+private fun writeManagedDirectoryEntries(
+    paths: TavernStoragePaths,
+    directoryName: String,
+    zipOutput: ZipOutputStream
+) {
+    val sourceDirectory = File(paths.serverDataDir, directoryName)
+    if (!sourceDirectory.exists()) {
+        zipOutput.putNextEntry(ZipEntry("$directoryName/"))
+        zipOutput.closeEntry()
+        return
+    }
+
+    val children = sourceDirectory.walkTopDown().toList().sortedBy { it.absolutePath }
+    if (children.size == 1) {
+        zipOutput.putNextEntry(ZipEntry("$directoryName/"))
+        zipOutput.closeEntry()
+    }
+
+    for (file in children) {
+        if (file == sourceDirectory) {
+            continue
+        }
+
+        val relativePath = file.relativeTo(paths.serverDataDir).invariantSeparatorsPath
+        if (file.isDirectory) {
+            if (file.listFiles().isNullOrEmpty()) {
+                zipOutput.putNextEntry(ZipEntry("$relativePath/"))
+                zipOutput.closeEntry()
+            }
+            continue
+        }
+
+        zipOutput.putNextEntry(ZipEntry(relativePath))
+        file.inputStream().use { input ->
+            input.copyTo(zipOutput)
+        }
+        zipOutput.closeEntry()
     }
 }

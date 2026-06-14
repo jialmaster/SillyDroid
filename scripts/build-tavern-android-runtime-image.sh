@@ -149,6 +149,7 @@ stage_runtime_image() {
     sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-node.so" "缺少 Tavern Termux node 入口：$tavern_jni_lib_root/libtermux-node.so"
     sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-git.so" "缺少 Tavern Termux git 入口：$tavern_jni_lib_root/libtermux-git.so"
     sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-git-remote-http.so" "缺少 Tavern Termux git HTTPS helper 入口：$tavern_jni_lib_root/libtermux-git-remote-http.so"
+    sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-curl.so" "缺少 Tavern Termux curl 入口：$tavern_jni_lib_root/libtermux-curl.so"
     sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-sh.so" "缺少 Tavern Termux shell 入口：$tavern_jni_lib_root/libtermux-sh.so"
 
     # 宿主启动脚本属于 Stage 4/APK 外层轻量资产；runtime image 只包含可复用 rootfs 与 native runtime。

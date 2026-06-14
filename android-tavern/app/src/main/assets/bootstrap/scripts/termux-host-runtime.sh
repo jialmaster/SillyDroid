@@ -41,6 +41,7 @@ install_termux_command_links() {
 	rm -f \
 		"$link_dir/node" \
 		"$link_dir/git" \
+		"$link_dir/curl" \
 		"$link_dir/sh" \
 		"$link_dir/bash" \
 		"$link_dir/npm" \
@@ -51,6 +52,7 @@ install_termux_command_links() {
 		"$link_dir/remote-ftps"
 	ensure_symlink "$TERMUX_NODE_BIN" "$link_dir/node"
 	ensure_symlink "$TERMUX_GIT_BIN" "$link_dir/git"
+	ensure_symlink "$TERMUX_CURL_BIN" "$link_dir/curl"
 	ensure_symlink "$TERMUX_SH_BIN" "$link_dir/sh"
 	# Git 的错误和部分执行路径使用裸 remote-https 名称；这里仍指向同一个 APK native helper。
 	ensure_symlink "$TERMUX_GIT_REMOTE_HTTP_BIN" "$link_dir/remote-http"
@@ -130,6 +132,7 @@ prepare_termux_host_runtime() {
 	assert_file "$TERMUX_NODE_BIN" "缺少 Termux Node 入口：$TERMUX_NODE_BIN"
 	assert_file "$TERMUX_GIT_BIN" "缺少 Termux Git 入口：$TERMUX_GIT_BIN"
 	assert_file "$TERMUX_GIT_REMOTE_HTTP_BIN" "缺少 Termux Git HTTPS helper 入口：$TERMUX_GIT_REMOTE_HTTP_BIN"
+	assert_file "$TERMUX_CURL_BIN" "缺少 Termux curl 入口：$TERMUX_CURL_BIN"
 	assert_file "$TERMUX_SH_BIN" "缺少 Termux shell 入口：$TERMUX_SH_BIN"
 
 	mkdir -p "$HOST_TMP_DIR"

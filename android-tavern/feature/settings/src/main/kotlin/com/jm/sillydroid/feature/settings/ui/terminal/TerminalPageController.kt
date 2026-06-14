@@ -44,7 +44,6 @@ class TerminalPageController(
     private val ctrlCButton: MaterialButton,
     private val clearButton: MaterialButton,
     private val resetButton: MaterialButton,
-    private val selectButton: MaterialButton,
     private val settingsButton: MaterialButton,
     private val extraKeysStripView: TerminalExtraKeysStripView,
     private val hostPreferencesRepository: HostPreferencesRepository,
@@ -133,9 +132,6 @@ class TerminalPageController(
         resetButton.setOnClickListener {
             stopSelectionModeIfActive()
             initializeOrReconnect(resetSession = true)
-        }
-        selectButton.setOnClickListener {
-            toggleSelectionMode()
         }
         settingsButton.setOnClickListener {
             terminalSettingsDialogController.show()
@@ -347,14 +343,6 @@ class TerminalPageController(
         ctrlCButton.isEnabled = state.isRunning
         clearButton.isEnabled = state.isRunning
         resetButton.isEnabled = state.phase != HostConsolePhase.STARTING
-        selectButton.isEnabled = state.isRunning || selectionModeActive
-        selectButton.text = activity.getString(
-            if (selectionModeActive) {
-                R.string.bootstrap_settings_terminal_select_stop
-            } else {
-                R.string.bootstrap_settings_terminal_select_start
-            }
-        )
         terminalView.isVisible = state.phase != HostConsolePhase.FAILED
         renderExtraKeysStrip()
     }
@@ -416,26 +404,6 @@ class TerminalPageController(
         textSelectionBridge.copySelection()
         clearArmedModifiers()
         terminalViewClient.refreshInputConnection()
-    }
-
-    private fun toggleSelectionMode() {
-        if (!currentSessionState.isRunning) {
-            return
-        }
-
-        if (selectionModeActive) {
-            stopSelectionModeIfActive()
-        } else {
-            startSelectionModeFromButton()
-        }
-    }
-
-    private fun startSelectionModeFromButton() {
-        if (!textSelectionBridge.startSelectionFromCursor()) {
-            return
-        }
-        clearArmedModifiers()
-        renderExtraKeysStrip()
     }
 
     private fun startTextSelectionFromLongPress(event: MotionEvent) {
@@ -546,13 +514,6 @@ class TerminalPageController(
 
     private fun onSelectionModeChanged(copyMode: Boolean) {
         selectionModeActive = copyMode
-        selectButton.text = activity.getString(
-            if (copyMode) {
-                R.string.bootstrap_settings_terminal_select_stop
-            } else {
-                R.string.bootstrap_settings_terminal_select_start
-            }
-        )
         renderExtraKeysStrip()
     }
 

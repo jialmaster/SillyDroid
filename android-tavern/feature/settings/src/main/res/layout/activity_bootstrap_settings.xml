@@ -1566,20 +1566,6 @@
                         android:text="@string/bootstrap_settings_terminal_reset" />
                 </LinearLayout>
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/sillydroid_space_xs_half"
-                    android:gravity="start|center_vertical"
-                    android:orientation="horizontal">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/bootstrapSettingsTerminalSelectButton"
-                        style="@style/Widget.SillyDroid.SettingsButton.Outlined"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/bootstrap_settings_terminal_select_start" />
-                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

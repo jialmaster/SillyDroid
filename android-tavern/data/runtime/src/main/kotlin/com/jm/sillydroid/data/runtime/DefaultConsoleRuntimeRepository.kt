@@ -47,9 +47,6 @@ internal fun buildConsoleShellLaunchSpec(
     val environment = buildHostRuntimeEnvironment(paths).toMutableMap().apply {
         put("APP_DATA_ROOT", paths.serverDataDir.absolutePath)
         put("SILLYDROID_GUEST_SHELL_PATH", guestShellPath)
-        put("SILLYDROID_CONSOLE_HOME", "/tavern/data/.sillydroid-terminal-home")
-        put("SILLYDROID_CONSOLE_WORKDIR", "/tavern/server")
-        put("SILLYDROID_CONSOLE_PROMPT", "${'$'}(sillydroid_prompt_path) > ")
         put("TERM", "xterm-256color")
         put("COLORTERM", "truecolor")
     }
@@ -61,7 +58,7 @@ internal fun buildConsoleShellLaunchSpec(
         workingDirectory = paths.bootstrapRoot.absolutePath,
         // Termux TerminalSession 底层直接把 arguments 作为 execvp(argv) 传入，不会自动补 argv[0]。
         // 这里必须显式带上 shell 自身和脚本路径，否则 /system/bin/sh 会退回成“等输入的交互 shell”，
-        // 首屏既不会执行 start-console-shell.sh，也不会出现 /tavern/server > prompt。
+        // 首屏既不会执行 start-console-shell.sh，也不会进入真实 Tavern 工作目录。
         arguments = listOf("/system/bin/sh", scriptFile.absolutePath),
         environment = environment,
         transcriptRows = 10_000

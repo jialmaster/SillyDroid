@@ -38,6 +38,7 @@ termux_bootstrap_packages=(
 termux_base_packages=(
     git
     nodejs-lts
+    curl
 )
 
 source "$workspace_root/scripts/android-build-common.sh"
@@ -57,6 +58,7 @@ config_path = pathlib.Path(sys.argv[1])
 default = [
     "git",
     "nodejs-lts",
+    "curl",
 ]
 
 if not config_path.exists():
@@ -447,6 +449,7 @@ prune_termux_host_prefix_for_native_entrypoints() {
         "$prefix_root/bin/node" \
         "$prefix_root/bin/bash" \
         "$prefix_root/bin/dash" \
+        "$prefix_root/bin/curl" \
         "$prefix_root/bin/git" \
         "$prefix_root/bin/git-shell"
 
@@ -532,6 +535,7 @@ sync_termux_host_runtime_jni_libs() {
     copy_termux_host_executable "$source_root/bin/node" "$destination_root/libtermux-node.so" 'node'
     copy_termux_host_executable "$source_root/libexec/git-core/git" "$destination_root/libtermux-git.so" 'git'
     copy_termux_host_executable "$source_root/libexec/git-core/git-remote-http" "$destination_root/libtermux-git-remote-http.so" 'git-remote-http'
+    copy_termux_host_executable "$source_root/bin/curl" "$destination_root/libtermux-curl.so" 'curl'
     copy_termux_host_executable "$source_root/bin/dash" "$destination_root/libtermux-sh.so" 'shell'
     if [[ -f "$source_root/bin/bash" ]]; then
         copy_termux_host_executable "$source_root/bin/bash" "$destination_root/libtermux-bash.so" 'bash'
@@ -552,6 +556,7 @@ seed_relative_paths = [
     "bin/node",
     "libexec/git-core/git",
     "libexec/git-core/git-remote-http",
+    "bin/curl",
     "bin/dash",
     "bin/bash",
 ]
@@ -801,6 +806,7 @@ if [[ -f "$existing_manifest_path" ]] \
     && [[ -f "$resolved_jni_libs_root/libtermux-node.so" ]] \
     && [[ -f "$resolved_jni_libs_root/libtermux-git.so" ]] \
     && [[ -f "$resolved_jni_libs_root/libtermux-git-remote-http.so" ]] \
+    && [[ -f "$resolved_jni_libs_root/libtermux-curl.so" ]] \
     && [[ -f "$resolved_jni_libs_root/libtermux-sh.so" ]]
 then
     sillydroid_log "Android rootfs assets are up to date, skipping sync."
