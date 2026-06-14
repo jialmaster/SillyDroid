@@ -6,7 +6,7 @@ class AndroidSystemNotificationBridge(
     private val notificationController: SystemNotificationController,
     private val isHostActive: () -> Boolean,
     private val runOnUiThread: (() -> Unit) -> Unit,
-    private val requestPermission: () -> Unit
+    private val requestNotificationPermission: () -> Unit
 ) {
     @JavascriptInterface
     fun showNotification(payload: String?): Boolean {
@@ -16,7 +16,7 @@ class AndroidSystemNotificationBridge(
 
         val request = notificationController.parseRequest(payload) ?: return false
         if (!notificationController.canPost()) {
-            runOnUiThread { requestPermission() }
+            runOnUiThread { requestNotificationPermission() }
             return false
         }
 
@@ -31,7 +31,9 @@ class AndroidSystemNotificationBridge(
     @JavascriptInterface
     fun requestPermission(): String {
         if (isHostActive()) {
-            runOnUiThread { requestPermission() }
+            // WebView 会在 JavaBridge 线程调用 @JavascriptInterface 方法；这里必须显式调用宿主权限动作，
+            // 不能与桥方法同名，否则 Kotlin 会解析为当前方法并造成递归栈溢出。
+            runOnUiThread { requestNotificationPermission() }
         }
         return notificationController.permissionState()
     }

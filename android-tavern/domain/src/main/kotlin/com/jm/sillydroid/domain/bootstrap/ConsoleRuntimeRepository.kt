@@ -1,14 +1,10 @@
 package com.jm.sillydroid.domain.bootstrap
 
 /**
- * 为设置页终端提供独立于 bootstrap 会话状态的运行时准备与 shell 启动参数。
- * 这里不能复用“启动酒馆服务”的生命周期语义，否则只想开终端也会误触发服务启动状态机。
+ * 为设置页终端提供独立于 bootstrap 会话状态的 shell 启动参数。
+ * 终端不能解包、刷新或校验 rootfs/server 资产；这些环境管理职责只能留在 app bootstrap 链路。
  */
 interface ConsoleRuntimeRepository {
-    fun prepareConsoleAssets(
-        onProgress: (message: String, details: String, progressPercent: Int) -> Unit = { _, _, _ -> }
-    )
-
     fun createShellLaunchSpec(): ConsoleShellLaunchSpec
 }
 

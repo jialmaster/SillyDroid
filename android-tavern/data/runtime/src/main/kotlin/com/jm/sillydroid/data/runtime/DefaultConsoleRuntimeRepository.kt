@@ -6,18 +6,11 @@ import com.jm.sillydroid.domain.bootstrap.ConsoleShellLaunchSpec
 import java.io.File
 
 /**
- * 设置页终端的 runtime 入口必须和酒馆服务共享同一套 Termux host 资产，
- * 但它只负责“准备资产 + 给出 shell 启动规格”，不能偷偷附带 bootstrap 状态机副作用。
+ * 设置页终端只负责给出 shell 启动规格，不能解包、刷新或校验 rootfs/server 资产。
+ * 资产准备只能由 app bootstrap 链路完成，避免用户只是打开终端时触发环境管理副作用。
  */
 class DefaultConsoleRuntimeRepository(context: Context) : ConsoleRuntimeRepository {
     private val appContext = context.applicationContext
-
-    override fun prepareConsoleAssets(
-        onProgress: (message: String, details: String, progressPercent: Int) -> Unit
-    ) {
-        val paths = HostPaths.from(appContext)
-        AssetExtractor(appContext).prepareConsoleAssets(paths, onProgress)
-    }
 
     override fun createShellLaunchSpec(): ConsoleShellLaunchSpec {
         val paths = HostPaths.from(appContext)
@@ -56,7 +49,7 @@ internal fun buildConsoleShellLaunchSpec(
         put("SILLYDROID_GUEST_SHELL_PATH", guestShellPath)
         put("SILLYDROID_CONSOLE_HOME", "/tavern/data/.sillydroid-terminal-home")
         put("SILLYDROID_CONSOLE_WORKDIR", "/tavern/server")
-        put("SILLYDROID_CONSOLE_PROMPT", "${'$'}PWD > ")
+        put("SILLYDROID_CONSOLE_PROMPT", "${'$'}(sillydroid_prompt_path) > ")
         put("TERM", "xterm-256color")
         put("COLORTERM", "truecolor")
     }

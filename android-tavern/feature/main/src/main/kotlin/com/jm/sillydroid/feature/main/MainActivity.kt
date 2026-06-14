@@ -802,7 +802,9 @@ class MainActivity : AppCompatActivity() {
             .put("browserOutdated", browserRuntimeInfo?.outdated == true)
             .put("browserUserAgent", browserRuntimeInfo?.userAgent.orEmpty())
             .put("browserZoomPercent", hostConfigStore.browserZoomPercent)
-            .put("browserAppliedZoomPercent", if (::browserHost.isInitialized) browserHost.currentBrowserZoomPercent() else hostConfigStore.browserZoomPercent)
+            // 该方法会被 JS Bridge 从 WebView JavaBridge 线程调用；版本信息只能读取宿主配置快照，
+            // 不能反向触碰 WebView/GeckoView UI 对象，否则部分 WebView 会抛出跨线程访问异常。
+            .put("browserAppliedZoomPercent", hostConfigStore.browserZoomPercent)
             .put("hostDisplayMode", hostConfigStore.hostDisplayMode.name)
             .put("launchWebViewOnReady", hostConfigStore.launchWebViewOnReady)
             .put("floatingLogBubbleEnabled", hostConfigStore.floatingLogBubbleEnabled)

@@ -588,56 +588,6 @@ class AssetExtractor(private val context: Context) {
         serverRefreshPlan.anyChanged
     }
 
-    /**
-     * 设置页终端只需要进入现有 Termux host 环境并附着一个交互 shell，
-     * 不能为了懒初始化 console 而复用 bootstrap service 的启动/重启语义。
-     */
-    fun prepareConsoleAssets(
-        paths: HostPaths,
-        onProgress: (message: String, details: String, progressPercent: Int) -> Unit = { _, _, _ -> }
-    ) = synchronized(extractLock) {
-        onProgress(
-            "正在准备终端运行时目录。",
-            "正在创建 bootstrap、data 和日志目录。",
-            5
-        )
-        prepareWorkDirectories(paths)
-
-        onProgress(
-            "正在检查 Linux rootfs 资产。",
-            "终端首次进入时需要先确认 rootfs 是否已解包完成。",
-            12
-        )
-        val rootfsDirectoryRefreshed = prepareRootfsAssets(paths) { details, progressPercent ->
-            onProgress(
-                "正在准备 Linux rootfs。",
-                details,
-                12 + ((progressPercent.coerceIn(0, 100) * 28) / 100)
-            )
-        }
-
-        onProgress(
-            "正在检查 Tavern server 资产。",
-            "终端默认工作目录固定为 /tavern/server，需要先保证 server source 与依赖包就绪。",
-            44
-        )
-        prepareServerAssets(paths, rootfsDirectoryRefreshed) { details, progressPercent ->
-            onProgress(
-                "正在准备 Tavern server 资产。",
-                details,
-                44 + ((progressPercent.coerceIn(0, 100) * 44) / 100)
-            )
-        }
-
-        BootstrapLayoutVerifier(paths).verify()
-        AndroidDnsConfigWriter(context).write(paths)
-        onProgress(
-            "终端运行时已准备完成。",
-            "rootfs、server source、host prefix 与 DNS 配置已经同步完成。",
-            100
-        )
-    }
-
     fun extractBootstrap(
         paths: HostPaths,
         onProgress: (message: String, details: String, progressPercent: Int) -> Unit = { _, _, _ -> }

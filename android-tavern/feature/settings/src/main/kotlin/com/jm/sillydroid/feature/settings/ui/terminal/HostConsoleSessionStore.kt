@@ -14,7 +14,7 @@ import kotlinx.coroutines.withContext
 
 enum class HostConsolePhase {
     IDLE,
-    PREPARING,
+    STARTING,
     READY,
     FAILED,
     EXITED
@@ -25,7 +25,7 @@ data class HostConsoleSessionState(
     val sessionId: String? = null,
     val title: String = "",
     val statusMessage: String = "终端尚未初始化。",
-    val details: String = "首次切到终端页签时才会懒初始化 rootfs shell。",
+    val details: String = "首次切到终端页签时只会启动 shell，会话在同一次 app 进程内复用。",
     val progressPercent: Int? = null,
     val isRunning: Boolean = false
 )
@@ -105,30 +105,22 @@ class HostConsoleSessionStore(
 
     private suspend fun createNewSession(): HostConsoleSessionHandle {
         _state.value = HostConsoleSessionState(
-            phase = HostConsolePhase.PREPARING,
-            statusMessage = "正在准备终端运行时。",
-            details = "首次进入终端页签时会懒初始化 rootfs、payload 和 host prefix。",
-            progressPercent = 0,
+            phase = HostConsolePhase.STARTING,
+            statusMessage = "正在启动终端 shell。",
+            details = "只创建终端会话，不解包、不刷新 rootfs/server 资产。",
+            progressPercent = null,
             isRunning = false
         )
 
         try {
-            withContext(dispatchers.io) {
-                consoleRuntimeRepository.prepareConsoleAssets { message, details, progressPercent ->
-                    _state.value = HostConsoleSessionState(
-                        phase = HostConsolePhase.PREPARING,
-                        statusMessage = message,
-                        details = details,
-                        progressPercent = progressPercent,
-                        isRunning = false
-                    )
-                }
+            val launchSpec = withContext(dispatchers.io) {
+                consoleRuntimeRepository.createShellLaunchSpec()
             }
 
             // Termux 的 TerminalSession 构造阶段会创建 MainThreadHandler，并立即接入 emulator/client 更新链。
             // 这里必须回到主线程创建 session；如果退回 IO 线程，首屏 transcript、prompt 和 IME 输入都可能直接失效。
             val session = sessionFactory.create(
-                launchSpec = consoleRuntimeRepository.createShellLaunchSpec(),
+                launchSpec = launchSpec,
                 callbacks = object : HostConsoleSessionCallbacks {
                     override fun onSessionTitleChanged(sessionId: String, title: String) {
                         if (currentSession?.sessionId != sessionId) {
@@ -161,7 +153,7 @@ class HostConsoleSessionStore(
             _state.value = HostConsoleSessionState(
                 phase = HostConsolePhase.FAILED,
                 statusMessage = "终端初始化失败。",
-                details = exception.message ?: "未拿到可用的 rootfs shell 启动参数。",
+                details = exception.message ?: "未拿到可用的终端 shell 启动参数。",
                 progressPercent = null,
                 isRunning = false
             )

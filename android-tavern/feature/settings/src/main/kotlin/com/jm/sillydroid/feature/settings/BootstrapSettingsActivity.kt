@@ -1,6 +1,7 @@
 package com.jm.sillydroid.feature.settings
 
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import android.provider.DocumentsContract
@@ -39,6 +40,8 @@ import com.jm.sillydroid.feature.settings.ui.about.BootstrapSettingsAboutControl
 import com.jm.sillydroid.feature.settings.ui.data.BootstrapSettingsDataCoordinator
 import com.jm.sillydroid.feature.settings.ui.extensions.BootstrapSettingsExtensionsCoordinator
 import com.jm.sillydroid.feature.settings.ui.form.BootstrapSettingsFormController
+import com.jm.sillydroid.feature.settings.ui.guide.SettingsGuideCarouselDialogController
+import com.jm.sillydroid.feature.settings.ui.guide.SettingsGuidePage
 import com.jm.sillydroid.feature.settings.ui.logs.BootstrapSettingsLogsCoordinator
 import com.jm.sillydroid.feature.settings.ui.screen.BootstrapSettingsScreenController
 import com.jm.sillydroid.feature.settings.ui.screen.RuntimePatchBottomSheetController
@@ -56,6 +59,7 @@ import com.jm.sillydroid.ui.update.AppUpdateCoordinator
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.zip.CRC32
 import kotlinx.coroutines.launch
 
 class BootstrapSettingsActivity : AppCompatActivity() {
@@ -69,7 +73,12 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         private const val openDefaultExtensionsInstallerKey = SettingsNavigationContract.openDefaultExtensionsInstallerKey
         private const val tavernDocumentsRootDocumentId = "root"
         private const val mtManagerPackageName = "bin.mt.plus"
-        private const val showAdvancedDocumentsExtra = "android.content.extra.SHOW_ADVANCED"
+        private const val mtManagerMainActivityName = "bin.mt.plus.Main"
+        private const val mtManagerShortcutActivityName = "bin.mt.plus.ShortcutActivity"
+        private const val mtManagerShortcutAction = "bin.mt.plus.ACTION_SHORTCUT"
+        private const val mtManagerShortcutOperationGoto = "goto"
+        private const val guidePreferencesName = "bootstrap-settings-guides"
+        private const val mtManagerGuideShownKey = "mt-manager-guide-shown"
 
         fun createIntent(
             activity: Activity,
@@ -176,7 +185,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var restoreDefaultsButton: ImageButton
     private lateinit var importButton: MaterialButton
     private lateinit var exportButton: MaterialButton
-    private lateinit var openTavernDirectoryButton: MaterialButton
     private lateinit var openTavernDirectoryMtButton: MaterialButton
     private lateinit var clearDataButton: MaterialButton
     private lateinit var clearBrowserDataButton: MaterialButton
@@ -202,6 +210,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var screenController: BootstrapSettingsScreenController
     private lateinit var stateController: SettingsActivityStateController
     private lateinit var runtimePatchBottomSheetController: RuntimePatchBottomSheetController
+    private lateinit var mtManagerGuideDialogController: SettingsGuideCarouselDialogController
     private lateinit var aboutController: BootstrapSettingsAboutController
     private lateinit var formController: BootstrapSettingsFormController
     private lateinit var settingsCoordinator: BootstrapSettingsSettingsCoordinator
@@ -275,11 +284,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
             exportArchiveLauncher.launch(getString(R.string.bootstrap_settings_export_name, timestamp))
         }
-        openTavernDirectoryButton.setOnClickListener {
-            openTavernDirectory(preferMtManager = false)
-        }
         openTavernDirectoryMtButton.setOnClickListener {
-            openTavernDirectory(preferMtManager = true)
+            openTavernDirectoryInMtWithGuide()
         }
         clearDataButton.setOnClickListener {
             screenController.confirmClearData {
@@ -421,7 +427,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         restoreDefaultsButton = findViewById(R.id.bootstrapSettingsRestoreDefaultsButton)
         importButton = findViewById(R.id.bootstrapSettingsImportButton)
         exportButton = findViewById(R.id.bootstrapSettingsExportButton)
-        openTavernDirectoryButton = findViewById(R.id.bootstrapSettingsOpenTavernDirectoryButton)
         openTavernDirectoryMtButton = findViewById(R.id.bootstrapSettingsOpenTavernDirectoryMtButton)
         clearDataButton = findViewById(R.id.bootstrapSettingsClearDataButton)
         clearBrowserDataButton = findViewById(R.id.bootstrapSettingsClearBrowserDataButton)
@@ -462,7 +467,6 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             restoreDefaultsButton = restoreDefaultsButton,
             importButton = importButton,
             exportButton = exportButton,
-            openTavernDirectoryButton = openTavernDirectoryButton,
             openTavernDirectoryMtButton = openTavernDirectoryMtButton,
             clearDataButton = clearDataButton,
             clearBrowserDataButton = clearBrowserDataButton,
@@ -505,6 +509,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             viewModel = settingsActivityViewModel,
             onServiceRestartRequired = { screenController.updateRestartServicePending(true) }
         )
+        mtManagerGuideDialogController = SettingsGuideCarouselDialogController(activity = this)
         stateController = SettingsActivityStateController(
             activity = this,
             viewModel = settingsActivityViewModel,
@@ -596,7 +601,10 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             updateDirtyState = settingsCoordinator::refreshDirtyState,
             restartBootstrap = processManager::restart,
             onBootstrapRestartRequired = {
-                processManager.restart()
+                updateResultFlags(
+                    shouldStartBootstrap = true,
+                    shouldForceFreshWebViewLoad = true
+                )
                 finish()
             }
         )
@@ -699,31 +707,101 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         )
     }
 
-    private fun openTavernDirectory(preferMtManager: Boolean) {
-        val fallbackIntent = createTavernDirectoryIntent()
-
-        if (preferMtManager && startTavernDirectoryIntent(createTavernDirectoryIntent().setPackage(mtManagerPackageName))) {
+    private fun openTavernDirectoryInMt() {
+        if (startTavernDirectoryIntent(createMtManagerShortcutIntent())) {
+            screenController.showMessage(getString(R.string.bootstrap_settings_open_tavern_directory_mt_shortcut_opened))
             return
         }
-        if (preferMtManager) {
-            screenController.showMessage(getString(R.string.bootstrap_settings_open_tavern_directory_mt_missing))
+        if (startTavernDirectoryIntent(createMtManagerLauncherIntent())) {
+            screenController.showMessage(getString(R.string.bootstrap_settings_open_tavern_directory_mt_shortcut_failed))
+            return
         }
+        screenController.showMessage(getString(R.string.bootstrap_settings_open_tavern_directory_mt_missing))
+    }
 
-        if (!startTavernDirectoryIntent(fallbackIntent)) {
-            screenController.showMessage(getString(R.string.bootstrap_settings_open_tavern_directory_failed))
+    private fun openTavernDirectoryInMtWithGuide() {
+        if (isMtManagerGuideShown()) {
+            openTavernDirectoryInMt()
+            return
+        }
+        mtManagerGuideDialogController.show(
+            title = getString(R.string.bootstrap_settings_mt_guide_title),
+            summary = getString(R.string.bootstrap_settings_mt_guide_summary),
+            pages = createMtManagerGuidePages(),
+            onDismissedByUser = {
+                markMtManagerGuideShown()
+                openTavernDirectoryInMt()
+            }
+        )
+    }
+
+    private fun isMtManagerGuideShown(): Boolean {
+        return getSharedPreferences(guidePreferencesName, MODE_PRIVATE)
+            .getBoolean(mtManagerGuideShownKey, false)
+    }
+
+    private fun markMtManagerGuideShown() {
+        getSharedPreferences(guidePreferencesName, MODE_PRIVATE)
+            .edit()
+            .putBoolean(mtManagerGuideShownKey, true)
+            .apply()
+    }
+
+    private fun createMtManagerGuidePages(): List<SettingsGuidePage> {
+        return listOf(
+            SettingsGuidePage(
+                imageResId = R.drawable.mt_manager_guide_03,
+                title = getString(R.string.bootstrap_settings_mt_guide_step_1_title),
+                description = getString(R.string.bootstrap_settings_mt_guide_step_1_summary)
+            ),
+            SettingsGuidePage(
+                imageResId = R.drawable.mt_manager_guide_01,
+                title = getString(R.string.bootstrap_settings_mt_guide_step_2_title),
+                description = getString(R.string.bootstrap_settings_mt_guide_step_2_summary)
+            ),
+            SettingsGuidePage(
+                imageResId = R.drawable.mt_manager_guide_02,
+                title = getString(R.string.bootstrap_settings_mt_guide_step_3_title),
+                description = getString(R.string.bootstrap_settings_mt_guide_step_3_summary)
+            ),
+            SettingsGuidePage(
+                imageResId = R.drawable.mt_manager_guide_04,
+                title = getString(R.string.bootstrap_settings_mt_guide_step_4_title),
+                description = getString(R.string.bootstrap_settings_mt_guide_step_4_summary)
+            ),
+            SettingsGuidePage(
+                imageResId = R.drawable.mt_manager_guide_05,
+                title = getString(R.string.bootstrap_settings_mt_guide_step_5_title),
+                description = getString(R.string.bootstrap_settings_mt_guide_step_5_summary)
+            )
+        )
+    }
+
+    private fun createMtManagerShortcutIntent(): Intent {
+        return Intent(mtManagerShortcutAction).apply {
+            // MT 会把已授权 SAF tree uri 的 CRC32 格式化成 /storage/XXXX-XXXX/ 虚拟路径。
+            // 该路径不是系统真实挂载点，只能用于 MT 的 ACTION_SHORTCUT 直达。
+            component = ComponentName(mtManagerPackageName, mtManagerShortcutActivityName)
+            putExtra("path", mtManagerVirtualPathFor(createTavernDirectoryTreeUri().toString()))
+            putExtra("folderColorIcon", "ic_folder")
+            putExtra("operation", mtManagerShortcutOperationGoto)
         }
     }
 
-    private fun createTavernDirectoryIntent(): Intent {
-        val treeUri = DocumentsContract.buildTreeDocumentUri(tavernDocumentsAuthority(), tavernDocumentsRootDocumentId)
-        return Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
-            // ACTION_OPEN_DOCUMENT_TREE 只能通过 EXTRA_INITIAL_URI 传目标；
-            // 把 provider uri 放进 data 会导致部分系统 DocumentsUI 无法解析该 Intent。
-            putExtra(DocumentsContract.EXTRA_INITIAL_URI, treeUri)
-            putExtra(showAdvancedDocumentsExtra, true)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
+    private fun createMtManagerLauncherIntent(): Intent {
+        return Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            component = ComponentName(mtManagerPackageName, mtManagerMainActivityName)
         }
+    }
+
+    private fun mtManagerVirtualPathFor(treeUri: String): String {
+        val crc32 = CRC32().apply {
+            update(treeUri.toByteArray(Charsets.UTF_8))
+        }.value.toString(16)
+            .uppercase(Locale.US)
+            .padStart(8, '0')
+        return "/storage/${crc32.take(4)}-${crc32.drop(4)}/"
     }
 
     private fun startTavernDirectoryIntent(intent: Intent): Boolean {
@@ -736,6 +814,9 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private fun tavernDocumentsAuthority(): String {
         return "$packageName.tavern-data.documents"
     }
+
+    private fun createTavernDirectoryTreeUri() =
+        DocumentsContract.buildTreeDocumentUri(tavernDocumentsAuthority(), tavernDocumentsRootDocumentId)
 
     private fun applySettingsSurfaceSystemBars(mode: HostDisplayMode = hostConfigStore.hostDisplayMode) {
         // 设置页本身也属于宿主界面；这里按用户选择的显示模式统一处理系统栏显示状态，

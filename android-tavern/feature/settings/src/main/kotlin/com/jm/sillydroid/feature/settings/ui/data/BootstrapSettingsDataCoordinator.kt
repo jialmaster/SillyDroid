@@ -98,6 +98,8 @@ class BootstrapSettingsDataCoordinator(
                     successMessage
                 )
                 showMessage(successMessage)
+                // 导入完成后服务已经在设置页停止；真正拉起前台服务统一交回主界面 ActivityResult 链路，
+                // 避免 Android 12+ 在设置页/后台受限时机直接 startForegroundService 崩溃。
                 onBootstrapRestartRequired()
             }.onFailure { exception ->
                 if (serviceWasStopped) {

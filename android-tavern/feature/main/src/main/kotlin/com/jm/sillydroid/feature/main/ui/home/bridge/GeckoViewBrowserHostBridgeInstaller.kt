@@ -74,7 +74,7 @@ class GeckoViewBrowserHostBridgeInstaller(
             notificationController = systemNotificationController,
             isHostActive = actions.isHostActive,
             runOnUiThread = actions.runOnUiThread,
-            requestPermission = requestNotificationPermission
+            requestNotificationPermission = requestNotificationPermission
         )
     }
 

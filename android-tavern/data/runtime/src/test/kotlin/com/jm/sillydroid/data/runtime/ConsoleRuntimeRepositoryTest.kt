@@ -42,7 +42,7 @@ class ConsoleRuntimeRepositoryTest {
             assertEquals("/bin/bash", spec.environment["SILLYDROID_GUEST_SHELL_PATH"])
             assertEquals("/tavern/server", spec.environment["SILLYDROID_CONSOLE_WORKDIR"])
             assertEquals("/tavern/data/.sillydroid-terminal-home", spec.environment["SILLYDROID_CONSOLE_HOME"])
-            assertEquals("${'$'}PWD > ", spec.environment["SILLYDROID_CONSOLE_PROMPT"])
+            assertEquals("${'$'}(sillydroid_prompt_path) > ", spec.environment["SILLYDROID_CONSOLE_PROMPT"])
             assertEquals("xterm-256color", spec.environment["TERM"])
             assertEquals("truecolor", spec.environment["COLORTERM"])
             assertEquals(paths.serverDataDir.absolutePath, spec.environment["APP_DATA_ROOT"])

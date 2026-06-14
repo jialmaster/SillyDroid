@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
@@ -24,7 +25,9 @@ import com.jm.sillydroid.feature.settings.R
 import com.jm.sillydroid.feature.settings.model.SettingsTab
 import com.termux.terminal.TextStyle
 import com.termux.view.TerminalView
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.launch
+import kotlin.coroutines.resume
 import kotlin.math.roundToInt
 
 /**
@@ -50,6 +53,8 @@ class TerminalPageController(
     companion object {
         private const val logTag = "SettingsTerminal"
         private const val terminalCursorBlinkRateMillis = 500
+        private const val terminalSizeSyncSecondPassDelayMillis = 48L
+        private const val terminalSizeSyncFinalPassDelayMillis = 220L
         private val normalShortcutActions = listOf(
             TerminalExtraKeyAction.ESC,
             TerminalExtraKeyAction.TAB,
@@ -76,6 +81,12 @@ class TerminalPageController(
     private var currentSessionState = HostConsoleSessionState()
     private val textSelectionBridge = TermuxTextSelectionBridge(terminalView)
     private var longPressMenuAnchorView: View? = null
+    private val terminalLayoutChangeListener = View.OnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+        val sizeChanged = (right - left) != (oldRight - oldLeft) || (bottom - top) != (oldBottom - oldTop)
+        if (selectedTab == SettingsTab.TERMINAL && sizeChanged) {
+            scheduleTerminalSizeSync()
+        }
+    }
     private val terminalSettingsDialogController = TerminalSettingsDialogController(
         activity = activity,
         hostPreferencesRepository = hostPreferencesRepository,
@@ -130,10 +141,15 @@ class TerminalPageController(
             terminalSettingsDialogController.show()
         }
         extraKeysStripView.setOnActionPressedListener(::handleExtraKeyAction)
+        terminalView.addOnLayoutChangeListener(terminalLayoutChangeListener)
+        terminalPanelView.addOnLayoutChangeListener(terminalLayoutChangeListener)
 
         ViewCompat.setOnApplyWindowInsetsListener(terminalPanelView) { _, insets ->
             imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
             renderExtraKeysStrip()
+            if (selectedTab == SettingsTab.TERMINAL) {
+                scheduleTerminalSizeSync()
+            }
             insets
         }
         ViewCompat.requestApplyInsets(terminalPanelView)
@@ -167,6 +183,8 @@ class TerminalPageController(
         stopSelectionModeIfActive()
         detachCurrentTerminalView()
         terminalViewClient.detachFromTerminalPage()
+        terminalView.removeOnLayoutChangeListener(terminalLayoutChangeListener)
+        terminalPanelView.removeOnLayoutChangeListener(terminalLayoutChangeListener)
         terminalView.setTerminalCursorBlinkerState(false, true)
     }
 
@@ -176,6 +194,7 @@ class TerminalPageController(
         }
 
         activity.lifecycleScope.launch {
+            awaitTerminalSizeReady()
             val result = runCatching {
                 if (resetSession) {
                     sessionStore.recreateSession()
@@ -190,8 +209,10 @@ class TerminalPageController(
                 }
 
                 session.attach(terminalView, terminalSessionClient)
+                syncTerminalSizeNow()
                 applyTerminalThemeColors()
                 terminalView.onScreenUpdated()
+                scheduleTerminalSizeSync()
                 terminalViewClient.attachToVisibleTerminal(showKeyboard = false)
                 applyTerminalCursorBlinkSettings(hostPreferencesRepository.terminalCursorBlinkEnabled)
                 renderExtraKeysStrip()
@@ -201,11 +222,86 @@ class TerminalPageController(
         }
     }
 
+    /**
+     * TerminalSession 会在 TerminalView.attachSession() 的第一次 updateSize() 里启动真实 pty。
+     * 必须等 TerminalView 已经拿到最终宽高后再 attach，否则 shell 的首个 prompt 和 readline
+     * 会按错误列宽渲染，表现成长路径/长命令只露出最后一段而不是自动折行。
+     */
+    private suspend fun awaitTerminalSizeReady() {
+        if (isTerminalSizeReady()) {
+            return
+        }
+
+        suspendCancellableCoroutine { continuation ->
+            var layoutListener: View.OnLayoutChangeListener? = null
+
+            fun detachListener() {
+                layoutListener?.let { listener ->
+                    terminalView.removeOnLayoutChangeListener(listener)
+                }
+                layoutListener = null
+            }
+
+            fun resumeIfReady() {
+                if (!continuation.isActive || !isTerminalSizeReady()) {
+                    return
+                }
+                detachListener()
+                continuation.resume(Unit)
+            }
+
+            layoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                resumeIfReady()
+            }
+            terminalView.addOnLayoutChangeListener(layoutListener)
+            terminalView.post {
+                resumeIfReady()
+            }
+            continuation.invokeOnCancellation {
+                detachListener()
+            }
+        }
+    }
+
+    private fun isTerminalSizeReady(): Boolean {
+        return terminalView.isAttachedToWindow && terminalView.width > 0 && terminalView.height > 0
+    }
+
     // 终端字号修改后需要立即回写当前 TerminalView，
     // 这样用户在终端设置里拖动字号时，能直接看到真实宿主终端的渲染变化。
     private fun applyTerminalFontSize(fontSizePx: Int) {
         terminalView.setTextSize(fontSizePx)
+        scheduleTerminalSizeSync()
         terminalView.onScreenUpdated()
+    }
+
+    /**
+     * TerminalView 只有在最终布局尺寸落定后，才会把列数回写给 pty。
+     * 页签切换、首次 attach、IME 动画和字体变化会跨多帧改变可视高度；
+     * 这里分几次同步，避免长粘贴按 0 宽或旧列宽渲染成只露尾部的横向滚动行。
+     */
+    private fun scheduleTerminalSizeSync() {
+        terminalView.doOnLayout {
+            syncTerminalSizeNow()
+        }
+        terminalView.post {
+            syncTerminalSizeNow()
+        }
+        terminalView.postDelayed({
+            syncTerminalSizeNow()
+        }, terminalSizeSyncSecondPassDelayMillis)
+        terminalView.postDelayed({
+            syncTerminalSizeNow()
+        }, terminalSizeSyncFinalPassDelayMillis)
+    }
+
+    private fun syncTerminalSizeNow() {
+        if (!terminalView.isAttachedToWindow || terminalView.width <= 0 || terminalView.height <= 0) {
+            return
+        }
+        terminalView.updateSize()
+        terminalView.onScreenUpdated()
+        terminalView.invalidate()
     }
 
     /**
@@ -250,7 +346,7 @@ class TerminalPageController(
         retryButton.isVisible = state.phase == HostConsolePhase.FAILED || state.phase == HostConsolePhase.EXITED
         ctrlCButton.isEnabled = state.isRunning
         clearButton.isEnabled = state.isRunning
-        resetButton.isEnabled = state.phase != HostConsolePhase.PREPARING
+        resetButton.isEnabled = state.phase != HostConsolePhase.STARTING
         selectButton.isEnabled = state.isRunning || selectionModeActive
         selectButton.text = activity.getString(
             if (selectionModeActive) {
@@ -397,6 +493,7 @@ class TerminalPageController(
 
     private fun pasteFromClipboard() {
         val session = sessionStore.currentSessionOrNull() ?: return
+        syncTerminalSizeNow()
         session.pasteFromClipboard()
         clearArmedModifiers()
         terminalViewClient.refreshInputConnection()

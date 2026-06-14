@@ -36,7 +36,7 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
     override fun queryDocument(documentId: String, projection: Array<out String>?): Cursor {
         val file = resolveDocumentFile(documentId)
         return MatrixCursor(resolveDocumentProjection(projection)).apply {
-            includeDocument(file)
+            includeDocument(documentFor(documentId, file))
         }
     }
 
@@ -51,12 +51,22 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
         }
 
         val rootDirectory = tavernRootDirectory()
+        val visibleRootDirectory = if (parentDocumentId.isServerDocumentId()) tavernServerDirectory() else rootDirectory
         return MatrixCursor(resolveDocumentProjection(projection)).apply {
+            if (parentDocumentId == rootDocumentId) {
+                includeDocument(
+                    TavernDocument(
+                        file = tavernServerDirectory().apply { mkdirs() },
+                        documentId = serverRootDocumentId,
+                        displayName = contextOrThrow().getString(R.string.tavern_data_documents_server_root_title)
+                    )
+                )
+            }
             parent.listFiles()
                 .orEmpty()
-                .filter { child -> isVisibleDocument(rootDirectory, child) }
+                .filter { child -> isVisibleDocument(parentDocumentId, visibleRootDirectory, child) }
                 .sortedWith(compareBy<File> { !it.isDirectory }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name })
-                .forEach { child -> includeDocument(child) }
+                .forEach { child -> includeDocument(documentFor(documentIdFor(child), child)) }
         }
     }
 
@@ -95,7 +105,7 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
 
     override fun deleteDocument(documentId: String) {
         val file = resolveDocumentFile(documentId)
-        if (isRootDocument(file)) {
+        if (isProtectedDocument(documentId, file)) {
             throw FileNotFoundException("Root document cannot be deleted.")
         }
 
@@ -111,7 +121,7 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
 
     override fun renameDocument(documentId: String, displayName: String): String {
         val file = resolveDocumentFile(documentId)
-        if (isRootDocument(file)) {
+        if (isProtectedDocument(documentId, file)) {
             throw FileNotFoundException("Root document cannot be renamed.")
         }
 
@@ -124,6 +134,9 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
     }
 
     override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean {
+        if (parentDocumentId == rootDocumentId && documentId.isServerDocumentId()) {
+            return true
+        }
         return runCatching {
             val parent = resolveDocumentFile(parentDocumentId).absoluteFile
             val child = resolveDocumentFile(documentId).absoluteFile
@@ -132,11 +145,17 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
     }
 
     private fun MatrixCursor.includeDocument(file: File) {
-        val rootDirectory = tavernRootDirectory()
-        val isRoot = isRootDocument(file)
+        includeDocument(documentFor(documentIdFor(file), file))
+    }
+
+    private fun MatrixCursor.includeDocument(document: TavernDocument) {
+        val file = document.file
+        val isRoot = document.documentId == rootDocumentId
+        val isServerRoot = document.documentId == serverRootDocumentId
         val isDirectory = file.isDirectory
         val flags = when {
             isRoot -> Document.FLAG_DIR_SUPPORTS_CREATE
+            isServerRoot -> 0
             isDirectory -> Document.FLAG_DIR_SUPPORTS_CREATE or
                 Document.FLAG_SUPPORTS_DELETE or
                 Document.FLAG_SUPPORTS_RENAME
@@ -146,10 +165,10 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
         }
 
         newRow().apply {
-            add(Document.COLUMN_DOCUMENT_ID, documentIdFor(file))
+            add(Document.COLUMN_DOCUMENT_ID, document.documentId)
             add(
                 Document.COLUMN_DISPLAY_NAME,
-                if (isRoot) contextOrThrow().getString(R.string.tavern_data_documents_root_title) else file.name
+                if (isRoot) contextOrThrow().getString(R.string.tavern_data_documents_root_title) else document.displayName
             )
             add(Document.COLUMN_SIZE, if (isDirectory) null else file.length())
             add(Document.COLUMN_MIME_TYPE, if (isDirectory) Document.MIME_TYPE_DIR else mimeTypeFor(file))
@@ -173,28 +192,19 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
 
     private fun resolveDocumentFile(documentId: String): File {
         val rootDirectory = tavernRootDirectory().apply { mkdirs() }.absoluteFile
-        val file = if (documentId == rootDocumentId) {
-            rootDirectory
-        } else if (documentId.startsWith("$rootDocumentId/")) {
-            val relativePath = documentId.removePrefix("$rootDocumentId/")
-            if (relativePath.isBlank()) {
-                rootDirectory
-            } else {
-                File(rootDirectory, relativePath)
-            }
-        } else {
-            throw FileNotFoundException("Unknown document id: $documentId")
-        }
+        val file = resolveDocumentFileUnchecked(documentId, rootDirectory)
 
         if (!isInsidePath(rootDirectory, file.absoluteFile)) {
-            throw FileNotFoundException("Document escapes Tavern root: $documentId")
+            if (!documentId.isServerDocumentId()) {
+                throw FileNotFoundException("Document escapes Tavern root: $documentId")
+            }
         }
 
         val canonicalFile = file.canonicalFile
         if (!isInsideAccessibleRoot(canonicalFile)) {
             throw FileNotFoundException("Document escapes Tavern root: $documentId")
         }
-        if (!isVisibleDocument(rootDirectory, file)) {
+        if (!isVisibleDocument(documentId, if (documentId.isServerDocumentId()) tavernServerDirectory() else rootDirectory, file)) {
             throw FileNotFoundException("Document is hidden from this provider: $documentId")
         }
         if (!file.exists()) {
@@ -203,21 +213,57 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
         return file
     }
 
+    private fun resolveDocumentFileUnchecked(documentId: String, rootDirectory: File): File {
+        return when {
+            documentId == rootDocumentId -> rootDirectory
+            documentId.startsWith("$rootDocumentId/") -> {
+                val relativePath = documentId.removePrefix("$rootDocumentId/")
+                if (relativePath.isBlank()) rootDirectory else File(rootDirectory, relativePath)
+            }
+            documentId == serverRootDocumentId -> tavernServerDirectory().apply { mkdirs() }.absoluteFile
+            documentId.startsWith("$serverRootDocumentId/") -> {
+                val relativePath = documentId.removePrefix("$serverRootDocumentId/")
+                if (relativePath.isBlank()) {
+                    tavernServerDirectory().apply { mkdirs() }.absoluteFile
+                } else {
+                    File(tavernServerDirectory().apply { mkdirs() }, relativePath)
+                }
+            }
+            else -> throw FileNotFoundException("Unknown document id: $documentId")
+        }
+    }
+
     private fun documentIdFor(file: File): String {
         val rootDirectory = tavernRootDirectory().absoluteFile
         val absoluteFile = file.absoluteFile
         return if (absoluteFile == rootDirectory) {
             rootDocumentId
+        } else if (absoluteFile == tavernServerDirectory().absoluteFile) {
+            serverRootDocumentId
+        } else if (isInsidePath(tavernServerDirectory().absoluteFile, absoluteFile)) {
+            "$serverRootDocumentId/${absoluteFile.relativeTo(tavernServerDirectory().absoluteFile).invariantSeparatorsPath}"
         } else {
             "$rootDocumentId/${absoluteFile.relativeTo(rootDirectory).invariantSeparatorsPath}"
         }
     }
 
-    private fun isRootDocument(file: File): Boolean {
-        return file.absoluteFile == tavernRootDirectory().absoluteFile
+    private fun documentFor(documentId: String, file: File): TavernDocument {
+        return TavernDocument(
+            file = file,
+            documentId = documentId,
+            displayName = if (documentId == serverRootDocumentId) {
+                contextOrThrow().getString(R.string.tavern_data_documents_server_root_title)
+            } else {
+                file.name
+            }
+        )
     }
 
-    private fun isVisibleDocument(rootDirectory: File, file: File): Boolean {
+    private fun isProtectedDocument(documentId: String, file: File): Boolean {
+        return file.absoluteFile == tavernRootDirectory().absoluteFile || documentId == serverRootDocumentId
+    }
+
+    private fun isVisibleDocument(documentId: String, rootDirectory: File, file: File): Boolean {
         if (!isInsidePath(rootDirectory.absoluteFile, file.absoluteFile)) {
             return false
         }
@@ -232,13 +278,18 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
 
         val relativePath = file.absoluteFile.relativeTo(rootDirectory.absoluteFile).invariantSeparatorsPath
         val topLevelName = relativePath.substringBefore('/')
-        return topLevelName != ".sillydroid-maintenance"
+        return documentId.isServerDocumentId() || topLevelName != ".sillydroid-maintenance"
     }
 
     private fun isInsideAccessibleRoot(file: File): Boolean {
         val paths = hostPaths()
         val canonicalFile = file.canonicalFile
-        return isInside(paths.serverDataDir.canonicalFile, canonicalFile)
+        return isInside(paths.serverDataDir.canonicalFile, canonicalFile) ||
+            isInside(paths.serverDir.canonicalFile, canonicalFile)
+    }
+
+    private fun tavernServerDirectory(): File {
+        return hostPaths().serverDir
     }
 
     private fun isInsidePath(parent: File, child: File): Boolean {
@@ -309,6 +360,7 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
     private companion object {
         private const val rootId = "sillydroid-tavern-data"
         private const val rootDocumentId = "root"
+        private const val serverRootDocumentId = "tavern-server"
 
         private val defaultRootProjection = arrayOf(
             Root.COLUMN_ROOT_ID,
@@ -329,5 +381,15 @@ class TavernDataDocumentsProvider : DocumentsProvider() {
             Document.COLUMN_LAST_MODIFIED,
             Document.COLUMN_FLAGS
         )
+
+        private fun String.isServerDocumentId(): Boolean {
+            return this == serverRootDocumentId || startsWith("$serverRootDocumentId/")
+        }
     }
+
+    private data class TavernDocument(
+        val file: File,
+        val documentId: String,
+        val displayName: String
+    )
 }

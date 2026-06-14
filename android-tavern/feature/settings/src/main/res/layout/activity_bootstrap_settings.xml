@@ -834,31 +834,14 @@
                                 android:text="@string/bootstrap_settings_export" />
                         </LinearLayout>
 
-                        <LinearLayout
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/bootstrapSettingsOpenTavernDirectoryMtButton"
+                            style="@style/Widget.SillyDroid.SettingsButton.Outlined"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="@dimen/sillydroid_field_vertical_spacing"
-                            android:orientation="horizontal">
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/bootstrapSettingsOpenTavernDirectoryButton"
-                                style="@style/Widget.SillyDroid.SettingsButton.Outlined"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginEnd="@dimen/sillydroid_space_xs"
-                                android:layout_weight="1"
-                                android:minHeight="@dimen/sillydroid_control_min_height"
-                                android:text="@string/bootstrap_settings_open_tavern_directory" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/bootstrapSettingsOpenTavernDirectoryMtButton"
-                                style="@style/Widget.SillyDroid.SettingsButton.Outlined"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:minHeight="@dimen/sillydroid_control_min_height"
-                                android:text="@string/bootstrap_settings_open_tavern_directory_mt" />
-                        </LinearLayout>
+                            android:minHeight="@dimen/sillydroid_control_min_height"
+                            android:text="@string/bootstrap_settings_open_tavern_directory_mt" />
 
                         <TextView
                             android:layout_width="match_parent"

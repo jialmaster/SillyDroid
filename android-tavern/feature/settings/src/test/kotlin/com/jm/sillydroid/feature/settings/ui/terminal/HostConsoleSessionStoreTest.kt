@@ -18,16 +18,15 @@ class HostConsoleSessionStoreTest {
     private val dispatchers = TestDispatcherProvider()
 
     @Test
-    fun `store construction does not prepare console assets`() {
+    fun `store construction does not create shell launch spec`() {
         val runtimeRepository = FakeConsoleRuntimeRepository()
         HostConsoleSessionStore(runtimeRepository, FakeHostConsoleSessionFactory(), dispatchers)
 
-        assertEquals(0, runtimeRepository.prepareCalls)
         assertEquals(0, runtimeRepository.createSpecCalls)
     }
 
     @Test
-    fun `ensureSession lazily prepares assets and creates session once`() = runTest {
+    fun `ensureSession creates session once without preparing assets`() = runTest {
         val runtimeRepository = FakeConsoleRuntimeRepository()
         val sessionFactory = FakeHostConsoleSessionFactory()
         val store = HostConsoleSessionStore(runtimeRepository, sessionFactory, dispatchers)
@@ -36,7 +35,6 @@ class HostConsoleSessionStoreTest {
         val secondSession = store.ensureSession()
 
         assertSame(firstSession, secondSession)
-        assertEquals(1, runtimeRepository.prepareCalls)
         assertEquals(1, runtimeRepository.createSpecCalls)
         assertEquals(1, sessionFactory.createCalls)
         assertEquals(firstSession.sessionId, store.state.value.sessionId)
@@ -55,7 +53,7 @@ class HostConsoleSessionStoreTest {
         val secondSession = store.ensureSession()
 
         assertFalse(firstSession === secondSession)
-        assertEquals(2, runtimeRepository.prepareCalls)
+        assertEquals(2, runtimeRepository.createSpecCalls)
         assertEquals(2, sessionFactory.createCalls)
         assertEquals(secondSession.sessionId, store.state.value.sessionId)
     }
@@ -72,7 +70,7 @@ class HostConsoleSessionStoreTest {
         assertTrue(firstSession.finishCalls == 1)
         assertFalse(firstSession.isRunning)
         assertFalse(firstSession === secondSession)
-        assertEquals(2, runtimeRepository.prepareCalls)
+        assertEquals(2, runtimeRepository.createSpecCalls)
         assertEquals(2, sessionFactory.createCalls)
         assertEquals(secondSession.sessionId, store.state.value.sessionId)
     }
@@ -103,13 +101,7 @@ private class TestDispatcherProvider : DispatcherProvider {
 }
 
 private class FakeConsoleRuntimeRepository : ConsoleRuntimeRepository {
-    var prepareCalls = 0
     var createSpecCalls = 0
-
-    override fun prepareConsoleAssets(onProgress: (message: String, details: String, progressPercent: Int) -> Unit) {
-        prepareCalls += 1
-        onProgress("prepare", "details", 50)
-    }
 
     override fun createShellLaunchSpec(): ConsoleShellLaunchSpec {
         createSpecCalls += 1
