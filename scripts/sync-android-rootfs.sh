@@ -794,7 +794,7 @@ rootfs_fs_stage_root="$assets_stage_root/fs"
 rootfs_fs_archive_path="$resolved_target_root/rootfs-fs.zip"
 host_prefix_archive_path="$resolved_target_root/rootfs-usr.zip"
 
-termux_packages_index_path="$downloads_root/$(basename "$termux_packages_index_url")"
+termux_packages_index_path="$apt_indexes_root/$(basename "$termux_packages_index_url")"
 
 existing_manifest_path="$resolved_target_root/rootfs-manifest.json"
 if [[ -f "$existing_manifest_path" ]] \
@@ -818,6 +818,9 @@ fi
 
 mkdir -p "$downloads_root" "$apt_indexes_root" "$apt_packages_root"
 sillydroid_download_queue_reset
+# Termux main 仓库是滚动源，旧 Packages 索引里的 deb 文件可能已经被上游清理。
+# deb 包本体可以缓存，但包索引必须每次刷新，避免 GitHub Actions cache 复用旧索引后下载 404。
+rm -f "$termux_packages_index_path"
 sillydroid_queue_download_if_missing "$termux_packages_index_url" "$termux_packages_index_path" 'termux-packages-index'
 sillydroid_run_download_queue
 
