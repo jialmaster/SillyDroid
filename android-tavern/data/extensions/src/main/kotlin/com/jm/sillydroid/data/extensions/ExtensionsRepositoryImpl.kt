@@ -153,6 +153,16 @@ class ExtensionsRepositoryImpl(
         )
     }
 
+    override fun installServerPluginDependencies(
+        onProgress: ((ExtensionRuntimeProgress) -> Unit)?,
+        failureMessage: (String) -> String
+    ) {
+        extensionCommandExecutor.installServerPluginDependencies(
+            onProgress = onProgress,
+            failureMessage = failureMessage
+        )
+    }
+
     private fun resolveExtensionFolderName(repository: NormalizedExtensionRepository): String {
         return extensionCommandExecutor.resolveExtensionFolderName(repository)
     }

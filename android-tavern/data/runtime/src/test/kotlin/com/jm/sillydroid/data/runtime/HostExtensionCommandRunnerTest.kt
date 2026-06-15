@@ -45,6 +45,18 @@ class HostExtensionCommandRunnerTest {
     }
 
     @Test
+    fun `extension launch script exposes npm runtime environment for server plugin dependency install`() {
+        val script = buildExtensionCommandLaunchScript()
+
+        assertTrue(script.contains("""HOST_PREFIX_DIR="${'$'}{HOST_PREFIX_DIR:?HOST_PREFIX_DIR is required}""""))
+        assertTrue(script.contains("""TERMUX_NODE_BIN="${'$'}{TERMUX_NODE_BIN:?TERMUX_NODE_BIN is required}""""))
+        assertTrue(script.contains("""APP_DATA_ROOT="${'$'}{APP_DATA_ROOT:?APP_DATA_ROOT is required}""""))
+        assertTrue(script.contains("""exec "${'$'}TERMUX_NODE_BIN" "${'$'}COMMAND_JS""""))
+        assertFalse(script.contains("TERMUX_NPM_BIN"))
+        assertFalse(script.contains("libtermux-npm.so"))
+    }
+
+    @Test
     fun `extension launch script uses shared termux host runtime setup`() {
         val script = buildExtensionCommandLaunchScript()
 

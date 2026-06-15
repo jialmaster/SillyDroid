@@ -144,6 +144,35 @@ if [ -r "$HOST_PREFIX_DIR/etc/bash.bashrc" ]; then
 	. "$HOST_PREFIX_DIR/etc/bash.bashrc"
 fi
 
+sillydroid_run_npm_cli() {
+	local npm_cli="$HOST_PREFIX_DIR/lib/node_modules/npm/bin/npm-cli.js"
+	if [ ! -r "$npm_cli" ]; then
+		printf '缺少 npm CLI：%s\n' "$npm_cli" >&2
+		return 127
+	fi
+	# 由 native node 读取 npm JS 入口，不从 app 私有可写目录直接 exec 脚本。
+	PREFIX="$HOST_PREFIX_DIR" command "$TERMUX_NODE_BIN" "$npm_cli" "$@"
+}
+
+sillydroid_run_npx_cli() {
+	local npx_cli="$HOST_PREFIX_DIR/lib/node_modules/npm/bin/npx-cli.js"
+	if [ ! -r "$npx_cli" ]; then
+		printf '缺少 npx CLI：%s\n' "$npx_cli" >&2
+		return 127
+	fi
+	PREFIX="$HOST_PREFIX_DIR" command "$TERMUX_NODE_BIN" "$npx_cli" "$@"
+}
+
+npm() {
+	sillydroid_run_npm_cli "$@"
+}
+
+npx() {
+	sillydroid_run_npx_cli "$@"
+}
+
+export -f sillydroid_run_npm_cli sillydroid_run_npx_cli npm npx
+
 bind 'set horizontal-scroll-mode off' 2>/dev/null || true
 shopt -s checkwinsize 2>/dev/null || true
 printf '\033[?7h'

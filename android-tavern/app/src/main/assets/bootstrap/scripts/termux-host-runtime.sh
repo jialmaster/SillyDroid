@@ -155,6 +155,18 @@ prepare_termux_host_runtime() {
 	if [ -f "$HOST_PREFIX_DIR/etc/tls/openssl.cnf" ]; then
 		export OPENSSL_CONF="$HOST_PREFIX_DIR/etc/tls/openssl.cnf"
 	fi
+	npm_lifecycle_android_shim="$(cd "$BOOTSTRAP_ROOT/scripts" 2>/dev/null && pwd -P)/npm-lifecycle-android-shim.cjs"
+	if [ -f "$npm_lifecycle_android_shim" ]; then
+		case " ${NODE_OPTIONS:-} " in
+			*" --require $npm_lifecycle_android_shim "*)
+				;;
+			*)
+				# npm 生命周期脚本会调用 node_modules/.bin 下的 JS shim；Android 不允许直接 exec app 私有可写路径。
+				# 预加载只在 npm CLI 进程内生效，负责把这类 JS bin 转回 native Node，并让 node-gyp 快速失败。
+				export NODE_OPTIONS="--require $npm_lifecycle_android_shim ${NODE_OPTIONS:-}"
+				;;
+		esac
+	fi
 
 	# Android 禁止从 app 私有可写目录直接 exec ELF；PATH 只暴露指向 APK nativeLibraryDir 的 symlink。
 	install_termux_command_links "$HOST_TMP_DIR/bin"

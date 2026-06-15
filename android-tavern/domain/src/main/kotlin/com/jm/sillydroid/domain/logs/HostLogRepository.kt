@@ -22,6 +22,7 @@ interface HostLogRepository {
     fun readRealtimeSnapshot(entry: HostLogEntry): HostLogSnapshot?
     fun clearAllLogs()
     fun currentCrashAutoUploadKey(): String?
+    fun clearUploadedCrashLog()
     fun exportToUri(targetUri: Uri, includedRelativePaths: Set<String>? = null): HostLogBundleExportResult
     fun exportToPublicDownloads(includedRelativePaths: Set<String>? = null): HostLogBundleExportResult
     suspend fun uploadBundle(

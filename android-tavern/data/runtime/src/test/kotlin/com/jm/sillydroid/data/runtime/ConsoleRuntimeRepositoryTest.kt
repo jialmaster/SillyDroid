@@ -58,10 +58,117 @@ class ConsoleRuntimeRepositoryTest {
             assertEquals(paths.hostTermuxGitRemoteHttpBinary.absolutePath, spec.environment["TERMUX_GIT_REMOTE_HTTP_BIN"])
             assertEquals(paths.hostTermuxCurlBinary.absolutePath, spec.environment["TERMUX_CURL_BIN"])
             assertEquals(paths.hostTermuxShellBinary.absolutePath, spec.environment["TERMUX_SH_BIN"])
+            assertFalse(spec.environment.containsKey("TERMUX_NPM_BIN"))
+            assertFalse(spec.environment.containsKey("TERMUX_NPX_BIN"))
             assertFalse(spec.environment.containsKey("HOST_PROOT_BIN"))
         } finally {
             rootDirectory.deleteRecursively()
         }
+    }
+
+    @Test
+    fun `terminal script exposes npm through bash functions without native npm entrypoints`() {
+        val script = resolveAndroidProjectFile(
+            "app/src/main/assets/bootstrap/scripts/start-console-shell.sh"
+        ).readText()
+
+        assertTrue(script.contains("sillydroid_run_npm_cli()"))
+        assertTrue(script.contains("sillydroid_run_npx_cli()"))
+        assertTrue(script.contains("npm()"))
+        assertTrue(script.contains("npx()"))
+        assertTrue(script.contains("""${'$'}HOST_PREFIX_DIR/lib/node_modules/npm/bin/npm-cli.js"""))
+        assertTrue(script.contains("""${'$'}HOST_PREFIX_DIR/lib/node_modules/npm/bin/npx-cli.js"""))
+        assertTrue(script.contains("""PREFIX="${'$'}HOST_PREFIX_DIR" command "${'$'}TERMUX_NODE_BIN" "${'$'}npm_cli" "${'$'}@""""))
+        assertTrue(script.contains("""PREFIX="${'$'}HOST_PREFIX_DIR" command "${'$'}TERMUX_NODE_BIN" "${'$'}npx_cli" "${'$'}@""""))
+        assertFalse(script.contains("npm_config_optional=false command"))
+        assertFalse(script.contains("--omit=optional"))
+        assertFalse(script.contains("--ignore-scripts"))
+        assertFalse(script.contains("corepack/dist/npm.js"))
+        assertFalse(script.contains("process.argv.splice"))
+        assertFalse(script.contains("SILLYDROID_NPM_CLI"))
+        assertFalse(script.contains("TERMUX_NPM_BIN"))
+        assertFalse(script.contains("TERMUX_NPX_BIN"))
+        assertFalse(script.contains("libtermux-npm.so"))
+    }
+
+    @Test
+    fun `termux host runtime injects npm lifecycle android shim without native npm entrypoints`() {
+        val script = resolveAndroidProjectFile(
+            "app/src/main/assets/bootstrap/scripts/termux-host-runtime.sh"
+        ).readText()
+        val shim = resolveAndroidProjectFile(
+            "app/src/main/assets/bootstrap/scripts/npm-lifecycle-android-shim.cjs"
+        ).readText()
+
+        assertTrue(script.contains("npm-lifecycle-android-shim.cjs"))
+        assertTrue(script.contains("""npm_lifecycle_android_shim="${'$'}(cd "${'$'}BOOTSTRAP_ROOT/scripts" 2>/dev/null && pwd -P)/npm-lifecycle-android-shim.cjs""""))
+        assertTrue(script.contains("""NODE_OPTIONS="--require ${'$'}npm_lifecycle_android_shim ${'$'}{NODE_OPTIONS:-}""""))
+        assertTrue(script.contains("node_modules/.bin"))
+        assertFalse(script.contains("TERMUX_NPM_BIN"))
+        assertFalse(script.contains("libtermux-npm.so"))
+        assertTrue(shim.contains("lib/node_modules/npm/bin/npm-cli.js"))
+        assertTrue(shim.contains("node_modules/.bin"))
+        assertTrue(shim.contains("prebuild-install"))
+        assertTrue(shim.contains("node-gyp is not supported in SillyDroid Android runtime"))
+        assertTrue(shim.contains("sh -c --"))
+        assertTrue(shim.contains("args[cIndex + 1] === '--' ? cIndex + 2 : cIndex + 1"))
+        assertTrue(shim.contains("rewriteShellArgs(command, args, options)"))
+        assertTrue(shim.contains("childProcess.spawn"))
+        assertTrue(shim.contains("childProcess.spawnSync"))
+        assertFalse(shim.contains("npm_config_optional"))
+    }
+
+    @Test
+    fun `runtime build scripts require preinstalled npm cli assets`() {
+        val syncScript = resolveWorkspaceFile("scripts/sync-android-rootfs.sh").readText()
+        val runtimeImageScript = resolveWorkspaceFile("scripts/build-tavern-android-runtime-image.sh").readText()
+        val apkScript = resolveWorkspaceFile("scripts/build-tavern-android-apk.sh").readText()
+        val buildConfig = resolveWorkspaceFile("sillydroid-build-config.json").readText()
+
+        assertTrue(syncScript.contains("npm"))
+        assertTrue(syncScript.contains("lib/node_modules/npm/lib/cli.js"))
+        assertTrue(syncScript.contains("lib/node_modules/npm/bin/npm-cli.js"))
+        assertTrue(syncScript.contains("lib/node_modules/npm/bin/npx-cli.js"))
+        assertTrue(syncScript.contains("缺少预置 npm CLI"))
+        assertTrue(syncScript.contains("""rm -f "${'$'}prefix_root/bin/npm" "${'$'}prefix_root/bin/npx""""))
+        assertTrue(syncScript.contains("写入 bin/npm 时误覆盖了 npm 包本体"))
+        assertTrue(syncScript.contains("\"archiveSha256\""))
+        assertFalse(syncScript.contains("corepack"))
+        assertFalse(syncScript.contains("corepack_npm_cli_relative_path"))
+        assertTrue(runtimeImageScript.contains("lib/node_modules/npm/lib/cli.js"))
+        assertTrue(runtimeImageScript.contains("lib/node_modules/npm/bin/npm-cli.js"))
+        assertTrue(runtimeImageScript.contains("lib/node_modules/npm/bin/npx-cli.js"))
+        assertTrue(apkScript.contains("lib/node_modules/npm/lib/cli.js"))
+        assertTrue(apkScript.contains("lib/node_modules/npm/bin/npm-cli.js"))
+        assertTrue(apkScript.contains("lib/node_modules/npm/bin/npx-cli.js"))
+        assertTrue(buildConfig.contains("\"npm\""))
+    }
+
+    @Test
+    fun `tavern entrypoint preserves plugin symlink resolution for server plugins`() {
+        val script = resolveAndroidProjectFile(
+            "app/src/main/assets/bootstrap/scripts/tavern-entrypoint.sh"
+        ).readText()
+
+        assertTrue(script.contains("plugins 持久化到 TAVERN_DATA_ROOT 后再软链接回 SillyTavern 根目录"))
+        assertTrue(script.contains("--preserve-symlinks"))
+        assertTrue(script.contains("""NODE_OPTIONS="--preserve-symlinks ${'$'}{NODE_OPTIONS:-}""""))
+        assertTrue(script.contains("export NODE_OPTIONS"))
+    }
+
+    @Test
+    fun `rootfs refresh owns host prefix extraction so npm assets reach files usr`() {
+        val runtimeSource = resolveAndroidProjectFile(
+            "data/runtime/src/main/kotlin/com/jm/sillydroid/data/runtime/HostRuntime.kt"
+        ).readText()
+
+        assertTrue(runtimeSource.contains("refreshHostPrefixDirectory(paths, rootfsDirectoryRefreshed)"))
+        assertTrue(runtimeSource.contains("refreshHostPrefixDirectory(paths, rootfsDirectoryRefreshed = false)"))
+        assertTrue(runtimeSource.contains("lib/node_modules/npm/lib/cli.js"))
+        assertTrue(runtimeSource.contains("lib/node_modules/npm/bin/npm-cli.js"))
+        assertFalse(runtimeSource.contains("lib/node_modules/corepack/dist/npm.js"))
+        assertTrue(runtimeSource.contains("rootfs manifest 与 host prefix 已同步完成"))
+        assertFalse(runtimeSource.contains("refreshHostPrefixDirectory(paths, rootfsAssetsRefreshed)"))
     }
 
     @Test
@@ -249,6 +356,19 @@ class ConsoleRuntimeRepositoryTest {
 
 private fun createTempTestDirectory(prefix: String): File {
     return createTempDirectory(prefix = prefix).toFile()
+}
+
+private fun resolveWorkspaceFile(relativePath: String): File {
+    generateSequence(File("").absoluteFile) { directory -> directory.parentFile }
+        .map { directory -> File(directory, relativePath) }
+        .firstOrNull { candidate -> candidate.isFile }
+        ?.let { return it }
+
+    throw AssertionError("Cannot resolve workspace file: $relativePath")
+}
+
+private fun resolveAndroidProjectFile(relativePath: String): File {
+    return resolveWorkspaceFile("android-tavern/$relativePath")
 }
 
 private fun File.writeHostRuntimeFiles() {

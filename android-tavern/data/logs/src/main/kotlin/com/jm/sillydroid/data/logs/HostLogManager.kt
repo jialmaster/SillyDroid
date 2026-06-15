@@ -249,6 +249,11 @@ object HostLogManager {
         replaceLogFileContent(crashLogFile(context), content)
     }
 
+    fun clearUploadedCrashLog(context: Context) {
+        // 自动上传成功后清掉 Java uncaught crash 文件，避免旧崩溃跨版本保留后被新版重复上传。
+        UploadedCrashLogCleaner.clear(crashLogFile(context))
+    }
+
     fun writeExitInfoLog(context: Context, content: String?) {
         val logFile = exitInfoLogFile(context)
         if (content.isNullOrBlank()) {

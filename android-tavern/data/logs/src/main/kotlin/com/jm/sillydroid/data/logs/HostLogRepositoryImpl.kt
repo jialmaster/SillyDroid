@@ -90,6 +90,10 @@ class HostLogRepositoryImpl(context: Context) : HostLogRepository {
         return HostLogManager.crashAutoUploadKey(appContext)
     }
 
+    override fun clearUploadedCrashLog() {
+        HostLogManager.clearUploadedCrashLog(appContext)
+    }
+
     override fun exportToUri(targetUri: Uri, includedRelativePaths: Set<String>?): HostLogBundleExportResult {
         ApplicationExitInfoLogStore.refreshBlocking(appContext)
         return HostLogManager.exportToUri(appContext, targetUri, includedRelativePaths = includedRelativePaths)

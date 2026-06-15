@@ -5,7 +5,8 @@
     "termuxPackages": [
       "git",
       "nodejs-lts",
-      "curl"
+      "curl",
+      "npm"
     ],
     "includeDependencyPacks": [
     ]

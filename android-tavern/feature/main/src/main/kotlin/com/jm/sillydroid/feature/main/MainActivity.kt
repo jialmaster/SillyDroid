@@ -424,6 +424,7 @@ class MainActivity : AppCompatActivity() {
             }
             result.onSuccess { upload ->
                 hostConfigStore.lastCrashLogAutoUploadKey = uploadKey
+                hostLogRepository.clearUploadedCrashLog()
                 recordDefaultHostDiagnostic(
                     category = "log_upload",
                     body = "event=auto_upload_success trigger=$trigger crashLogId=${upload.crashLogId} archiveSizeBytes=${upload.archiveSizeBytes}"

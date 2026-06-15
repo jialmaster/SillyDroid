@@ -51,6 +51,25 @@ class ExtensionCommandExecutor(
         )
     }
 
+    fun installServerPluginDependencies(
+        onProgress: ((ExtensionRuntimeProgress) -> Unit)? = null,
+        failureMessage: (String) -> String
+    ) {
+        val requestName = "server-plugin-npm-install-${System.currentTimeMillis()}"
+        commandRunner.run(
+            request = ExtensionCommandRequest(
+                requestName = requestName,
+                commandFileName = "$requestName.mjs",
+                commandContent = serverPluginDependencyInstallCommand(),
+                environment = emptyMap()
+            ),
+            onProgressPayload = { payload ->
+                parseRuntimeProgress(payload)?.let { progress -> onProgress?.invoke(progress) }
+            },
+            failureMessage = failureMessage
+        )
+    }
+
     fun resolveExtensionFolderName(repository: NormalizedExtensionRepository): String {
         val rawFolderName = runCatching {
             Uri.parse(repository.cloneUrl).pathSegments.orEmpty().lastOrNull()
@@ -208,6 +227,84 @@ class ExtensionCommandExecutor(
                 if (fs.existsSync(tempDir)) {
                     fs.rmSync(tempDir, { recursive: true, force: true });
                 }
+            }
+        """.trimIndent()
+    }
+
+    private fun serverPluginDependencyInstallCommand(): String {
+        return """
+            import fs from 'node:fs';
+            import path from 'node:path';
+            import { spawn } from 'node:child_process';
+
+            const appDataRoot = process.env.APP_DATA_ROOT;
+            const hostPrefixDir = process.env.HOST_PREFIX_DIR;
+            const nodeBin = process.env.TERMUX_NODE_BIN;
+            if (!appDataRoot || !hostPrefixDir || !nodeBin) {
+                throw new Error('Missing server plugin npm environment.');
+            }
+
+            ${extensionProgressHelpers()}
+
+            const pluginsDir = path.join(appDataRoot, 'plugins');
+            const npmCli = path.join(hostPrefixDir, 'lib/node_modules/npm/bin/npm-cli.js');
+            if (!fs.existsSync(npmCli)) {
+                throw new Error('Missing npm CLI: ' + npmCli);
+            }
+            function listPluginPackageDirs() {
+                if (!fs.existsSync(pluginsDir)) {
+                    return [];
+                }
+
+                return fs.readdirSync(pluginsDir, { withFileTypes: true })
+                    .filter(entry => entry.isDirectory())
+                    .map(entry => ({
+                        name: entry.name,
+                        dir: path.join(pluginsDir, entry.name),
+                    }))
+                    .filter(plugin => fs.existsSync(path.join(plugin.dir, 'package.json')))
+                    .sort((left, right) => left.name.localeCompare(right.name));
+            }
+
+            function runNpmInstall(plugin) {
+                return new Promise((resolve, reject) => {
+                    // 后端插件依赖安装必须保持官方安装命令语义，不替用户额外追加环境或忽略脚本参数。
+                    const args = [npmCli, 'install', '--omit=dev'];
+                    console.log('[sillydroid] npm install --omit=dev in ' + plugin.dir);
+                    const child = spawn(nodeBin, args, {
+                        cwd: plugin.dir,
+                        env: {
+                            ...process.env,
+                            PREFIX: hostPrefixDir,
+                        },
+                        stdio: ['ignore', 'inherit', 'inherit'],
+                    });
+                    child.on('error', reject);
+                    child.on('exit', (code, signal) => {
+                        if (code === 0) {
+                            resolve();
+                            return;
+                        }
+                        reject(new Error('npm install failed for ' + plugin.name + ' code=' + code + ' signal=' + signal));
+                    });
+                });
+            }
+
+            const plugins = listPluginPackageDirs();
+            if (plugins.length === 0) {
+                writeProgress({ step: 'completed', loaded: 1, total: 1, message: '未发现含 package.json 的后端插件' });
+            } else {
+                console.log('[sillydroid] installing npm dependencies for ' + plugins.length + ' server plugin(s).');
+                for (const [index, plugin] of plugins.entries()) {
+                    writeProgress({
+                        step: 'npm',
+                        loaded: index,
+                        total: plugins.length,
+                        message: '安装后端插件依赖：' + plugin.name,
+                    });
+                    await runNpmInstall(plugin);
+                }
+                writeProgress({ step: 'completed', loaded: plugins.length, total: plugins.length, message: '后端插件依赖安装完成' });
             }
         """.trimIndent()
     }

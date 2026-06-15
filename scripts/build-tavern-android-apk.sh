@@ -135,7 +135,7 @@ resolve_stage4_version_metadata() {
 
 read_termux_packages_from_config() {
     if ! command -v python3 >/dev/null 2>&1; then
-        printf 'git\nnodejs-lts\ncurl\nnano\nbash\ndash\ncoreutils\nfindutils\ngrep\nsed\ngawk\ntar\ngzip\nxz-utils\nwhich\nca-certificates\n'
+        printf 'git\nnodejs-lts\ncurl\nnpm\nnano\nbash\ndash\ncoreutils\nfindutils\ngrep\nsed\ngawk\ntar\ngzip\nxz-utils\nwhich\nca-certificates\n'
         return
     fi
 
@@ -149,6 +149,7 @@ default = [
     "git",
     "nodejs-lts",
     "curl",
+    "npm",
 ]
 
 if not config_path.exists():
@@ -617,6 +618,9 @@ runtime_image_applied_satisfy_request() {
     [[ -f "$rootfs_root/rootfs-fs.zip" ]] || return 1
     [[ -f "$rootfs_root/rootfs-usr.zip" ]] || return 1
     [[ -f "$rootfs_root/rootfs-manifest.json" ]] || return 1
+    "$JAVA_HOME/bin/jar" --list --file "$rootfs_root/rootfs-usr.zip" | grep -Fx 'lib/node_modules/npm/lib/cli.js' >/dev/null || return 1
+    "$JAVA_HOME/bin/jar" --list --file "$rootfs_root/rootfs-usr.zip" | grep -Fx 'lib/node_modules/npm/bin/npm-cli.js' >/dev/null || return 1
+    "$JAVA_HOME/bin/jar" --list --file "$rootfs_root/rootfs-usr.zip" | grep -Fx 'lib/node_modules/npm/bin/npx-cli.js' >/dev/null || return 1
     [[ -f "$jni_lib_root/libtermux-node.so" ]] || return 1
     [[ -f "$jni_lib_root/libtermux-git.so" ]] || return 1
     [[ -f "$jni_lib_root/libtermux-git-remote-http.so" ]] || return 1
@@ -750,6 +754,9 @@ apply_runtime_image() {
     sillydroid_extract_archive_with_progress "$image_path" "$extract_root" 'runtime-image'
 
     sillydroid_assert_path_exists "$extract_root/assets/bootstrap/rootfs/rootfs-fs.zip" "runtime image 缺少 rootfs 资产：$image_path"
+    "$JAVA_HOME/bin/jar" --list --file "$extract_root/assets/bootstrap/rootfs/rootfs-usr.zip" | grep -Fx 'lib/node_modules/npm/lib/cli.js' >/dev/null || sillydroid_fail "runtime image 缺少预置 npm JS CLI：$image_path"
+    "$JAVA_HOME/bin/jar" --list --file "$extract_root/assets/bootstrap/rootfs/rootfs-usr.zip" | grep -Fx 'lib/node_modules/npm/bin/npm-cli.js' >/dev/null || sillydroid_fail "runtime image 缺少预置 npm wrapper：$image_path"
+    "$JAVA_HOME/bin/jar" --list --file "$extract_root/assets/bootstrap/rootfs/rootfs-usr.zip" | grep -Fx 'lib/node_modules/npm/bin/npx-cli.js' >/dev/null || sillydroid_fail "runtime image 缺少预置 npx wrapper：$image_path"
     sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libtermux-node.so" "runtime image 缺少 Termux node 入口：$image_path"
     sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libtermux-git.so" "runtime image 缺少 Termux git 入口：$image_path"
     sillydroid_assert_path_exists "$extract_root/jniLibs/arm64-v8a/libtermux-git-remote-http.so" "runtime image 缺少 Termux git HTTPS helper 入口：$image_path"

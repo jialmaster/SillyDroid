@@ -47,4 +47,8 @@ interface ExtensionsRepository {
         onProgress: ((ExtensionRuntimeProgress) -> Unit)? = null,
         failureMessage: (String) -> String
     )
+    fun installServerPluginDependencies(
+        onProgress: ((ExtensionRuntimeProgress) -> Unit)? = null,
+        failureMessage: (String) -> String
+    )
 }

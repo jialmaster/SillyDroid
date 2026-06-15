@@ -111,6 +111,7 @@ internal class ExtensionProgressController(
             runtimeProgress.step == "backup" -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_backup)
             runtimeProgress.step == "validate" -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_validating)
             runtimeProgress.step == "completed" -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_completed)
+            runtimeProgress.step == "npm" -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating)
             runtimeProgress.phase?.contains("receiving objects", ignoreCase = true) == true -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_receiving)
             runtimeProgress.phase?.contains("resolving deltas", ignoreCase = true) == true -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_resolving)
             runtimeProgress.phase?.contains("updating workdir", ignoreCase = true) == true -> activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating)
@@ -119,6 +120,7 @@ internal class ExtensionProgressController(
 
         val percent = when {
             runtimeProgress.step == "completed" -> 100
+            runtimeProgress.step == "npm" -> scaleProgress(runtimeProgress.loaded, runtimeProgress.total, 0, 99)
             runtimeProgress.phase?.contains("receiving objects", ignoreCase = true) == true -> scaleProgress(runtimeProgress.loaded, runtimeProgress.total, 6, 82)
             runtimeProgress.phase?.contains("resolving deltas", ignoreCase = true) == true -> scaleProgress(runtimeProgress.loaded, runtimeProgress.total, 82, 94)
             runtimeProgress.phase?.contains("updating workdir", ignoreCase = true) == true -> scaleProgress(runtimeProgress.loaded, runtimeProgress.total, 94, 99)

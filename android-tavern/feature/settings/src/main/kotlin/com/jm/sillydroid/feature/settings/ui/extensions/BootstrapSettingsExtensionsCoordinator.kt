@@ -763,6 +763,9 @@ class BootstrapSettingsExtensionsCoordinator(
         actions += activity.getString(R.string.bootstrap_settings_extensions_action_install_repository) to {
             promptInstallRepositoryExtension()
         }
+        actions += activity.getString(R.string.bootstrap_settings_extensions_action_install_server_plugin_dependencies) to {
+            confirmInstallServerPluginDependencies()
+        }
         if (bundledExtensions.isNotEmpty()) {
             actions += activity.getString(R.string.bootstrap_settings_extensions_action_install_bundled) to {
                 promptInstallBundledExtension(bundledExtensions)
@@ -776,6 +779,57 @@ class BootstrapSettingsExtensionsCoordinator(
             }
             .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
             .show()
+    }
+
+    private fun confirmInstallServerPluginDependencies() {
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.bootstrap_settings_extensions_server_plugin_dependencies_confirm_title)
+            .setMessage(R.string.bootstrap_settings_extensions_server_plugin_dependencies_confirm_message)
+            .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
+            .setPositiveButton(R.string.bootstrap_settings_extensions_server_plugin_dependencies_confirm_action) { _, _ ->
+                installServerPluginDependencies()
+            }
+            .show()
+    }
+
+    private fun installServerPluginDependencies() {
+        activity.lifecycleScope.launch {
+            progressController.setProgressState(
+                actionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_install_server_plugin_dependencies),
+                stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating),
+                percent = null,
+                indeterminate = true
+            )
+            setBusyState(true)
+            val result = withContext(dispatchers.io) {
+                runCatching {
+                    extensionsRepository.installServerPluginDependencies(
+                        onProgress = { runtimeProgress ->
+                            progressController.publishRuntimeProgress(
+                                activity.getString(R.string.bootstrap_settings_extensions_progress_action_install_server_plugin_dependencies),
+                                runtimeProgress
+                            )
+                        },
+                        failureMessage = { failedLogPath ->
+                            activity.getString(R.string.bootstrap_settings_extensions_runtime_failed, failedLogPath)
+                        }
+                    )
+                }
+            }
+            setBusyState(false)
+            progressController.clear()
+
+            result.onSuccess {
+                val message = activity.getString(R.string.bootstrap_settings_extensions_server_plugin_dependencies_success)
+                showBanner(message)
+                showMessage(message)
+                onTavernUiReloadRequired()
+                reloadExtensions()
+            }.onFailure { exception ->
+                showError(exception.message ?: activity.getString(R.string.bootstrap_settings_extensions_server_plugin_dependencies_failed))
+                reloadExtensions()
+            }
+        }
     }
 
     private fun promptInstallDefaultRepositories(repositories: List<DefaultExtensionRepository>) {

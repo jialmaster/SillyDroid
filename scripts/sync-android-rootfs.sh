@@ -39,6 +39,7 @@ termux_base_packages=(
     git
     nodejs-lts
     curl
+    npm
 )
 
 source "$workspace_root/scripts/android-build-common.sh"
@@ -59,6 +60,7 @@ default = [
     "git",
     "nodejs-lts",
     "curl",
+    "npm",
 ]
 
 if not config_path.exists():
@@ -397,46 +399,47 @@ install_termux_guest_rootfs_shims() {
 
 install_termux_host_prefix_wrappers() {
     local prefix_root="$1"
-    local npm_cli_relative_path='lib/node_modules/npm/bin/npm-cli.js'
-    local npx_cli_relative_path='lib/node_modules/npm/bin/npx-cli.js'
-    local corepack_npm_cli_relative_path='lib/node_modules/corepack/dist/npm.js'
+    local npm_cli_relative_path='lib/node_modules/npm/lib/cli.js'
+    local npm_bin_relative_path='lib/node_modules/npm/bin/npm-cli.js'
+    local npx_bin_relative_path='lib/node_modules/npm/bin/npx-cli.js'
 
     mkdir -p "$prefix_root/bin"
 
-    if [[ -f "$prefix_root/$npm_cli_relative_path" ]]; then
-        cat > "$prefix_root/bin/npm" <<EOF
-#!/bin/sh
-set -eu
-prefix_root="\${PREFIX:-$termux_guest_runtime_prefix}"
-exec "\$prefix_root/bin/node" "\$prefix_root/$npm_cli_relative_path" "\$@"
-EOF
-        chmod 0755 "$prefix_root/bin/npm"
-    elif [[ -f "$prefix_root/$corepack_npm_cli_relative_path" ]]; then
+    assert_path_exists "$prefix_root/$npm_cli_relative_path" "缺少预置 npm CLI：$prefix_root/$npm_cli_relative_path"
+    assert_path_exists "$prefix_root/$npm_bin_relative_path" "缺少预置 npm wrapper：$prefix_root/$npm_bin_relative_path"
+    assert_path_exists "$prefix_root/$npx_bin_relative_path" "缺少预置 npx wrapper：$prefix_root/$npx_bin_relative_path"
+
+    if grep -F 'SILLYDROID_NPM_CLI=' "$prefix_root/$npm_bin_relative_path" >/dev/null 2>&1; then
+        sillydroid_fail "预置 npm wrapper 已被构建包装脚本污染：$prefix_root/$npm_bin_relative_path"
+    fi
+    if grep -F 'SILLYDROID_NPM_CLI=' "$prefix_root/$npx_bin_relative_path" >/dev/null 2>&1; then
+        sillydroid_fail "预置 npx wrapper 已被构建包装脚本污染：$prefix_root/$npx_bin_relative_path"
+    fi
+
+    # Termux 的 bin/npm 与 bin/npx 可能是 symlink；先删除再写，避免重定向跟随 symlink 覆盖 npm 包本体。
+    rm -f "$prefix_root/bin/npm" "$prefix_root/bin/npx"
+
     cat > "$prefix_root/bin/npm" <<EOF
 #!/bin/sh
 set -eu
 prefix_root="\${PREFIX:-$termux_guest_runtime_prefix}"
-exec "\$prefix_root/bin/node" "\$prefix_root/$corepack_npm_cli_relative_path" "\$@"
+exec "\$prefix_root/bin/node" "\$prefix_root/$npm_bin_relative_path" "\$@"
 EOF
     chmod 0755 "$prefix_root/bin/npm"
-    fi
 
-    if [[ -f "$prefix_root/$npx_cli_relative_path" ]]; then
-        cat > "$prefix_root/bin/npx" <<EOF
+    cat > "$prefix_root/bin/npx" <<EOF
 #!/bin/sh
 set -eu
 prefix_root="\${PREFIX:-$termux_guest_runtime_prefix}"
-exec "\$prefix_root/bin/node" "\$prefix_root/$npx_cli_relative_path" "\$@"
+exec "\$prefix_root/bin/node" "\$prefix_root/$npx_bin_relative_path" "\$@"
 EOF
-        chmod 0755 "$prefix_root/bin/npx"
-    elif [[ -f "$prefix_root/$corepack_npm_cli_relative_path" ]]; then
-        cat > "$prefix_root/bin/npx" <<EOF
-#!/bin/sh
-set -eu
-prefix_root="\${PREFIX:-$termux_guest_runtime_prefix}"
-exec "\$prefix_root/bin/node" "\$prefix_root/$corepack_npm_cli_relative_path" exec --yes -- "\$@"
-EOF
-        chmod 0755 "$prefix_root/bin/npx"
+    chmod 0755 "$prefix_root/bin/npx"
+
+    if grep -F 'SILLYDROID_NPM_CLI=' "$prefix_root/$npm_bin_relative_path" >/dev/null 2>&1; then
+        sillydroid_fail "写入 bin/npm 时误覆盖了 npm 包本体：$prefix_root/$npm_bin_relative_path"
+    fi
+    if grep -F 'SILLYDROID_NPM_CLI=' "$prefix_root/$npx_bin_relative_path" >/dev/null 2>&1; then
+        sillydroid_fail "写入 bin/npx 时误覆盖了 npx 包本体：$prefix_root/$npx_bin_relative_path"
     fi
 }
 
@@ -444,7 +447,7 @@ prune_termux_host_prefix_for_native_entrypoints() {
     local prefix_root="$1"
 
     # no-proot 运行时不能从 files/usr 直接 exec ELF；这些入口已经复制到 APK nativeLibraryDir。
-    # 这里保留 npm/corepack、Git helper、证书、模板等资源，避免酒馆 simple-git/npm 相关能力退化。
+    # 这里保留 npm 本体、Git helper、证书、模板等资源，避免酒馆 simple-git/npm 相关能力退化。
     rm -f \
         "$prefix_root/bin/node" \
         "$prefix_root/bin/bash" \
@@ -888,6 +891,8 @@ rootfs_fs_file_count="$(find "$rootfs_fs_stage_root" -type f | wc -l | tr -d '[:
 host_prefix_file_count="$(find "$host_prefix_stage_root" -type f | wc -l | tr -d '[:space:]')"
 rootfs_fs_archive_size_bytes="$(stat -c '%s' "$rootfs_fs_archive_path")"
 host_prefix_archive_size_bytes="$(stat -c '%s' "$host_prefix_archive_path")"
+rootfs_fs_archive_sha256="$(sha256sum "$rootfs_fs_archive_path" | awk '{print $1}')"
+host_prefix_archive_sha256="$(sha256sum "$host_prefix_archive_path" | awk '{print $1}')"
 termux_base_version="$(extract_termux_package_version dash "${termux_filename_by_package[dash]:-}")"
 if [[ -n "$termux_base_version" ]]; then
     termux_base_version="stable-dash.$termux_base_version"
@@ -951,6 +956,10 @@ manifest_path="$resolved_target_root/rootfs-manifest.json"
     printf '  "archiveSizeBytes": {\n'
     printf '    "fs": %s,\n' "$rootfs_fs_archive_size_bytes"
     printf '    "usr": %s\n' "$host_prefix_archive_size_bytes"
+    printf '  },\n'
+    printf '  "archiveSha256": {\n'
+    printf '    "fs": "%s",\n' "$rootfs_fs_archive_sha256"
+    printf '    "usr": "%s"\n' "$host_prefix_archive_sha256"
     printf '  }\n'
     printf '}\n'
 } > "$manifest_path"

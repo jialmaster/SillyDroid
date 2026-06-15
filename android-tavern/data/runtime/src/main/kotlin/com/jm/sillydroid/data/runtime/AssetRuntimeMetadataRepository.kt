@@ -41,27 +41,17 @@ class AssetRuntimeMetadataRepository(context: Context) : RuntimeMetadataReposito
 
     override fun resolveRuntimeVersionLabel(): String? {
         val manifest = readJsonAssetOrNull(rootfsManifestAssetPath) ?: return null
-
-        val directVersion = manifest.optMeaningfulString("runtimeVersion")
-        if (directVersion.isNotBlank()) {
-            return directVersion
-        }
-
-        // 当前宿主只认 no-proot Termux host manifest 结构：runtimeVersion 优先，缺失时退回 baseFlavor/baseVersion。
-        // 历史 ubuntuBase* 兼容已移除，避免运行时版本解析继续暗示旧基线仍被支持。
-        val baseFlavor = manifest.optMeaningfulString("baseFlavor")
-        val baseVersion = manifest.optMeaningfulString("baseVersion")
-
-        val baseLabel = when {
-            baseVersion.isBlank() -> ""
-            baseFlavor.isBlank() -> baseVersion
-            else -> "$baseFlavor.$baseVersion"
-        }
-
-        return when {
-            baseLabel.isNotBlank() -> baseLabel
-            else -> null
-        }
+        return resolveRootfsRuntimeVersionLabel(
+            RootfsRuntimeVersionMetadata(
+                runtimeVersion = manifest.optMeaningfulString("runtimeVersion"),
+                runtimeMode = manifest.optMeaningfulString("runtimeMode"),
+                baseFlavor = manifest.optMeaningfulString("baseFlavor"),
+                baseVersion = manifest.optMeaningfulString("baseVersion"),
+                usrArchiveSha256 = manifest.optJSONObject("archiveSha256")
+                    ?.optMeaningfulString("usr")
+                    .orEmpty()
+            )
+        )
     }
 
     override fun resolveServerPayloadVersionLabel(
@@ -248,5 +238,53 @@ class AssetRuntimeMetadataRepository(context: Context) : RuntimeMetadataReposito
         private const val serverManifestAssetPath = "bootstrap/server/bootstrap-manifest.json"
         private const val runtimePatchAssetRoot = "bootstrap/runtime-patches"
         private const val runtimePatchManifestAssetPath = "$runtimePatchAssetRoot/manifest.json"
+    }
+}
+
+internal data class RootfsRuntimeVersionMetadata(
+    val runtimeVersion: String,
+    val runtimeMode: String,
+    val baseFlavor: String,
+    val baseVersion: String,
+    val usrArchiveSha256: String
+)
+
+internal fun resolveRootfsRuntimeVersionLabel(metadata: RootfsRuntimeVersionMetadata): String? {
+    // rootfs 的 runtimeVersion 是布局版本，可能长期保持 1.0.0；关于页需要展示可随资产内容变化的标签。
+    // 因此优先组合 runtimeMode/baseVersion 与 rootfs-usr 归档指纹，避免 runtime 更新后仍显示固定版本。
+    val runtimeMode = metadata.runtimeMode.trim()
+    val baseFlavor = metadata.baseFlavor.trim()
+    val baseVersion = metadata.baseVersion.trim()
+    val usrArchiveSha = metadata.usrArchiveSha256.trim()
+        .take(8)
+
+    val runtimeLabel = when {
+        runtimeMode.isNotBlank() -> runtimeMode
+        baseFlavor.isBlank() -> baseVersion
+        else -> "$baseFlavor.$baseVersion"
+    }
+    val baseLabel = when {
+        runtimeMode.isNotBlank() && baseVersion.isNotBlank() -> baseVersion
+        runtimeMode.isNotBlank() && baseFlavor.isNotBlank() -> baseFlavor
+        else -> ""
+    }
+    val archiveLabel = usrArchiveSha.takeIf { value -> value.isNotBlank() }?.let { value -> "usr $value" }.orEmpty()
+    val contentLabel = listOf(runtimeLabel, baseLabel, archiveLabel)
+        .filter { value -> value.isNotBlank() }
+        .distinct()
+        .joinToString(separator = " · ")
+    if (contentLabel.isNotBlank()) {
+        return contentLabel
+    }
+
+    val directVersion = metadata.runtimeVersion.trim()
+    if (directVersion.isNotBlank()) {
+        return directVersion
+    }
+
+    return when {
+        baseVersion.isNotBlank() && baseFlavor.isNotBlank() -> "$baseFlavor.$baseVersion"
+        baseVersion.isNotBlank() -> baseVersion
+        else -> null
     }
 }

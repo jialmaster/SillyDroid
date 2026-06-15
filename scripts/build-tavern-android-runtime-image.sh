@@ -145,7 +145,11 @@ stage_runtime_image() {
     mkdir -p "$stage_root/assets/bootstrap" "$stage_root/jniLibs/arm64-v8a"
 
     sillydroid_assert_path_exists "$tavern_rootfs_root/rootfs-fs.zip" "缺少 Tavern rootfs 归档：$tavern_rootfs_root/rootfs-fs.zip"
+    sillydroid_assert_path_exists "$tavern_rootfs_root/rootfs-usr.zip" "缺少 Tavern host prefix 归档：$tavern_rootfs_root/rootfs-usr.zip"
     sillydroid_assert_path_exists "$tavern_rootfs_root/rootfs-manifest.json" "缺少 Tavern rootfs manifest：$tavern_rootfs_root/rootfs-manifest.json"
+    "$JAVA_HOME/bin/jar" --list --file "$tavern_rootfs_root/rootfs-usr.zip" | grep -Fx 'lib/node_modules/npm/lib/cli.js' >/dev/null || sillydroid_fail "缺少 Tavern 预置 npm JS CLI：$tavern_rootfs_root/rootfs-usr.zip"
+    "$JAVA_HOME/bin/jar" --list --file "$tavern_rootfs_root/rootfs-usr.zip" | grep -Fx 'lib/node_modules/npm/bin/npm-cli.js' >/dev/null || sillydroid_fail "缺少 Tavern 预置 npm wrapper：$tavern_rootfs_root/rootfs-usr.zip"
+    "$JAVA_HOME/bin/jar" --list --file "$tavern_rootfs_root/rootfs-usr.zip" | grep -Fx 'lib/node_modules/npm/bin/npx-cli.js' >/dev/null || sillydroid_fail "缺少 Tavern 预置 npx wrapper：$tavern_rootfs_root/rootfs-usr.zip"
     sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-node.so" "缺少 Tavern Termux node 入口：$tavern_jni_lib_root/libtermux-node.so"
     sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-git.so" "缺少 Tavern Termux git 入口：$tavern_jni_lib_root/libtermux-git.so"
     sillydroid_assert_path_exists "$tavern_jni_lib_root/libtermux-git-remote-http.so" "缺少 Tavern Termux git HTTPS helper 入口：$tavern_jni_lib_root/libtermux-git-remote-http.so"

@@ -118,6 +118,18 @@ if [ -z "${UV_THREADPOOL_SIZE:-}" ]; then
     esac
 fi
 
+# Android 运行时把 plugins 持久化到 TAVERN_DATA_ROOT 后再软链接回 SillyTavern 根目录。
+# Node 默认会把 ESM 依赖解析到软链接真实路径，导致 server plugin 无法向上找到上游根 node_modules。
+# 保留 symlink 路径可维持上游 `SillyTavern/plugins/<plugin>` 布局语义，同时不影响插件自带 node_modules。
+case " ${NODE_OPTIONS:-} " in
+    *" --preserve-symlinks "*)
+        ;;
+    *)
+        NODE_OPTIONS="--preserve-symlinks ${NODE_OPTIONS:-}"
+        export NODE_OPTIONS
+        ;;
+esac
+
 # 监听开关与监听地址必须交由用户 config.yaml 决定，不能在宿主入口里写死；
 # 否则“启用外部访问”会被 CLI 参数覆盖，最终只能监听 127.0.0.1。
 exec "$NODE_BIN" server.js \

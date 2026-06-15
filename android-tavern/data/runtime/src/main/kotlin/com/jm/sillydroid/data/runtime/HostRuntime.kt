@@ -529,7 +529,9 @@ class AssetExtractor(private val context: Context) {
             targetDirectory = paths.rootfsDir,
             requiredRelativePaths = rootfsRequiredRelativePaths
         )
-        onProgress("rootfs manifest 已同步完成。", 100)
+        onProgress("正在准备 usr、tmp 与运行时依赖目录。", 94)
+        refreshHostPrefixDirectory(paths, rootfsDirectoryRefreshed)
+        onProgress("rootfs manifest 与 host prefix 已同步完成。", 100)
         true
     }
 
@@ -589,7 +591,7 @@ class AssetExtractor(private val context: Context) {
             onProgress(details, 80 + ((progressPercent.coerceIn(0, 100) * 8) / 100))
         }
         onProgress("正在准备 usr、tmp 与运行时依赖目录。", 94)
-        refreshHostPrefixDirectory(paths, rootfsAssetsRefreshed)
+        refreshHostPrefixDirectory(paths, rootfsDirectoryRefreshed = false)
         validatePreparedAssetDirectory(
             label = "Tavern 资产",
             targetDirectory = paths.serverDir,
@@ -655,9 +657,10 @@ class AssetExtractor(private val context: Context) {
                     targetPath = File(paths.rootfsDir, "rootfs-manifest.json")
                 )
             )
+            refreshHostPrefixDirectory(paths, rootfsDirectoryRefreshed)
             onProgress(
                 "Linux rootfs 已准备完成。",
-                "rootfs manifest 已同步完成。",
+                "rootfs manifest 与 host prefix 已同步完成。",
                 40
             )
         } else {
@@ -736,7 +739,7 @@ class AssetExtractor(private val context: Context) {
             "正在准备 usr、tmp 与运行时依赖目录。",
             80
         )
-        refreshHostPrefixDirectory(paths, rootfsDirectoryRefreshed)
+        refreshHostPrefixDirectory(paths, rootfsDirectoryRefreshed = false)
         validatePreparedAssetDirectory(
             label = "rootfs 资产",
             targetDirectory = paths.rootfsDir,
@@ -1345,7 +1348,9 @@ class AssetExtractor(private val context: Context) {
     private fun refreshHostPrefixDirectory(paths: HostPaths, rootfsDirectoryRefreshed: Boolean) {
         val hostPrefixRequiredFiles = listOf(
             "etc/tls/cert.pem",
-            "lib/node_modules/corepack/dist/npm.js",
+            "lib/node_modules/npm/lib/cli.js",
+            "lib/node_modules/npm/bin/npm-cli.js",
+            "lib/node_modules/npm/bin/npx-cli.js",
             "libexec/git-core/git",
             "libexec/git-core/git-remote-http"
         )
