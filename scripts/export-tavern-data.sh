@@ -21,7 +21,7 @@ is_termux_environment_marker() {
     if [[ -d /data/data/com.termux/files/home || -d /data/data/com.termux/files/usr ]]; then
         return 0
     fi
-    if command -v termux-setup-storage >/dev/null 2>&1 || command -v termux-share >/dev/null 2>&1 || command -v termux-download >/dev/null 2>&1; then
+    if command -v termux-setup-storage >/dev/null 2>&1 || command -v termux-download >/dev/null 2>&1; then
         return 0
     fi
     if has_linux_distribution_release && is_android_mobile_environment; then
@@ -127,13 +127,13 @@ ensure_termux_api_tools_available() {
         return 1
     fi
 
-    if command -v termux-download >/dev/null 2>&1 && command -v termux-share >/dev/null 2>&1; then
+    if command -v termux-download >/dev/null 2>&1; then
         return 0
     fi
 
     install_package_for_command termux-api termux-download termux-api || true
 
-    command -v termux-download >/dev/null 2>&1 || command -v termux-share >/dev/null 2>&1
+    command -v termux-download >/dev/null 2>&1
 }
 
 ensure_python_available() {
@@ -150,7 +150,7 @@ run_command_with_timeout() {
     local timeout_seconds="$1"
     shift
 
-    # 分享面板可能在厂商系统/Termux:API 组合里不返回；这里统一用自带看门狗，
+    # Android 系统 API 命令可能在厂商系统/Termux:API 组合里不返回；这里统一用自带看门狗，
     # 并优先杀进程组，避免 shell wrapper 里的子进程残留导致导出卡在发布阶段。
     if command -v setsid >/dev/null 2>&1; then
         setsid "$@" &
@@ -1241,7 +1241,7 @@ detect_output_dir() {
     fi
 
     if is_termux_host_environment; then
-        warn "未找到可写的 Android 共享存储目录，将继续尝试 Termux:API 分享/下载；如需保存到下载目录，请在 Termux 主环境执行 termux-setup-storage。"
+        warn "未找到可写的 Android 共享存储目录，将继续尝试 Android 系统下载服务；如需保存到下载目录，请在 Termux 主环境执行 termux-setup-storage。"
         return 1
     fi
 
@@ -1269,38 +1269,10 @@ ensure_storage_access() {
         if request_termux_storage_access; then
             return 0
         fi
-        warn "Termux 共享存储仍未就绪，将继续尝试 Termux:API 分享/下载。"
+        warn "Termux 共享存储仍未就绪，将继续尝试 Android 系统下载服务。"
     elif is_termux_proot_environment; then
         warn "Android 共享存储未就绪；Termux proot 将在找不到共享目录时保存到当前目录。"
     fi
-}
-
-confirm_export_method() {
-    local prompt="$1"
-    local answer
-
-    if ! prompt_available; then
-        echo "当前不是交互式终端，无法确认导出方式：$prompt" >&2
-        return 1
-    fi
-
-    while true; do
-        answer="$(read_prompt_line "$prompt [Y/n]: ")" || return 1
-        case "$answer" in
-            '')
-                return 0
-                ;;
-            y|Y|yes|YES|Yes)
-                return 0
-                ;;
-            n|N|no|NO|No)
-                return 1
-                ;;
-            *)
-                printf '请输入 Y 或 N，直接回车默认 Y。\n' >&2
-                ;;
-        esac
-    done
 }
 
 find_python_command() {
@@ -1361,7 +1333,7 @@ resolve_archive_target() {
 
     if is_termux_proot_environment; then
         error "无法直接保存导出文件：$direct_failure_reason"
-        error "Termux proot 不启用 Termux:API 分享/下载回退；请确认 /sdcard/Download 或 /storage/emulated/0/Download 可写，或使用 --output-dir 指定 MT 可见目录。"
+        error "Termux proot 不启用 Android 系统下载服务；请确认 /sdcard/Download 或 /storage/emulated/0/Download 可写，或使用 --output-dir 指定 MT 可见目录。"
         return 1
     fi
 
@@ -1376,30 +1348,14 @@ resolve_archive_target() {
 
     ensure_termux_api_tools_available || true
 
-    if is_termux_host_environment && command -v termux-share >/dev/null 2>&1; then
-        warn "回退方案：使用 Android 系统分享面板。原因：$direct_failure_reason"
-        if confirm_export_method "是否使用系统分享面板导出？选择 N 将继续尝试最后的系统下载服务方案。"; then
-            EXPORT_METHOD='share'
-            ARCHIVE_PATH="$export_cache_dir/$archive_name"
-            EXPORT_LABEL='Android 系统分享面板'
-            return 0
-        fi
-        warn "用户选择不使用系统分享面板，继续尝试最后的系统下载服务方案。"
-    else
-        warn "系统分享面板不可用：未检测到 termux-share。"
-    fi
-
     ensure_python_available || true
 
     if is_termux_host_environment && command -v termux-download >/dev/null 2>&1 && find_python_command >/dev/null 2>&1; then
-        warn "最后回退方案：使用 Android 系统下载服务。原因：无法直接保存，且未使用系统分享面板。"
-        if confirm_export_method "是否使用系统下载服务导出？选择 N 将中止导出。"; then
-            EXPORT_METHOD='download'
-            ARCHIVE_PATH="$export_cache_dir/$archive_name"
-            EXPORT_LABEL='Android 系统下载服务'
-            return 0
-        fi
-        warn "用户选择不使用系统下载服务。"
+        warn "回退方案：使用 Android 系统下载服务。原因：无法直接保存。"
+        EXPORT_METHOD='download'
+        ARCHIVE_PATH="$export_cache_dir/$archive_name"
+        EXPORT_LABEL='Android 系统下载服务'
+        return 0
     else
         local missing_download_reasons=()
         is_termux_host_environment || missing_download_reasons+=("当前不是 Termux")
@@ -1408,15 +1364,31 @@ resolve_archive_target() {
         warn "系统下载服务不可用：$(IFS='；'; printf '%s' "${missing_download_reasons[*]}")。如果刚才自动安装 termux-api 成功但仍不可用，请确认已安装 Android 端 Termux:API 应用。"
     fi
 
-    error "无法发布导出文件：没有可写输出目录，且未检测到可用的 termux-download 或 termux-share。"
+    error "无法发布导出文件：没有可写输出目录，且未检测到可用的 termux-download。"
     error "可执行：使用 --output-dir 指定目录；或在 Termux 中安装 termux-api / Termux:API 应用后重试。"
     return 1
+}
+
+android_download_manager_target_path() {
+    local archive_name="$1"
+    local candidate
+    local -a candidates=(
+        "${SILLYDROID_EXPORT_DOWNLOAD_MANAGER_TARGET_DIR:-}"
+        "/storage/emulated/0/Download"
+        "/sdcard/Download"
+    )
+
+    for candidate in "${candidates[@]}"; do
+        [[ -n "$candidate" ]] || continue
+        printf '%s/%s\n' "${candidate%/}" "$archive_name"
+        return 0
+    done
 }
 
 publish_with_download_manager() {
     local archive_path="$1"
     local archive_name="$2"
-    local python_bin port archive_dir server_log server_pid url
+    local python_bin port archive_dir server_log server_pid url target_path download_timeout_seconds
 
     if ! python_bin="$(find_python_command)"; then
         echo "无法使用系统下载服务：未检测到 python/python3 用于临时本地 HTTP 服务。" >&2
@@ -1446,28 +1418,19 @@ publish_with_download_manager() {
     fi
 
     url="http://127.0.0.1:${port}/${archive_name}"
-    if ! termux-download -t "$archive_name" -d "SillyTavern 数据备份" "$url"; then
+    target_path="$(android_download_manager_target_path "$archive_name")"
+    download_timeout_seconds="${SILLYDROID_EXPORT_DOWNLOAD_TIMEOUT_SECONDS:-30}"
+    log "正在调用 Android 系统下载服务，目标：$target_path"
+    if ! run_command_with_timeout "$download_timeout_seconds" termux-download -t "$archive_name" -d "SillyTavern 数据备份" -p "$target_path" "$url"; then
         kill "$server_pid" >/dev/null 2>&1 || true
-        echo "调用 termux-download 失败。" >&2
+        echo "调用 termux-download 失败或超时。" >&2
         return 1
     fi
 
     nohup sh -c "sleep 600; kill '$server_pid' >/dev/null 2>&1; rm -f '$archive_dir/.sillytavern-export-http.pid'" >/dev/null 2>&1 &
     log "已交给 Android 系统下载服务：$archive_name"
+    log "系统下载目标：$target_path"
     log "如果系统下载失败，可在 10 分钟内重新尝试；临时源文件保留在：$archive_path"
-}
-
-publish_with_share_sheet() {
-    local archive_path="$1"
-    local share_timeout_seconds="${SILLYDROID_EXPORT_SHARE_TIMEOUT_SECONDS:-60}"
-
-    log "正在打开 Android 系统分享面板，若厂商系统未响应会在 ${share_timeout_seconds} 秒后自动尝试下载服务。"
-    if ! run_command_with_timeout "$share_timeout_seconds" termux-share -a send -c application/zip "$archive_path"; then
-        echo "调用 termux-share 失败或超时。" >&2
-        return 1
-    fi
-    log "已打开 Android 系统分享面板，请选择文件管理器、网盘或聊天应用保存压缩包。"
-    log "临时源文件保留在：$archive_path"
 }
 
 publish_archive() {
@@ -1484,21 +1447,6 @@ publish_archive() {
             ;;
         download)
             publish_with_download_manager "$archive_path" "$archive_name"
-            ;;
-        share)
-            if publish_with_share_sheet "$archive_path"; then
-                return 0
-            fi
-            warn "系统分享面板没有完成发布，将继续尝试 Android 系统下载服务。"
-            ensure_python_available || true
-            if command -v termux-download >/dev/null 2>&1 && find_python_command >/dev/null 2>&1; then
-                EXPORT_METHOD='download'
-                EXPORT_LABEL='Android 系统下载服务'
-                publish_with_download_manager "$archive_path" "$archive_name"
-                return $?
-            fi
-            echo "分享失败后无法继续下载服务：未检测到 termux-download 或 python/python3。" >&2
-            return 1
             ;;
         *)
             echo "未知导出发布方式：$EXPORT_METHOD" >&2
@@ -1535,6 +1483,8 @@ copy_config_payload() {
         cp -a "$config_file" "$target_dir/config.yaml"
         return 0
     fi
+
+    warn "未找到 config.yaml；可能是刚安装后尚未启动生成配置，将继续导出空 config/ 目录。"
 }
 
 validate_payload_before_archive() {
@@ -1550,8 +1500,7 @@ validate_payload_before_archive() {
     done
 
     if [[ ! -f "$stage_root/config/config.yaml" ]]; then
-        error "导出包结构不完整：缺少 config/config.yaml。"
-        return 1
+        warn "导出包中没有 config/config.yaml；刚安装未启动的酒馆可能尚未生成配置。"
     fi
 }
 
@@ -1687,10 +1636,6 @@ main() {
             ;;
         download)
             printf '压缩包已交给系统下载服务：%s\n' "$(color_text "$COLOR_GREEN" "$archive_name")"
-            printf '临时源文件：%s\n' "$(color_text "$COLOR_BLUE" "$archive_path")"
-            ;;
-        share)
-            printf '压缩包已打开系统分享面板：%s\n' "$(color_text "$COLOR_GREEN" "$archive_name")"
             printf '临时源文件：%s\n' "$(color_text "$COLOR_BLUE" "$archive_path")"
             ;;
     esac
