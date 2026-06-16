@@ -272,7 +272,11 @@
                         android:ellipsize="end"
                         android:maxWidth="@dimen/sillydroid_floating_logs_select_control_width"
                         android:maxLines="1"
-                        android:text="@string/floating_logs_panel_auto_select_label" />
+                        android:text="@string/floating_logs_panel_auto_select_label"
+                        app:icon="@drawable/ic_arrow_drop_down"
+                        app:iconGravity="textEnd"
+                        app:iconPadding="@dimen/sillydroid_space_xs"
+                        app:iconTint="@color/floating_logs_panel_title" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/floatingLogsIntervalButton"
@@ -283,7 +287,11 @@
                         android:ellipsize="end"
                         android:maxWidth="@dimen/sillydroid_floating_logs_interval_control_width"
                         android:maxLines="1"
-                        android:text="@string/bootstrap_settings_host_floating_logs_refresh_interval_one_second" />
+                        android:text="@string/bootstrap_settings_host_floating_logs_refresh_interval_one_second"
+                        app:icon="@drawable/ic_arrow_drop_down"
+                        app:iconGravity="textEnd"
+                        app:iconPadding="@dimen/sillydroid_space_xs"
+                        app:iconTint="@color/floating_logs_panel_title" />
 
                     <ImageButton
                         android:id="@+id/floatingLogsCloseButton"
@@ -348,6 +356,36 @@
 
                     <SeekBar
                         android:id="@+id/floatingLogsBrowserZoomSlider"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/sillydroid_space_md"
+                        android:layout_weight="1" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/floatingLogsBrowserPageZoomRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/sillydroid_space_sm"
+                    android:background="@drawable/bg_floating_logs_panel_surface"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="@dimen/sillydroid_space_md"
+                    android:paddingTop="@dimen/sillydroid_space_xs"
+                    android:paddingEnd="@dimen/sillydroid_space_md"
+                    android:paddingBottom="@dimen/sillydroid_space_xs">
+
+                    <TextView
+                        android:id="@+id/floatingLogsBrowserPageZoomLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minWidth="@dimen/sillydroid_floating_logs_interval_control_width"
+                        android:text="@string/floating_logs_browser_page_zoom_label_default"
+                        android:textAppearance="@style/TextAppearance.SillyDroid.SettingsMeta"
+                        android:textColor="@color/floating_logs_panel_secondary_text" />
+
+                    <SeekBar
+                        android:id="@+id/floatingLogsBrowserPageZoomSlider"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="@dimen/sillydroid_space_md"

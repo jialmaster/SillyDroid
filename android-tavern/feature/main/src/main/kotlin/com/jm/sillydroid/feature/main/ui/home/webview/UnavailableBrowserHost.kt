@@ -60,6 +60,8 @@ class UnavailableBrowserHost(
 
     override fun currentBrowserZoomPercent(): Int = 100
 
+    override fun currentBrowserPageZoomPercent(): Int = 100
+
     override fun configure() {
         if (unavailableView.parent == null) {
             browserFrame.addView(unavailableView)
@@ -69,6 +71,8 @@ class UnavailableBrowserHost(
     }
 
     override fun setBrowserZoomPercent(percent: Int): Boolean = false
+
+    override fun setBrowserPageZoomPercent(percent: Int): Boolean = false
 
     override fun showBrowser(baseUrl: String) {
         lastLocalUrl = baseUrl

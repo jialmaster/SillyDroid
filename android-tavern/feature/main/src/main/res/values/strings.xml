@@ -73,8 +73,10 @@
     <string name="floating_logs_download_button">导出日志</string>
     <string name="floating_logs_download_success">已导出日志 ZIP“%1$s”。\n路径：%2$s</string>
     <string name="floating_logs_download_failed">导出日志失败。</string>
-    <string name="floating_logs_browser_zoom_label_default">浏览器缩放 100%</string>
-    <string name="floating_logs_browser_zoom_label">浏览器缩放 %1$d%%</string>
+    <string name="floating_logs_browser_zoom_label_default">字体缩放 100%</string>
+    <string name="floating_logs_browser_zoom_label">字体缩放 %1$d%%</string>
+    <string name="floating_logs_browser_page_zoom_label_default">界面密度 100%</string>
+    <string name="floating_logs_browser_page_zoom_label">界面密度 %1$d%%</string>
     <string name="bootstrap_settings_host_floating_logs_refresh_interval_realtime">实时</string>
     <string name="bootstrap_settings_host_floating_logs_refresh_interval_one_second">1 秒</string>
     <string name="bootstrap_settings_host_floating_logs_refresh_interval_three_seconds">3 秒</string>

@@ -49,8 +49,8 @@ class GeckoViewBrowserHostBridgeInstaller(
     private var installStarted = false
     private var pendingReadyCallbacks = mutableListOf<() -> Unit>()
     private var allowedOrigin: String = ""
-    private var zoomCommandPort: WebExtension.Port? = null
-    private var pendingTabsZoomPercent: Int? = null
+    private var viewportDensityPort: WebExtension.Port? = null
+    private var pendingViewportDensityRequest: ViewportDensityRequest? = null
 
     private val androidHostBridge by lazy {
         AndroidHostBridge(
@@ -147,23 +147,26 @@ class GeckoViewBrowserHostBridgeInstaller(
             )
     }
 
-    override fun requestBrowserTabsZoomPercent(percent: Int): Boolean {
-        val sanitizedPercent = BrowserZoomOptions.sanitize(percent)
-        pendingTabsZoomPercent = sanitizedPercent
-        if (!postTabsZoomCommandIfPossible(reason = "host_request", percent = sanitizedPercent)) {
+    override fun close() {
+        installedSession = null
+        runCatching { viewportDensityPort?.disconnect() }
+        viewportDensityPort = null
+        pendingReadyCallbacks.clear()
+        blobDownloadController.close()
+    }
+
+    override fun requestViewportDensityPercent(percent: Int, baseViewportWidthCssPx: Int): Boolean {
+        val request = ViewportDensityRequest(
+            percent = BrowserZoomOptions.sanitizeViewportDensity(percent),
+            baseViewportWidthCssPx = baseViewportWidthCssPx.coerceAtLeast(240)
+        )
+        pendingViewportDensityRequest = request
+        if (!postViewportDensityCommandIfPossible(reason = "host_request", request = request)) {
             recordDiagnostic(
-                "event=gecko_tabs_zoom_pending reason=port_not_ready percent=$sanitizedPercent"
+                "event=gecko_viewport_density_pending reason=port_not_ready percent=${request.percent} baseViewportWidthCssPx=${request.baseViewportWidthCssPx}"
             )
         }
         return true
-    }
-
-    override fun close() {
-        installedSession = null
-        runCatching { zoomCommandPort?.disconnect() }
-        zoomCommandPort = null
-        pendingReadyCallbacks.clear()
-        blobDownloadController.close()
     }
 
     private fun bindExtensionMessageDelegate(installedExtension: WebExtension) {
@@ -178,7 +181,7 @@ class GeckoViewBrowserHostBridgeInstaller(
                 }
 
                 override fun onConnect(port: WebExtension.Port) {
-                    bindZoomCommandPort(port)
+                    bindViewportDensityPort(port)
                 }
             },
             NATIVE_APP_NAME
@@ -201,7 +204,7 @@ class GeckoViewBrowserHostBridgeInstaller(
                 }
 
                 override fun onConnect(port: WebExtension.Port) {
-                    bindZoomCommandPort(port)
+                    bindViewportDensityPort(port)
                 }
             },
             NATIVE_APP_NAME
@@ -243,63 +246,6 @@ class GeckoViewBrowserHostBridgeInstaller(
         )
     }
 
-    private fun bindZoomCommandPort(port: WebExtension.Port) {
-        if (!isTrustedPortSender(port.sender)) {
-            recordDiagnostic(
-                "event=gecko_tabs_zoom_port_rejected reason=untrusted_sender url=${port.sender.url.orEmpty()} environmentType=${port.sender.environmentType}"
-            )
-            runCatching { port.disconnect() }
-            return
-        }
-        zoomCommandPort = port
-        port.setDelegate(
-            object : WebExtension.PortDelegate {
-                override fun onPortMessage(message: Any, port: WebExtension.Port) {
-                    recordDiagnostic(
-                        "event=gecko_tabs_zoom_port_message payload=${message.toString().replaceWhitespaceForDiagnostic()}"
-                    )
-                }
-
-                override fun onDisconnect(port: WebExtension.Port) {
-                    if (zoomCommandPort === port) {
-                        zoomCommandPort = null
-                    }
-                    recordDiagnostic("event=gecko_tabs_zoom_port_disconnected")
-                }
-            }
-        )
-        recordDiagnostic(
-            "event=gecko_tabs_zoom_port_connected environmentType=${port.sender.environmentType} url=${port.sender.url.orEmpty()}"
-        )
-        pendingTabsZoomPercent?.let { percent ->
-            postTabsZoomCommandIfPossible(reason = "port_connected", percent = percent)
-        }
-    }
-
-    private fun postTabsZoomCommandIfPossible(reason: String, percent: Int): Boolean {
-        val port = zoomCommandPort ?: return false
-        val sanitizedPercent = BrowserZoomOptions.sanitize(percent)
-        val payload = JSONObject()
-            .put("action", "setTabsZoom")
-            .put("percent", sanitizedPercent)
-            .put("factor", BrowserZoomOptions.toZoomFactor(sanitizedPercent).toDouble())
-            .put("reason", reason)
-        return runCatching {
-            port.postMessage(payload)
-        }.onSuccess {
-            recordDiagnostic(
-                "event=gecko_tabs_zoom_command_sent reason=$reason percent=$sanitizedPercent factor=${BrowserZoomOptions.toZoomFactor(sanitizedPercent)}"
-            )
-        }.onFailure { error ->
-            if (zoomCommandPort === port) {
-                zoomCommandPort = null
-            }
-            recordDiagnostic(
-                "event=gecko_tabs_zoom_command_failed reason=$reason percent=$sanitizedPercent error=${error.message ?: error.javaClass.simpleName}"
-            )
-        }.isSuccess
-    }
-
     private fun handleAction(action: String, data: Any?): Any {
         return when (action) {
             "openSettings" -> androidHostBridge.openSettings()
@@ -333,6 +279,62 @@ class GeckoViewBrowserHostBridgeInstaller(
             }
             else -> false
         }
+    }
+
+    private fun bindViewportDensityPort(port: WebExtension.Port) {
+        if (!isTrustedPortSender(port.sender)) {
+            recordDiagnostic(
+                "event=gecko_viewport_density_port_rejected reason=untrusted_sender url=${port.sender.url.orEmpty()} environmentType=${port.sender.environmentType}"
+            )
+            runCatching { port.disconnect() }
+            return
+        }
+        viewportDensityPort = port
+        port.setDelegate(
+            object : WebExtension.PortDelegate {
+                override fun onPortMessage(message: Any, port: WebExtension.Port) {
+                    recordDiagnostic(
+                        "event=gecko_viewport_density_port_message payload=${message.toString().replaceWhitespaceForDiagnostic()}"
+                    )
+                }
+
+                override fun onDisconnect(port: WebExtension.Port) {
+                    if (viewportDensityPort === port) {
+                        viewportDensityPort = null
+                    }
+                    recordDiagnostic("event=gecko_viewport_density_port_disconnected")
+                }
+            }
+        )
+        recordDiagnostic(
+            "event=gecko_viewport_density_port_connected environmentType=${port.sender.environmentType} url=${port.sender.url.orEmpty()}"
+        )
+        pendingViewportDensityRequest?.let { request ->
+            postViewportDensityCommandIfPossible(reason = "port_connected", request = request)
+        }
+    }
+
+    private fun postViewportDensityCommandIfPossible(reason: String, request: ViewportDensityRequest): Boolean {
+        val port = viewportDensityPort ?: return false
+        val payload = JSONObject()
+            .put("action", "setViewportDensity")
+            .put("percent", request.percent)
+            .put("baseViewportWidthCssPx", request.baseViewportWidthCssPx)
+            .put("reason", reason)
+        return runCatching {
+            port.postMessage(payload)
+        }.onSuccess {
+            recordDiagnostic(
+                "event=gecko_viewport_density_command_sent reason=$reason percent=${request.percent} baseViewportWidthCssPx=${request.baseViewportWidthCssPx}"
+            )
+        }.onFailure { error ->
+            if (viewportDensityPort === port) {
+                viewportDensityPort = null
+            }
+            recordDiagnostic(
+                "event=gecko_viewport_density_command_failed reason=$reason percent=${request.percent} error=${error.message ?: error.javaClass.simpleName}"
+            )
+        }.isSuccess
     }
 
     private fun isTrustedSender(sender: WebExtension.MessageSender): Boolean {
@@ -378,6 +380,11 @@ class GeckoViewBrowserHostBridgeInstaller(
         is JSONObject -> this.toString()
         else -> toString()
     }
+
+    private data class ViewportDensityRequest(
+        val percent: Int,
+        val baseViewportWidthCssPx: Int
+    )
 
     private fun Any?.asBoolean(): Boolean = when (this) {
         is Boolean -> this

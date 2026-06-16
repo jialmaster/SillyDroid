@@ -34,6 +34,7 @@ class FloatingLogsHost(
     private val openCurrentPageInBrowser: () -> Boolean,
     private val reloadTavernWebView: () -> Boolean,
     private val applyBrowserZoomPercent: (Int) -> Boolean,
+    private val applyBrowserPageZoomPercent: (Int) -> Boolean,
     private val feedbackImageLauncher: ActivityResultLauncher<String>,
     private val feedbackUploadConfig: () -> HostLogBundleUploadRequestConfig,
     private val recordHostDiagnostic: (category: String, body: String) -> Unit
@@ -53,6 +54,8 @@ class FloatingLogsHost(
     private val clearButton: MaterialButton = activity.findViewById(R.id.floatingLogsClearButton)
     private val browserZoomLabel: TextView = activity.findViewById(R.id.floatingLogsBrowserZoomLabel)
     private val browserZoomSlider: SeekBar = activity.findViewById(R.id.floatingLogsBrowserZoomSlider)
+    private val browserPageZoomLabel: TextView = activity.findViewById(R.id.floatingLogsBrowserPageZoomLabel)
+    private val browserPageZoomSlider: SeekBar = activity.findViewById(R.id.floatingLogsBrowserPageZoomSlider)
     private val openSettingsButton: MaterialButton = activity.findViewById(R.id.floatingLogsOpenSettingsButton)
     private val openBrowserButton: MaterialButton = activity.findViewById(R.id.floatingLogsOpenBrowserButton)
     private val feedbackButton: MaterialButton = activity.findViewById(R.id.floatingLogsFeedbackButton)
@@ -98,6 +101,8 @@ class FloatingLogsHost(
                 clearButton = clearButton,
                 browserZoomLabel = browserZoomLabel,
                 browserZoomSlider = browserZoomSlider,
+                browserPageZoomLabel = browserPageZoomLabel,
+                browserPageZoomSlider = browserPageZoomSlider,
                 openSettingsButton = openSettingsButton,
                 openBrowserButton = openBrowserButton,
                 feedbackButton = feedbackButton,
@@ -121,6 +126,7 @@ class FloatingLogsHost(
                 downloadSuccess = { zipFileName, zipPath -> activity.getString(R.string.floating_logs_download_success, zipFileName, zipPath) },
                 downloadFailed = { activity.getString(R.string.floating_logs_download_failed) },
                 browserZoomLabel = { percent -> activity.getString(R.string.floating_logs_browser_zoom_label, percent) },
+                browserPageZoomLabel = { percent -> activity.getString(R.string.floating_logs_browser_page_zoom_label, percent) },
                 clearConfirmTitle = { activity.getString(R.string.bootstrap_settings_logs_clear_confirm_title) },
                 clearConfirmMessage = { activity.getString(R.string.bootstrap_settings_logs_clear_confirm_message) },
                 clearConfirmPositiveLabel = { activity.getString(R.string.bootstrap_settings_logs_clear) },
@@ -147,6 +153,7 @@ class FloatingLogsHost(
             openCurrentPageInBrowser = openCurrentPageInBrowser,
             reloadTavernWebView = reloadTavernWebView,
             applyBrowserZoomPercent = applyBrowserZoomPercent,
+            applyBrowserPageZoomPercent = applyBrowserPageZoomPercent,
             feedbackImageLauncher = feedbackImageLauncher,
             feedbackUploadConfig = feedbackUploadConfig,
             recordHostDiagnostic = recordHostDiagnostic

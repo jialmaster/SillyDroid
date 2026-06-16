@@ -37,6 +37,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    testImplementation("org.robolectric:robolectric:4.13")
     // mockito-inline 用于在 JVM 单测里 mock WebView 等 final 类，验证 renderer 重建后控制器
     // 能正确切换到新 WebView 实例。
     testImplementation("org.mockito:mockito-inline:5.2.0")

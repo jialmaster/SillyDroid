@@ -25,7 +25,7 @@ interface BrowserHostBridgeInstaller {
 
     fun installAfterPageFinished(target: BrowserHostBridgeTarget) = Unit
 
-    fun requestBrowserTabsZoomPercent(percent: Int): Boolean = false
+    fun requestViewportDensityPercent(percent: Int, baseViewportWidthCssPx: Int): Boolean = false
 
     fun close() = Unit
 

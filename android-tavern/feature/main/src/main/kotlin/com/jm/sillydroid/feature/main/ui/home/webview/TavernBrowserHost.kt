@@ -17,8 +17,10 @@ interface TavernBrowserHost {
 
     fun currentBrowserRuntimeInfo(): BrowserRuntimeInfo
     fun currentBrowserZoomPercent(): Int
+    fun currentBrowserPageZoomPercent(): Int
     fun configure()
     fun setBrowserZoomPercent(percent: Int): Boolean
+    fun setBrowserPageZoomPercent(percent: Int): Boolean
     fun showBrowser(baseUrl: String)
     fun hideForBootstrapRestart()
     fun reloadTavernUiIfPossible(snapshot: BootstrapSessionSnapshot)

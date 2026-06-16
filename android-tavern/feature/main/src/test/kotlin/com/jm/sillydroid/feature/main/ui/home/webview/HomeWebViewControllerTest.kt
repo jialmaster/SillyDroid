@@ -39,6 +39,39 @@ class HomeWebViewControllerTest {
     }
 
     @Test
+    fun `viewport density script shows more content without bitmap scaling`() {
+        val script = buildApplyWebViewViewportDensityScript(
+            percent = 50,
+            baseViewportWidthCssPx = 400,
+            reason = "unit_test"
+        )
+
+        assertTrue(script.contains("const viewportWidth = 800"))
+        assertTrue(script.contains("const initialScale = 0.5"))
+        assertTrue(script.contains("document.querySelector('meta[name=\"viewport\"]')"))
+        assertTrue(script.contains("'width=' + viewportWidth"))
+        assertTrue(script.contains("initial-scale="))
+        assertTrue(script.contains("initialScale"))
+        assertTrue(script.contains("root.dataset.sillydroidViewportDensityPercent = String(percent)"))
+        assertTrue(script.contains("root.dataset.sillydroidViewportDensityReason = \"unit_test\""))
+        assertFalse(script.contains("body.style.transform = 'scale(' + factor + ')'"))
+        assertFalse(script.contains("initialScale = percent > 100 ? factor : 1"))
+        assertFalse(script.contains("style.zoom"))
+    }
+
+    @Test
+    fun `viewport density width only expands layout viewport below one hundred`() {
+        assertEquals(800, resolveViewportDensityWidthCssPx(percent = 50, baseViewportWidthCssPx = 400))
+        assertEquals(533, resolveViewportDensityWidthCssPx(percent = 75, baseViewportWidthCssPx = 400))
+        assertEquals(400, resolveViewportDensityWidthCssPx(percent = 100, baseViewportWidthCssPx = 400))
+        assertEquals(400, resolveViewportDensityWidthCssPx(percent = 125, baseViewportWidthCssPx = 400))
+        assertEquals("0.5", resolveViewportDensityInitialScale(percent = 50))
+        assertEquals("0.75", resolveViewportDensityInitialScale(percent = 75))
+        assertEquals("1", resolveViewportDensityInitialScale(percent = 100))
+        assertEquals("1", resolveViewportDensityInitialScale(percent = 150))
+    }
+
+    @Test
     fun `local load error info keeps webview network failure evidence`() {
         val info = WebViewLocalLoadErrorInfo(
             failingUrl = "http://127.0.0.1:8000/",

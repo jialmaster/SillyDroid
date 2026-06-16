@@ -52,11 +52,15 @@ class DisabledBrowserHost(
 
     override fun currentBrowserZoomPercent(): Int = 100
 
+    override fun currentBrowserPageZoomPercent(): Int = 100
+
     override fun configure() {
         recordDiagnostic(event = "configured")
     }
 
     override fun setBrowserZoomPercent(percent: Int): Boolean = false
+
+    override fun setBrowserPageZoomPercent(percent: Int): Boolean = false
 
     override fun showBrowser(baseUrl: String) {
         lastLocalUrl = baseUrl

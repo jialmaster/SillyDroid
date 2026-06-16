@@ -37,7 +37,10 @@ interface HostPreferencesRepository {
     var nodeMaxSemiSpaceMb: Int
     var hostDisplayMode: HostDisplayMode
     var browserEngine: BrowserEngine
+    // 字体缩放：沿用 WebView textZoom / Gecko fontSizeFactor，只影响文字字号。
     var browserZoomPercent: Int
+    // 界面密度：独立于字体缩放，System WebView 通过 HTML viewport width 调整同屏 CSS 像素容量。
+    var browserPageZoomPercent: Int
     var launchWebViewOnReady: Boolean
     var backgroundHealthCheckEnabled: Boolean
     // 是否启用 SillyDroid 对 Tavern 的运行时 patch 预设；默认关，开启后需重启本地服务生效。

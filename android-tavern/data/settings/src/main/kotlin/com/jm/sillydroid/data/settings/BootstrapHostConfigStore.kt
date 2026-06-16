@@ -23,6 +23,7 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         private const val hostDisplayModeKey = "host-display-mode"
         private const val browserEngineKey = "browser-engine"
         private const val browserZoomPercentKey = "browser-zoom-percent"
+        private const val browserPageZoomPercentKey = "browser-page-zoom-percent"
         private const val launchWebViewOnReadyKey = "launch-webview-on-ready"
         private const val backgroundHealthCheckEnabledKey = "background-health-check-enabled"
         private const val tavernRuntimePatchEnabledKey = "tavern-runtime-patch-enabled"
@@ -126,6 +127,16 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         set(value) {
             preferences.edit()
                 .putInt(browserZoomPercentKey, BrowserZoomOptions.sanitize(value))
+                .apply()
+        }
+
+    override var browserPageZoomPercent: Int
+        get() = BrowserZoomOptions.sanitizeViewportDensity(
+            preferences.getInt(browserPageZoomPercentKey, BrowserZoomOptions.DEFAULT_PERCENT)
+        )
+        set(value) {
+            preferences.edit()
+                .putInt(browserPageZoomPercentKey, BrowserZoomOptions.sanitizeViewportDensity(value))
                 .apply()
         }
 

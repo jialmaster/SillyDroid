@@ -146,6 +146,7 @@ class SettingsActivityViewModelResultFlagsTest {
         override var hostDisplayMode: HostDisplayMode = HostDisplayMode.NORMAL
         override var browserEngine: BrowserEngine = BrowserEngine.SYSTEM_WEBVIEW
         override var browserZoomPercent: Int = 100
+        override var browserPageZoomPercent: Int = 100
         override var launchWebViewOnReady: Boolean = true
         override var backgroundHealthCheckEnabled: Boolean = false
         override var tavernRuntimePatchEnabled: Boolean = false

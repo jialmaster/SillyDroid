@@ -71,6 +71,7 @@ class HostLogBundleInfoFormatterTest {
         assertTrue(bundleInfo.contains("nodeMaxSemiSpaceMb=64"))
         assertTrue(bundleInfo.contains("browserEngine=SYSTEM_WEBVIEW"))
         assertTrue(bundleInfo.contains("browserZoomPercent=100"))
+        assertTrue(bundleInfo.contains("browserPageZoomPercent=100"))
         assertTrue(bundleInfo.contains("tavernRuntimePatchEnabled=true"))
         assertTrue(bundleInfo.contains("tavernRuntimePatchDisabledModuleIds=character-all-limited-concurrency"))
         assertTrue(bundleInfo.contains("tavernRuntimePatchSettingOverrides=character-all-limited-concurrency.concurrency=4"))
@@ -187,6 +188,7 @@ class HostLogBundleInfoFormatterTest {
         assertTrue(bundleInfoJson.contains("\"nodeMaxSemiSpaceMb\": 64"))
         assertTrue(bundleInfoJson.contains("\"browserEngine\": \"SYSTEM_WEBVIEW\""))
         assertTrue(bundleInfoJson.contains("\"browserZoomPercent\": 100"))
+        assertTrue(bundleInfoJson.contains("\"browserPageZoomPercent\": 100"))
         assertTrue(bundleInfoJson.contains("\"launchWebViewOnReady\": true"))
         assertTrue(bundleInfoJson.contains("\"backgroundHealthCheckEnabled\": false"))
         assertTrue(bundleInfoJson.contains("\"tavernRuntimePatchEnabled\": true"))
@@ -245,6 +247,7 @@ class HostLogBundleInfoFormatterTest {
             hostDisplayMode = HostDisplayMode.NORMAL,
             browserEngine = BrowserEngine.SYSTEM_WEBVIEW,
             browserZoomPercent = 100,
+            browserPageZoomPercent = 100,
             launchWebViewOnReady = true,
             backgroundHealthCheckEnabled = false,
             tavernRuntimePatchEnabled = true,

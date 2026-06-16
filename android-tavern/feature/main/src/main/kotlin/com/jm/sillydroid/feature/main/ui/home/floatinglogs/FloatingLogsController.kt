@@ -69,6 +69,7 @@ class FloatingLogsController(
     private val openCurrentPageInBrowser: () -> Boolean,
     private val reloadTavernWebView: () -> Boolean,
     private val applyBrowserZoomPercent: (Int) -> Boolean,
+    private val applyBrowserPageZoomPercent: (Int) -> Boolean,
     private val feedbackImageLauncher: ActivityResultLauncher<String>,
     private val feedbackUploadConfig: () -> HostLogBundleUploadRequestConfig,
     private val recordHostDiagnostic: (category: String, body: String) -> Unit
@@ -530,6 +531,7 @@ class FloatingLogsController(
         views.intervalButton.text = refreshIntervalLabel(preferences.floatingLogRefreshIntervalMillis)
         views.intervalButton.isEnabled = true
         updateBrowserZoomLabel(preferences.browserZoomPercent)
+        updateBrowserPageZoomLabel(preferences.browserPageZoomPercent)
     }
 
     private fun configureBrowserZoomControls() {
@@ -550,7 +552,7 @@ class FloatingLogsController(
                     val applied = applyBrowserZoomPercent(percent)
                     recordHostDiagnostic(
                         "browser",
-                        "event=floating_logs_browser_zoom_changed percent=$percent applied=$applied"
+                        "event=floating_logs_browser_text_zoom_changed percent=$percent applied=$applied"
                     )
                 }
 
@@ -563,10 +565,51 @@ class FloatingLogsController(
                         val applied = applyBrowserZoomPercent(percent)
                         recordHostDiagnostic(
                             "browser",
-                            "event=floating_logs_browser_zoom_committed percent=$percent applied=$applied"
+                            "event=floating_logs_browser_text_zoom_committed percent=$percent applied=$applied"
                         )
                     }
                     updateBrowserZoomLabel(percent)
+                }
+            }
+        )
+
+        views.browserPageZoomSlider.max = BrowserZoomOptions.viewportDensitySliderProgress(
+            BrowserZoomOptions.MAX_VIEWPORT_DENSITY_PERCENT
+        )
+        views.browserPageZoomSlider.progress =
+            BrowserZoomOptions.viewportDensitySliderProgress(preferences.browserPageZoomPercent)
+        updateBrowserPageZoomLabel(preferences.browserPageZoomPercent)
+        views.browserPageZoomSlider.setOnSeekBarChangeListener(
+            object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                    val percent = BrowserZoomOptions.viewportDensityPercentFromSliderProgress(progress)
+                    updateBrowserPageZoomLabel(percent)
+                    if (!fromUser) {
+                        return
+                    }
+                    if (preferences.browserPageZoomPercent != percent) {
+                        preferences.browserPageZoomPercent = percent
+                    }
+                    val applied = applyBrowserPageZoomPercent(percent)
+                    recordHostDiagnostic(
+                        "browser",
+                        "event=floating_logs_browser_viewport_density_changed percent=$percent applied=$applied"
+                    )
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
+
+                override fun onStopTrackingTouch(seekBar: SeekBar) {
+                    val percent = BrowserZoomOptions.viewportDensityPercentFromSliderProgress(seekBar.progress)
+                    if (preferences.browserPageZoomPercent != percent) {
+                        preferences.browserPageZoomPercent = percent
+                        val applied = applyBrowserPageZoomPercent(percent)
+                        recordHostDiagnostic(
+                            "browser",
+                            "event=floating_logs_browser_viewport_density_committed percent=$percent applied=$applied"
+                        )
+                    }
+                    updateBrowserPageZoomLabel(percent)
                 }
             }
         )
@@ -574,6 +617,11 @@ class FloatingLogsController(
 
     private fun updateBrowserZoomLabel(percent: Int) {
         views.browserZoomLabel.text = text.browserZoomLabel(BrowserZoomOptions.sanitize(percent))
+    }
+
+    private fun updateBrowserPageZoomLabel(percent: Int) {
+        views.browserPageZoomLabel.text =
+            text.browserPageZoomLabel(BrowserZoomOptions.sanitizeViewportDensity(percent))
     }
 
     private fun showSelectDialog() {
@@ -975,6 +1023,8 @@ data class FloatingLogsViews(
     val clearButton: MaterialButton,
     val browserZoomLabel: TextView,
     val browserZoomSlider: SeekBar,
+    val browserPageZoomLabel: TextView,
+    val browserPageZoomSlider: SeekBar,
     val openSettingsButton: MaterialButton,
     val openBrowserButton: MaterialButton,
     val feedbackButton: MaterialButton,
@@ -999,6 +1049,7 @@ data class FloatingLogsText(
     val downloadSuccess: (zipFileName: String, zipPath: String) -> String,
     val downloadFailed: () -> String,
     val browserZoomLabel: (percent: Int) -> String,
+    val browserPageZoomLabel: (percent: Int) -> String,
     val clearConfirmTitle: () -> String,
     val clearConfirmMessage: () -> String,
     val clearConfirmPositiveLabel: () -> String,

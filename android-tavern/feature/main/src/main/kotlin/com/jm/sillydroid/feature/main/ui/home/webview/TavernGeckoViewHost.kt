@@ -174,6 +174,10 @@ class TavernGeckoViewHost(
         return BrowserZoomOptions.sanitize((runtime(activity).settings.fontSizeFactor * 100f).roundToInt())
     }
 
+    override fun currentBrowserPageZoomPercent(): Int {
+        return BrowserZoomOptions.sanitizeViewportDensity(hostConfigStore.browserPageZoomPercent)
+    }
+
     override fun configure() {
         if (configured) {
             return
@@ -186,6 +190,7 @@ class TavernGeckoViewHost(
         bridgeInstaller.install(buildBridgeTarget())
         filePromptUriMaterializer.cleanPreparedFiles()
         setBrowserZoomPercent(hostConfigStore.browserZoomPercent)
+        setBrowserPageZoomPercent(hostConfigStore.browserPageZoomPercent)
         restoreHostSystemBarAppearance()
         recordHostDiagnostic(
             category = "geckoview",
@@ -197,18 +202,47 @@ class TavernGeckoViewHost(
         val sanitizedPercent = BrowserZoomOptions.sanitize(percent)
         val zoomFactor = BrowserZoomOptions.toZoomFactor(sanitizedPercent)
         runtime(activity).settings.setFontSizeFactor(zoomFactor)
-        val tabsZoomRequested = bridgeInstaller.requestBrowserTabsZoomPercent(sanitizedPercent)
         recordCriticalHostDiagnostic(
             category = "geckoview",
             body = buildString {
-                append("event=browser_zoom_applied")
+                append("event=browser_text_zoom_applied")
                 append(" engine=${browserEngine.name}")
                 append(" percent=$sanitizedPercent")
                 append(" fontSizeFactor=${runtime(activity).settings.fontSizeFactor}")
-                append(" tabsZoomRequested=$tabsZoomRequested")
             }
         )
-        return tabsZoomRequested
+        return true
+    }
+
+    override fun setBrowserPageZoomPercent(percent: Int): Boolean {
+        val sanitizedPercent = BrowserZoomOptions.sanitizeViewportDensity(percent)
+        val baseViewportWidthCssPx = resolveGeckoBaseViewportWidthCssPx()
+        val requested = bridgeInstaller.requestViewportDensityPercent(
+            percent = sanitizedPercent,
+            baseViewportWidthCssPx = baseViewportWidthCssPx
+        )
+        recordCriticalHostDiagnostic(
+            category = "geckoview",
+            body = buildString {
+                append("event=browser_viewport_density_requested")
+                append(" engine=${browserEngine.name}")
+                append(" percent=$sanitizedPercent")
+                append(" baseViewportWidthCssPx=$baseViewportWidthCssPx")
+                append(" requested=$requested")
+            }
+        )
+        return requested
+    }
+
+    private fun resolveGeckoBaseViewportWidthCssPx(): Int {
+        val density = activity.resources.displayMetrics.density.takeIf { value ->
+            value.isFinite() && value > 0f
+        } ?: 1f
+        val widthPx = geckoView.width
+            .takeIf { value -> value > 0 }
+            ?: browserFrame.width.takeIf { value -> value > 0 }
+            ?: activity.resources.displayMetrics.widthPixels
+        return (widthPx / density).toInt().coerceAtLeast(240)
     }
 
     override fun showBrowser(baseUrl: String) {
@@ -413,6 +447,7 @@ class TavernGeckoViewHost(
                 hideInitialPagePaintCover(reason = "page_stop")
                 bridgeInstaller.installAfterPageFinished(buildBridgeTarget())
                 setBrowserZoomPercent(hostConfigStore.browserZoomPercent)
+                setBrowserPageZoomPercent(hostConfigStore.browserPageZoomPercent)
                 recordHostDiagnostic(
                     category = "geckoview",
                     body = "event=page_stop success=$success ${currentGeckoDiagnosticState()}"

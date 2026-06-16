@@ -197,7 +197,11 @@ class TavernWebViewHost(
     }
 
     override fun currentBrowserZoomPercent(): Int {
-        return BrowserZoomOptions.sanitize(webView.settings.textZoom)
+        return BrowserZoomOptions.sanitize(hostConfigStore.browserZoomPercent)
+    }
+
+    override fun currentBrowserPageZoomPercent(): Int {
+        return BrowserZoomOptions.sanitizeViewportDensity(hostConfigStore.browserPageZoomPercent)
     }
 
     override fun configure() {
@@ -205,6 +209,7 @@ class TavernWebViewHost(
         homeWebViewRefreshController.configure(webViewBackgroundColor)
         homeWebViewController.configure()
         setBrowserZoomPercent(hostConfigStore.browserZoomPercent)
+        setBrowserPageZoomPercent(hostConfigStore.browserPageZoomPercent)
         restoreHostSystemBarAppearance()
         installDebugRendererCrashReceiverIfDebuggable()
         recordHostDiagnostic(
@@ -578,6 +583,7 @@ class TavernWebViewHost(
         updateRefreshLayoutEnabled()
         CookieManager.getInstance().flush()
         setBrowserZoomPercent(hostConfigStore.browserZoomPercent)
+        setBrowserPageZoomPercent(hostConfigStore.browserPageZoomPercent)
         bridgeInstaller.installAfterPageFinished(buildBridgeTarget(sourceWebView))
         installSystemBarThemeSyncScript(sourceWebView)
         installWebPerformanceDiagnosticScript(sourceWebView)
@@ -1333,14 +1339,47 @@ class TavernWebViewHost(
         recordCriticalHostDiagnostic(
             category = "webview",
             body = buildString {
-                append("event=browser_zoom_applied")
+                append("event=browser_text_zoom_applied")
                 append(" engine=${browserEngine.name}")
                 append(" percent=$sanitizedPercent")
-                append(" mode=textZoom")
                 append(" webViewTextZoom=${webView.settings.textZoom}")
             }
         )
         return webView.settings.textZoom == sanitizedPercent
+    }
+
+    override fun setBrowserPageZoomPercent(percent: Int): Boolean {
+        val sanitizedPercent = BrowserZoomOptions.sanitizeViewportDensity(percent)
+        applyWebViewViewportDensityPercent(sanitizedPercent, reason = "set_browser_viewport_density")
+        recordCriticalHostDiagnostic(
+            category = "webview",
+            body = buildString {
+                append("event=browser_viewport_density_applied")
+                append(" engine=${browserEngine.name}")
+                append(" percent=$sanitizedPercent")
+                append(" mode=html_viewport")
+            }
+        )
+        return true
+    }
+
+    private fun applyWebViewViewportDensityPercent(percent: Int, reason: String) {
+        webView.evaluateJavascript(
+            buildApplyWebViewViewportDensityScript(
+                percent = BrowserZoomOptions.sanitizeViewportDensity(percent),
+                baseViewportWidthCssPx = resolveWebViewBaseViewportWidthCssPx(),
+                reason = reason
+            ),
+            null
+        )
+    }
+
+    private fun resolveWebViewBaseViewportWidthCssPx(): Int {
+        val density = activity.resources.displayMetrics.density.takeIf { value ->
+            value.isFinite() && value > 0f
+        } ?: 1f
+        val widthPx = webView.width.takeIf { value -> value > 0 } ?: activity.resources.displayMetrics.widthPixels
+        return (widthPx / density).toInt().coerceAtLeast(240)
     }
 
     private fun installWebDocumentStartScriptController() {
@@ -1746,4 +1785,124 @@ internal fun isTavernUrlForBaseUrl(url: String, baseUrl: String): Boolean {
 
 internal fun buildInitialTavernUrl(baseUrl: String): String {
     return "${baseUrl.trim().trimEnd('/')}/"
+}
+
+internal fun buildApplyWebViewViewportDensityScript(
+    percent: Int,
+    baseViewportWidthCssPx: Int,
+    reason: String
+): String {
+    val sanitizedPercent = BrowserZoomOptions.sanitizeViewportDensity(percent)
+    val viewportWidth = resolveViewportDensityWidthCssPx(
+        percent = sanitizedPercent,
+        baseViewportWidthCssPx = baseViewportWidthCssPx
+    )
+    val initialScale = resolveViewportDensityInitialScale(sanitizedPercent)
+    val reasonJson = quoteJavascriptString(reason)
+    return """
+        (function() {
+            const head = document.head || document.getElementsByTagName('head')[0];
+            if (!head) {
+                return 'missing_head';
+            }
+            const percent = $sanitizedPercent;
+            const viewportWidth = $viewportWidth;
+            const initialScale = $initialScale;
+            const root = document.documentElement;
+            const body = document.body;
+            if (body) {
+                // 清理旧版错误实现留下的视觉缩放样式；界面密度只通过 layout viewport 生效。
+                body.style.transform = '';
+                body.style.transformOrigin = '';
+                body.style.width = '';
+                body.style.minWidth = '';
+                body.style.minHeight = '';
+                body.style.overflowX = '';
+                body.style.overflowY = '';
+            }
+            let viewport = document.querySelector('meta[name="viewport"]');
+            if (!viewport) {
+                viewport = document.createElement('meta');
+                viewport.setAttribute('name', 'viewport');
+                head.appendChild(viewport);
+            }
+            if (viewport.dataset.sillydroidOriginalViewport === undefined) {
+                viewport.dataset.sillydroidOriginalViewport = viewport.getAttribute('content') || '';
+            }
+            const originalViewport = viewport.dataset.sillydroidOriginalViewport || '';
+            if (percent === 100) {
+                if (originalViewport) {
+                    viewport.setAttribute('content', originalViewport);
+                } else {
+                    viewport.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
+                }
+                delete viewport.dataset.sillydroidViewportDensityPercent;
+                delete viewport.dataset.sillydroidViewportDensityReason;
+                delete viewport.dataset.sillydroidViewportDensityWidth;
+                delete viewport.dataset.sillydroidHtmlPageZoomPercent;
+                delete viewport.dataset.sillydroidHtmlPageZoomReason;
+                delete viewport.dataset.sillydroidHtmlPageZoomWidth;
+                if (root) {
+                    delete root.dataset.sillydroidViewportDensityPercent;
+                    delete root.dataset.sillydroidViewportDensityReason;
+                    delete root.dataset.sillydroidHtmlPageZoomPercent;
+                    delete root.dataset.sillydroidHtmlPageZoomReason;
+                }
+                return 'viewport_density_reset';
+            }
+            // 界面密度语义：降低有效密度时加宽 layout viewport，并用同等 initial-scale
+            // 把更宽的 CSS 布局压回屏幕内，因此同屏内容更多；这不是 WebView page zoom。
+            viewport.setAttribute(
+                'content',
+                'width=' + viewportWidth +
+                    ', initial-scale=' + initialScale +
+                    ', maximum-scale=1' +
+                    ', viewport-fit=cover'
+            );
+            viewport.dataset.sillydroidViewportDensityPercent = String(percent);
+            viewport.dataset.sillydroidViewportDensityReason = $reasonJson;
+            viewport.dataset.sillydroidViewportDensityWidth = String(viewportWidth);
+            if (root) {
+                root.dataset.sillydroidViewportDensityPercent = String(percent);
+                root.dataset.sillydroidViewportDensityReason = $reasonJson;
+            }
+            return 'viewport_density_applied:' + percent + ':' + viewportWidth;
+        })();
+    """.trimIndent()
+}
+
+internal fun resolveViewportDensityWidthCssPx(percent: Int, baseViewportWidthCssPx: Int): Int {
+    val sanitizedPercent = BrowserZoomOptions.sanitizeViewportDensity(percent)
+    val baseWidth = baseViewportWidthCssPx.coerceAtLeast(240)
+    if (sanitizedPercent == BrowserZoomOptions.DEFAULT_PERCENT) {
+        return baseWidth
+    }
+    return (baseWidth * BrowserZoomOptions.DEFAULT_PERCENT.toFloat() / sanitizedPercent).toInt()
+        .coerceAtLeast(240)
+}
+
+internal fun resolveViewportDensityInitialScale(percent: Int): String {
+    val factor = BrowserZoomOptions.toViewportDensityFactor(percent)
+    return if (factor == 1f) {
+        "1"
+    } else {
+        "%.4f".format(java.util.Locale.US, factor).trimEnd('0').trimEnd('.')
+    }
+}
+
+private fun quoteJavascriptString(value: String): String {
+    return buildString {
+        append('"')
+        value.forEach { char ->
+            when (char) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> append(char)
+            }
+        }
+        append('"')
+    }
 }

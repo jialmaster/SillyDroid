@@ -94,6 +94,118 @@
     sendNative('recordWebPerformanceDiagnostic', String(payload || '')).catch(function() {});
   }
 
+  function applyViewportDensity(percent, baseViewportWidthCssPx, reason) {
+    const sanitizedPercent = Math.max(50, Math.min(100, Math.round(Number(percent || 100) / 5) * 5));
+    const baseWidth = Math.max(240, Math.round(Number(baseViewportWidthCssPx || window.innerWidth || 360)));
+    const densityFactor = sanitizedPercent / 100;
+    const initialScale = densityFactor === 1 ? '1' : String(Number(densityFactor.toFixed(4)));
+    const viewportWidth = Math.max(240, Math.round(baseWidth / densityFactor));
+    const root = document.documentElement;
+    const body = document.body;
+    if (body) {
+      body.style.transform = '';
+      body.style.transformOrigin = '';
+      body.style.width = '';
+      body.style.minWidth = '';
+      body.style.minHeight = '';
+      body.style.overflowX = '';
+      body.style.overflowY = '';
+    }
+    const head = document.head || document.getElementsByTagName('head')[0];
+    if (!head) {
+      window.setTimeout(function() {
+        applyViewportDensity(sanitizedPercent, baseWidth, reason);
+      }, 0);
+      return false;
+    }
+    let viewport = document.querySelector('meta[name="viewport"]');
+    if (!viewport) {
+      viewport = document.createElement('meta');
+      viewport.setAttribute('name', 'viewport');
+      head.appendChild(viewport);
+    }
+    if (viewport.dataset.sillydroidOriginalViewport === undefined) {
+      viewport.dataset.sillydroidOriginalViewport = viewport.getAttribute('content') || '';
+    }
+    const originalViewport = viewport.dataset.sillydroidOriginalViewport || '';
+    if (sanitizedPercent === 100) {
+      viewport.setAttribute('content', originalViewport || 'width=device-width, initial-scale=1, viewport-fit=cover');
+      delete viewport.dataset.sillydroidViewportDensityPercent;
+      delete viewport.dataset.sillydroidViewportDensityReason;
+      delete viewport.dataset.sillydroidViewportDensityWidth;
+      delete viewport.dataset.sillydroidHtmlPageZoomPercent;
+      delete viewport.dataset.sillydroidHtmlPageZoomReason;
+      delete viewport.dataset.sillydroidHtmlPageZoomWidth;
+      if (root) {
+        delete root.dataset.sillydroidViewportDensityPercent;
+        delete root.dataset.sillydroidViewportDensityReason;
+        delete root.dataset.sillydroidHtmlPageZoomPercent;
+        delete root.dataset.sillydroidHtmlPageZoomReason;
+      }
+      recordBridgeDiagnostic('event=gecko_viewport_density_reset reason=' + String(reason || 'host'));
+      return true;
+    }
+    // 界面密度只做 50%-100%：加宽 layout viewport 并用同等 initial-scale 压回屏幕内，
+    // 让同屏 CSS 内容更多。这不是 Gecko tabs/page zoom，也不是 transform 位图缩放。
+    viewport.setAttribute(
+      'content',
+      'width=' + viewportWidth + ', initial-scale=' + initialScale + ', maximum-scale=1, viewport-fit=cover'
+    );
+    viewport.dataset.sillydroidViewportDensityPercent = String(sanitizedPercent);
+    viewport.dataset.sillydroidViewportDensityReason = String(reason || 'host');
+    viewport.dataset.sillydroidViewportDensityWidth = String(viewportWidth);
+    if (root) {
+      root.dataset.sillydroidViewportDensityPercent = String(sanitizedPercent);
+      root.dataset.sillydroidViewportDensityReason = String(reason || 'host');
+    }
+    recordBridgeDiagnostic(
+      'event=gecko_viewport_density_applied percent=' + sanitizedPercent +
+        ' baseViewportWidthCssPx=' + baseWidth +
+        ' viewportWidth=' + viewportWidth +
+        ' reason=' + String(reason || 'host')
+    );
+    return true;
+  }
+
+  function installViewportDensityPort() {
+    let port = null;
+    function connect() {
+      try {
+        port = browser.runtime.connectNative(nativeApp);
+        port.onMessage.addListener(function(message) {
+          if (!message || message.action !== 'setViewportDensity') {
+            return;
+          }
+          const applied = applyViewportDensity(
+            message.percent,
+            message.baseViewportWidthCssPx,
+            message.reason
+          );
+          try {
+            port.postMessage({
+              action: 'viewportDensityApplied',
+              applied,
+              percent: message.percent,
+              baseViewportWidthCssPx: message.baseViewportWidthCssPx
+            });
+          } catch (_) {}
+        });
+        port.onDisconnect.addListener(function() {
+          port = null;
+          window.setTimeout(connect, 1000);
+        });
+        recordBridgeDiagnostic('event=gecko_viewport_density_port_opened');
+      } catch (error) {
+        recordBridgeDiagnostic(
+          'event=gecko_viewport_density_port_failed reason=' +
+            String(error && error.message || error || 'unknown').replace(/\s+/g, '_').slice(0, 180)
+        );
+        window.setTimeout(connect, 1000);
+      }
+    }
+    connect();
+  }
+
   function injectPageScript() {
     const parent = document.documentElement || document.head || document.body;
     if (!parent) {
@@ -1523,5 +1635,6 @@
     });
   }
 
+  installViewportDensityPort();
   injectPageScript();
 })();

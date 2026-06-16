@@ -722,6 +722,11 @@ class BootstrapSettingsFormController(
 
     private fun ensureViewVisible(targetView: View) {
         scrollView.post {
+            // 自动滚动是延迟执行的；表单重建或切页后旧控件可能已经脱离当前 ScrollView，必须跳过避免系统抛出 descendant 校验异常。
+            if (!targetView.isAttachedToWindow || !isDescendantOfScrollView(targetView)) {
+                return@post
+            }
+
             val targetRect = Rect()
             targetView.getDrawingRect(targetRect)
             scrollView.offsetDescendantRectToMyCoords(targetView, targetRect)
@@ -747,6 +752,17 @@ class BootstrapSettingsFormController(
                 scrollView.smoothScrollTo(0, desiredScrollY)
             }
         }
+    }
+
+    private fun isDescendantOfScrollView(view: View): Boolean {
+        var current: View? = view
+        while (current != null) {
+            if (current === scrollView) {
+                return true
+            }
+            current = current.parent as? View
+        }
+        return false
     }
 
     private fun findAvailableRandomPort(excludedPort: Int?): Int {

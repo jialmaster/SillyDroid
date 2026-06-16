@@ -151,6 +151,7 @@ class MainActivity : AppCompatActivity() {
             openCurrentPageInBrowser = { browserHost.openCurrentPageInExternalBrowser() },
             reloadTavernWebView = { browserHost.reloadTavernWebView(source = "floating_logs_button") },
             applyBrowserZoomPercent = ::applyBrowserZoomPercentFromFloatingLogs,
+            applyBrowserPageZoomPercent = ::applyBrowserPageZoomPercentFromFloatingLogs,
             feedbackImageLauncher = feedbackImageLauncher,
             feedbackUploadConfig = {
                 HostLogBundleUploadRequestConfig(
@@ -810,9 +811,11 @@ class MainActivity : AppCompatActivity() {
             .put("browserOutdated", browserRuntimeInfo?.outdated == true)
             .put("browserUserAgent", browserRuntimeInfo?.userAgent.orEmpty())
             .put("browserZoomPercent", hostConfigStore.browserZoomPercent)
+            .put("browserPageZoomPercent", hostConfigStore.browserPageZoomPercent)
             // 该方法会被 JS Bridge 从 WebView JavaBridge 线程调用；版本信息只能读取宿主配置快照，
             // 不能反向触碰 WebView/GeckoView UI 对象，否则部分 WebView 会抛出跨线程访问异常。
             .put("browserAppliedZoomPercent", hostConfigStore.browserZoomPercent)
+            .put("browserAppliedPageZoomPercent", hostConfigStore.browserPageZoomPercent)
             .put("hostDisplayMode", hostConfigStore.hostDisplayMode.name)
             .put("launchWebViewOnReady", hostConfigStore.launchWebViewOnReady)
             .put("floatingLogBubbleEnabled", hostConfigStore.floatingLogBubbleEnabled)
@@ -828,11 +831,24 @@ class MainActivity : AppCompatActivity() {
         if (!::browserHost.isInitialized || !shouldUseWebViewSurface()) {
             recordDefaultHostDiagnostic(
                 category = "browser",
-                body = "event=browser_zoom_apply_skipped reason=browser_unavailable percent=$sanitizedPercent"
+                body = "event=browser_text_zoom_apply_skipped reason=browser_unavailable percent=$sanitizedPercent"
             )
             return false
         }
         return browserHost.setBrowserZoomPercent(sanitizedPercent)
+    }
+
+    private fun applyBrowserPageZoomPercentFromFloatingLogs(percent: Int): Boolean {
+        val sanitizedPercent = BrowserZoomOptions.sanitizeViewportDensity(percent)
+        hostConfigStore.browserPageZoomPercent = sanitizedPercent
+        if (!::browserHost.isInitialized || !shouldUseWebViewSurface()) {
+            recordDefaultHostDiagnostic(
+                category = "browser",
+                body = "event=browser_viewport_density_apply_skipped reason=browser_unavailable percent=$sanitizedPercent"
+            )
+            return false
+        }
+        return browserHost.setBrowserPageZoomPercent(sanitizedPercent)
     }
 
     private fun currentPackageInfo() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

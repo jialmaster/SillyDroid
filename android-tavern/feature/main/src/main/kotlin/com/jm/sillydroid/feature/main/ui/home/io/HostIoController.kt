@@ -198,11 +198,11 @@ class HostIoController(
         try {
             fileChooserLauncher.launch(launchRequest.intent)
         } catch (error: ActivityNotFoundException) {
-            failPendingFileChooserLaunch(source = source, error = error, callback = callback)
+            launchFallbackFileChooser(source = source, request = request, launchRequest = launchRequest, error = error, callback = callback)
         } catch (error: IllegalStateException) {
-            failPendingFileChooserLaunch(source = source, error = error, callback = callback)
+            launchFallbackFileChooser(source = source, request = request, launchRequest = launchRequest, error = error, callback = callback)
         } catch (error: SecurityException) {
-            failPendingFileChooserLaunch(source = source, error = error, callback = callback)
+            launchFallbackFileChooser(source = source, request = request, launchRequest = launchRequest, error = error, callback = callback)
         }
     }
 
@@ -232,6 +232,37 @@ class HostIoController(
         )
         Toast.makeText(activity, R.string.file_chooser_open_failed, Toast.LENGTH_LONG).show()
         callback.invoke(null)
+    }
+
+    private fun launchFallbackFileChooser(
+        source: String,
+        request: BrowserFileChooserRequest,
+        launchRequest: FileChooserLaunchRequest,
+        error: Exception,
+        callback: (Array<Uri>?) -> Unit
+    ) {
+        recordFileChooserDiagnostic(
+            "event=file_chooser_primary_launch_failed source=$source error=${error.javaClass.simpleName} " +
+                "message=${normalizeDiagnosticValue(error.message)} fallbackAction=${Intent.ACTION_GET_CONTENT}"
+        )
+        val fallbackIntent = BrowserFileChooserIntentFallback.buildGetContentFallback(
+            sourceIntent = launchRequest.intent,
+            allowMultiple = request.allowMultiple
+        )
+        recordFileChooserDiagnostic(
+            "event=file_chooser_fallback_launch_requested source=$source action=${normalizeDiagnosticValue(fallbackIntent.action)} " +
+                "type=${normalizeDiagnosticValue(fallbackIntent.type)} allowMultiple=${request.allowMultiple} " +
+                "selectionFilter=${launchRequest.selectionFilter != null} acceptTypes=${request.acceptTypes.joinToString(separator = ",").ifBlank { "-" }}"
+        )
+        try {
+            fileChooserLauncher.launch(fallbackIntent)
+        } catch (fallbackError: ActivityNotFoundException) {
+            failPendingFileChooserLaunch(source = source, error = fallbackError, callback = callback)
+        } catch (fallbackError: IllegalStateException) {
+            failPendingFileChooserLaunch(source = source, error = fallbackError, callback = callback)
+        } catch (fallbackError: SecurityException) {
+            failPendingFileChooserLaunch(source = source, error = fallbackError, callback = callback)
+        }
     }
 
     @Suppress("DEPRECATION")

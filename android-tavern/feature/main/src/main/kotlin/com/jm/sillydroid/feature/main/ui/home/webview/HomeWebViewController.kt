@@ -75,6 +75,11 @@ class HomeWebViewController(
         val webView = webViewProvider()
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
+        webView.settings.useWideViewPort = true
+        webView.settings.loadWithOverviewMode = false
+        webView.settings.setSupportZoom(true)
+        webView.settings.builtInZoomControls = true
+        webView.settings.displayZoomControls = false
         webView.settings.allowFileAccess = false
         webView.settings.allowContentAccess = true
         webView.settings.setSupportMultipleWindows(true)
