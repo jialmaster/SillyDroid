@@ -4,7 +4,7 @@ set -euo pipefail
 # Stage Contract: 4/4 APK Assembly
 # Responsibilities:
 # - Consume stage-1 runtime image, stage-2 dependency packs, and stage-3 server source.
-# - Copy reusable runtime/server archives into the Android project, inject host assets, and assemble the APK.
+# - Copy reusable runtime/dependency archives, inject host assets, and assemble the APK.
 # Must not:
 # - Implicitly rebuild or refresh stage-1/stage-2/stage-3 prerequisites.
 # - Move stage-3 responsibilities back into this script's callers or into earlier stages.
@@ -53,9 +53,10 @@ usage() {
 Usage: build-tavern-android-apk.sh [--runtime-image <path>] [--server-source <path> | --tag <sillytavern-tag>] [--runtime-rid linux-arm64] [--build-type debug|release] [--dependency-packs <comma-separated>]
 
 说明：
-- runtime image / dependency packs 只负责 Termux rootfs、环境依赖、环境修复脚本；server source 只负责指定上游 tag 的 Tavern 源码与 npm 运行依赖。
+- runtime image / dependency packs 只负责 Termux rootfs、环境依赖、环境修复脚本；server source 负责指定上游 tag 的源码与 npm 运行依赖。
+- APK build 阶段直接消费 stage 3 server source，不在 stage 4 重新安装 npm 依赖。
 - Android Host 扩展与默认扩展列表在 APK build 阶段分别写入独立 assets 目录，不再混入 server source。
-- 这是纯 stage 4 脚本，只消费现有 runtime image、server source 与 dependency packs，然后把它们原样写入 android-tavern 工程。
+- 这是纯 stage 4 脚本，只消费现有 runtime image、server source 与 dependency packs，不会隐式触发上一阶段构建。
 - 若不传 --runtime-image，默认读取 artifacts/releases/rootfs/<rid>/tavern-rootfs-<rid>.zip；缺失时会直接报错。
 - 若不传 --server-source，则默认读取 artifacts/releases/server-source/<rid>/<tag>/server-source.zip。
 - build.includeDependencyPacks 若显式配置为空数组，则跳过 dependency packs，直接依赖 rootfs 提供运行时。

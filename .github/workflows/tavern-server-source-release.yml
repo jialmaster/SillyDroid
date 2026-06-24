@@ -1,0 +1,242 @@
+name: tavern-server-source-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tavern_tags:
+        description: 要发布的上游 SillyTavern tags，逗号或空白分隔；默认发布 1.13-1.18 全部 release tag
+        required: false
+        default: "1.13.0 1.13.1 1.13.2 1.13.3 1.13.4 1.13.5 1.14.0 1.15.0 1.16.0 1.17.0 1.18.0"
+        type: string
+      force_rebuild:
+        description: 已存在同 tag server source release 时是否覆盖重建
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tavern-server-source-release
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Resolve server source tag matrix
+        id: plan
+        env:
+          TAVERN_TAGS: ${{ inputs.tavern_tags }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          import re
+
+          raw = os.environ.get("TAVERN_TAGS", "")
+          tags = []
+          seen = set()
+          for item in re.split(r"[\s,]+", raw.strip()):
+              tag = item.strip()
+              if not tag or tag in seen:
+                  continue
+              if not re.fullmatch(r"\d+\.\d+(?:\.\d+)?(?:[-.][0-9A-Za-z]+)?", tag):
+                  raise SystemExit(f"unsupported SillyTavern tag: {tag}")
+              seen.add(tag)
+              tags.append(tag)
+
+          if not tags:
+              raise SystemExit("missing SillyTavern tags")
+
+          print("matrix=" + json.dumps({"tavern_tag": tags}, ensure_ascii=False))
+          PY
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout server source packager
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts
+            sillydroid-build-config.json
+
+      - name: Resolve release names
+        id: names
+        env:
+          TAVERN_TAG: ${{ matrix.tavern_tag }}
+        run: |
+          set -euo pipefail
+
+          safe_tag="$(printf '%s' "$TAVERN_TAG" | sed -E 's#[^A-Za-z0-9._-]+#-#g')"
+          release_tag="tavern-server-source-linux-arm64-$safe_tag"
+          release_dir="artifacts/releases/server-source/linux-arm64/$TAVERN_TAG"
+
+          {
+            printf 'safe_tag=%s\n' "$safe_tag"
+            printf 'release_tag=%s\n' "$release_tag"
+            printf 'release_dir=%s\n' "$release_dir"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore server source packaging caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/sillydroid-android-toolchain
+            ~/.cache/sillydroid-tavern-android-bootstrap
+          key: tavern-server-source-${{ runner.os }}-${{ matrix.tavern_tag }}-${{ hashFiles('scripts/android-build-common.sh', 'scripts/sync-tavern-android-bootstrap.sh') }}
+          restore-keys: |
+            tavern-server-source-${{ runner.os }}-${{ matrix.tavern_tag }}-
+            tavern-server-source-${{ runner.os }}-
+
+      - name: Resolve existing server source release
+        id: existing
+        run: |
+          set -euo pipefail
+
+          source='built'
+          if [ '${{ inputs.force_rebuild }}' != 'true' ] && gh release view '${{ steps.names.outputs.release_tag }}' --repo '${{ github.repository }}' > /dev/null 2>&1; then
+            check_dir="$RUNNER_TEMP/server-source-check/${{ matrix.tavern_tag }}"
+            rm -rf "$check_dir"
+            mkdir -p "$check_dir"
+            gh release download '${{ steps.names.outputs.release_tag }}' \
+              --repo '${{ github.repository }}' \
+              --dir "$check_dir" \
+              --pattern 'server-source.zip' \
+              --pattern 'server-source-manifest.json' \
+              --clobber || true
+
+            if [ -f "$check_dir/server-source.zip" ] && [ -f "$check_dir/server-source-manifest.json" ] && \
+              python3 - "$check_dir/server-source.zip" "$check_dir/server-source-manifest.json" '${{ matrix.tavern_tag }}' <<'PY'
+          import json
+          import pathlib
+          import sys
+          import zipfile
+
+          archive_path = pathlib.Path(sys.argv[1])
+          manifest_path = pathlib.Path(sys.argv[2])
+          expected_tag = sys.argv[3]
+          payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+          if payload.get("tag") != expected_tag:
+              raise SystemExit(1)
+          if payload.get("includesNodeModules") is not True:
+              raise SystemExit(1)
+          if payload.get("installedRuntimeDependencies") is not True:
+              raise SystemExit(1)
+          with zipfile.ZipFile(archive_path) as archive:
+              if not any("/node_modules/" in f"/{name}" for name in archive.namelist()):
+                  raise SystemExit(1)
+          PY
+            then
+              source='release'
+            else
+              echo 'Existing server source release is missing node_modules runtime dependencies; rebuilding it.'
+            fi
+          fi
+
+          printf 'source=%s\n' "$source" >> "$GITHUB_OUTPUT"
+
+      - name: Build immutable server source zip
+        if: steps.existing.outputs.source == 'built'
+        run: |
+          set -euo pipefail
+
+          bash ./scripts/sync-tavern-android-bootstrap.sh \
+            --runtime-rid linux-arm64 \
+            --tag '${{ matrix.tavern_tag }}' \
+            --target-root "$GITHUB_WORKSPACE/${{ steps.names.outputs.release_dir }}"
+
+      - name: Verify server source zip runtime dependencies
+        if: steps.existing.outputs.source == 'built'
+        run: |
+          set -euo pipefail
+
+          server_dir="$GITHUB_WORKSPACE/${{ steps.names.outputs.release_dir }}"
+          test -f "$server_dir/server-source.zip"
+          test -f "$server_dir/server-source-manifest.json"
+
+          if ! "$JAVA_HOME/bin/jar" --list --file "$server_dir/server-source.zip" | grep -E '(^|/)node_modules/' >/dev/null; then
+            echo 'server-source.zip must include node_modules runtime dependencies.' >&2
+            exit 1
+          fi
+
+          python3 - "$server_dir/server-source-manifest.json" '${{ matrix.tavern_tag }}' <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          manifest_path = pathlib.Path(sys.argv[1])
+          expected_tag = sys.argv[2]
+          payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+          if payload.get("tag") != expected_tag:
+              raise SystemExit(f"manifest tag mismatch: {payload.get('tag')} != {expected_tag}")
+          if payload.get("includesNodeModules") is not True:
+              raise SystemExit("manifest includesNodeModules must be true")
+          if payload.get("installedRuntimeDependencies") is not True:
+              raise SystemExit("manifest installedRuntimeDependencies must be true")
+          if payload.get("archiveFile") != "server-source.zip":
+              raise SystemExit("manifest archiveFile must be server-source.zip")
+          if not payload.get("archiveSha256"):
+              raise SystemExit("manifest archiveSha256 is required")
+          PY
+
+      - name: Publish server source release
+        if: steps.existing.outputs.source == 'built'
+        run: |
+          set -euo pipefail
+
+          server_dir="$GITHUB_WORKSPACE/${{ steps.names.outputs.release_dir }}"
+          notes_file="$(mktemp)"
+
+          {
+            echo '## Tavern server source'
+            echo
+            echo '- Tavern tag: ${{ matrix.tavern_tag }}'
+            echo '- Runtime RID: linux-arm64'
+            echo '- Contents: SillyTavern source with npm runtime dependencies'
+            echo '- Source commit: ${{ github.sha }}'
+          } > "$notes_file"
+
+          if ! gh release view '${{ steps.names.outputs.release_tag }}' --repo '${{ github.repository }}' > /dev/null 2>&1; then
+            gh release create '${{ steps.names.outputs.release_tag }}' \
+              --repo '${{ github.repository }}' \
+              --target '${{ github.sha }}' \
+              --title 'Tavern server source ${{ matrix.tavern_tag }} linux-arm64' \
+              --notes-file "$notes_file"
+          fi
+
+          gh release edit '${{ steps.names.outputs.release_tag }}' \
+            --repo '${{ github.repository }}' \
+            --title 'Tavern server source ${{ matrix.tavern_tag }} linux-arm64' \
+            --notes-file "$notes_file" > /dev/null
+
+          gh release upload '${{ steps.names.outputs.release_tag }}' \
+            "$server_dir/server-source.zip" \
+            "$server_dir/server-source-manifest.json" \
+            --repo '${{ github.repository }}' \
+            --clobber
+
+      - name: Append summary
+        run: |
+          {
+            echo '### Server source release'
+            echo
+            echo '- Tavern tag: ${{ matrix.tavern_tag }}'
+            echo '- Release tag: ${{ steps.names.outputs.release_tag }}'
+            echo '- Source: ${{ steps.existing.outputs.source }}'
+          } >> "$GITHUB_STEP_SUMMARY"

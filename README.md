@@ -8,7 +8,7 @@
 
 这个仓库维护 SillyDroid Android 宿主、离线运行时打包链，以及基于指定 SillyTavern tag 的 APK 构建与发布流程。
 
-上游 SillyTavern 源码不会长期作为主工程保存在仓库里；构建时会同步指定 tag，先生成 stage 3 的 server source，再由 stage 4 把 server source、dependency packs、宿主脚本和 patch assets 分别写入 APK assets。Stage 3 只受上游 Tavern tag 控制，不承载宿主启动脚本、runtime patch 或 Android 侧启动策略。
+上游 SillyTavern 源码不会长期作为主工程保存在仓库里；构建时会同步指定 tag，先生成 stage 3 的不可变 server source（源码与 npm 运行依赖），再由 stage 4 把该包、dependency packs、宿主脚本和 patch assets 分别写入 APK assets。Stage 3 只受上游 Tavern tag 与上游 npm lockfile 控制，不承载宿主启动脚本、runtime patch 或 Android 侧启动策略。
 
 README 保留常用说明；更细的构建语义、阶段边界和脚本职责，以 scripts 下对应脚本开头的 Contract 注释为准。
 
@@ -100,9 +100,9 @@ curl -fsSL https://raw.githubusercontent.com/jialmaster/SillyDroid/master/script
 6. `scripts/build-tavern-dependency-packs.sh`
    单独构建 `node`、`git` 等 dependency pack zip。
 7. `scripts/sync-tavern-android-bootstrap.sh`
-   下载指定 SillyTavern tag，生成 `server-source.zip`；只包含 Tavern 源码和由上游锁文件决定的 npm 运行依赖，不包含宿主启动脚本、runtime patch、dependency packs，也不直接产出 APK server assets。
+   下载指定 SillyTavern tag，安装 npm 运行依赖并生成 `server-source.zip`；不包含宿主启动脚本、runtime patch、dependency packs，也不直接产出 APK server assets。
 8. `scripts/build-tavern-android-apk.sh`
-   当前是阶段 4 脚本，只消费现有 runtime image、server source、dependency packs 组装 debug 或 release APK，不再作为推荐的一键总入口。
+   当前是阶段 4 脚本，只消费现有 runtime image、server source、dependency packs 组装 debug 或 release APK；不会重新安装 server source 的 npm 运行依赖。
 9. `scripts/android-build-common.sh`
    Android/WSL 构建公共环境脚本。
 

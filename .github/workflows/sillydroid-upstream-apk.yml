@@ -482,7 +482,32 @@ jobs:
             fi
 
             if [ -f "$server_path" ] && [ -f "$server_manifest_path" ]; then
-              source='release'
+              if python3 - "$server_path" "$server_manifest_path" '${{ needs.plan.outputs.tavern_tag }}' <<'PY'
+          import json
+          import pathlib
+          import sys
+          import zipfile
+
+          archive_path = pathlib.Path(sys.argv[1])
+          manifest_path = pathlib.Path(sys.argv[2])
+          expected_tag = sys.argv[3]
+          payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+          if payload.get("tag") != expected_tag:
+              raise SystemExit(1)
+          if payload.get("includesNodeModules") is not True:
+              raise SystemExit(1)
+          if payload.get("installedRuntimeDependencies") is not True:
+              raise SystemExit(1)
+          with zipfile.ZipFile(archive_path) as archive:
+              if not any("/node_modules/" in f"/{name}" for name in archive.namelist()):
+                  raise SystemExit(1)
+          PY
+              then
+                source='release'
+              else
+                echo 'Existing server source release is missing node_modules runtime dependencies; rebuilding it.'
+                rm -f "$server_path" "$server_manifest_path"
+              fi
             fi
           fi
 
@@ -505,6 +530,24 @@ jobs:
           server_dir="$GITHUB_WORKSPACE/${{ needs.plan.outputs.server_release_dir }}"
           test -f "$server_dir/${{ needs.plan.outputs.server_asset_name }}"
           test -f "$server_dir/${{ needs.plan.outputs.server_manifest_name }}"
+          if ! "$JAVA_HOME/bin/jar" --list --file "$server_dir/${{ needs.plan.outputs.server_asset_name }}" | grep -E '(^|/)node_modules/' >/dev/null; then
+            echo 'server-source.zip must include node_modules runtime dependencies for version switching.' >&2
+            exit 1
+          fi
+          python3 - "$server_dir/${{ needs.plan.outputs.server_manifest_name }}" '${{ needs.plan.outputs.tavern_tag }}' <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          expected_tag = sys.argv[2]
+          if payload.get("tag") != expected_tag:
+              raise SystemExit(f"manifest tag mismatch: {payload.get('tag')} != {expected_tag}")
+          if payload.get("includesNodeModules") is not True:
+              raise SystemExit("server-source-manifest.json must declare includesNodeModules=true")
+          if payload.get("installedRuntimeDependencies") is not True:
+              raise SystemExit("server-source-manifest.json must declare installedRuntimeDependencies=true")
+          PY
 
       - name: Publish server source prerequisite release
         if: steps.resolve.outputs.source == 'built'
