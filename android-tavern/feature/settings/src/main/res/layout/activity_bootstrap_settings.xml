@@ -929,129 +929,6 @@
             </LinearLayout>
 
             <LinearLayout
-                android:id="@+id/bootstrapSettingsExtensionsPanel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <com.google.android.material.card.MaterialCardView
-                    style="@style/Widget.SillyDroid.SettingsPanelCard"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingStart="@dimen/sillydroid_panel_padding"
-                        android:paddingTop="@dimen/sillydroid_panel_padding"
-                        android:paddingEnd="@dimen/sillydroid_panel_padding"
-                        android:paddingBottom="@dimen/sillydroid_panel_padding">
-
-                        <!-- 这一行保留 3 个 ImageButton 是为了 findViewById 仍然可以拿到引用；
-                             实际渲染时 BootstrapSettingsExtensionsCoordinator 会把这三个按钮重新挂到
-                             “全局扩展” 段落标题右侧，让上方不再独占一整行。 -->
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:visibility="gone">
-
-                            <ImageButton
-                                android:id="@+id/bootstrapSettingsExtensionsInstallButton"
-                                android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
-                                android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
-                                android:layout_marginEnd="@dimen/sillydroid_space_xs"
-                                android:background="?attr/selectableItemBackgroundBorderless"
-                                android:contentDescription="@string/bootstrap_settings_extensions_install"
-                                android:minWidth="0dp"
-                                android:minHeight="0dp"
-                                android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
-                                android:scaleType="centerInside"
-                                android:src="@drawable/ic_add"
-                                android:tint="?attr/colorPrimary" />
-
-                            <ImageButton
-                                android:id="@+id/bootstrapSettingsExtensionsBatchDeleteButton"
-                                android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
-                                android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
-                                android:layout_marginEnd="@dimen/sillydroid_space_xs"
-                                android:background="?attr/selectableItemBackgroundBorderless"
-                                android:contentDescription="@string/bootstrap_settings_extensions_action_delete_batch"
-                                android:minWidth="0dp"
-                                android:minHeight="0dp"
-                                android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
-                                android:scaleType="centerInside"
-                                android:src="@drawable/ic_delete"
-                                android:tint="?attr/colorError" />
-
-                            <ImageButton
-                                android:id="@+id/bootstrapSettingsExtensionsReloadButton"
-                                android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
-                                android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
-                                android:background="?attr/selectableItemBackgroundBorderless"
-                                android:contentDescription="@string/bootstrap_settings_extensions_reload"
-                                android:minWidth="0dp"
-                                android:minHeight="0dp"
-                                android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
-                                android:scaleType="centerInside"
-                                android:src="@drawable/ic_restore_defaults"
-                                android:tint="?attr/colorOnSurfaceVariant" />
-                        </LinearLayout>
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/sillydroid_space_xs"
-                            android:text="@string/bootstrap_settings_extensions_summary"
-                            android:textColor="?attr/colorOnSurfaceVariant"
-                            android:textSize="10sp" />
-
-                        <com.google.android.material.progressindicator.LinearProgressIndicator
-                            android:id="@+id/bootstrapSettingsExtensionsProgress"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/sillydroid_space_md"
-                            android:visibility="gone" />
-
-                        <TextView
-                            android:id="@+id/bootstrapSettingsExtensionsProgressLabel"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/sillydroid_field_vertical_spacing"
-                            android:textColor="?attr/colorOnSurfaceVariant"
-                            android:textSize="10sp"
-                            android:visibility="gone" />
-
-                        <TextView
-                            android:id="@+id/bootstrapSettingsExtensionsEmpty"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/sillydroid_space_md"
-                            android:background="@drawable/bg_bootstrap_settings_nested_surface_rounded"
-                            android:paddingStart="@dimen/sillydroid_panel_padding"
-                            android:paddingTop="@dimen/sillydroid_panel_padding"
-                            android:paddingEnd="@dimen/sillydroid_panel_padding"
-                            android:paddingBottom="@dimen/sillydroid_panel_padding"
-                            android:text="@string/bootstrap_settings_extensions_empty"
-                            android:textColor="?attr/colorOnSurfaceVariant"
-                            android:textSize="10sp"
-                            android:visibility="gone" />
-
-                        <LinearLayout
-                            android:id="@+id/bootstrapSettingsExtensionsListContainer"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/sillydroid_space_xl"
-                            android:orientation="vertical" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-            </LinearLayout>
-
-
-            <LinearLayout
                 android:id="@+id/bootstrapSettingsSettingsPanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -1285,6 +1162,161 @@
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
+    <LinearLayout
+        android:id="@+id/bootstrapSettingsExtensionsPanel"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/sillydroid_space_md"
+        android:paddingTop="@dimen/sillydroid_space_sm"
+        android:paddingEnd="@dimen/sillydroid_space_md"
+        android:paddingBottom="@dimen/sillydroid_space_lg"
+        android:visibility="gone">
+
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.SillyDroid.SettingsPanelCard"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:paddingStart="@dimen/sillydroid_panel_padding"
+                android:paddingTop="@dimen/sillydroid_panel_padding"
+                android:paddingEnd="@dimen/sillydroid_panel_padding"
+                android:paddingBottom="@dimen/sillydroid_panel_padding">
+
+                <!-- 这一行保留 3 个 ImageButton 是为了 findViewById 仍然可以拿到引用；
+                     实际渲染时 BootstrapSettingsExtensionsCoordinator 会把这三个按钮重新挂到
+                     当前子页的段落标题右侧，让顶部只保留子页签和进度。 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <ImageButton
+                        android:id="@+id/bootstrapSettingsExtensionsInstallButton"
+                        android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
+                        android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
+                        android:layout_marginEnd="@dimen/sillydroid_space_xs"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/bootstrap_settings_extensions_install"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
+                        android:scaleType="centerInside"
+                        android:src="@drawable/ic_add"
+                        android:tint="?attr/colorPrimary" />
+
+                    <ImageButton
+                        android:id="@+id/bootstrapSettingsExtensionsBatchDeleteButton"
+                        android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
+                        android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
+                        android:layout_marginEnd="@dimen/sillydroid_space_xs"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/bootstrap_settings_extensions_action_delete_batch"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
+                        android:scaleType="centerInside"
+                        android:src="@drawable/ic_delete"
+                        android:tint="?attr/colorError" />
+
+                    <ImageButton
+                        android:id="@+id/bootstrapSettingsExtensionsReloadButton"
+                        android:layout_width="@dimen/sillydroid_settings_dense_icon_button_size"
+                        android:layout_height="@dimen/sillydroid_settings_dense_icon_button_size"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/bootstrap_settings_extensions_reload"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:padding="@dimen/sillydroid_settings_dense_icon_button_padding"
+                        android:scaleType="centerInside"
+                        android:src="@drawable/ic_restore_defaults"
+                        android:tint="?attr/colorOnSurfaceVariant" />
+                </LinearLayout>
+
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/bootstrapSettingsExtensionsProgress"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/bootstrapSettingsExtensionsProgressLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/sillydroid_field_vertical_spacing"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="10sp"
+                    android:visibility="gone" />
+
+                <com.google.android.material.tabs.TabLayout
+                    android:id="@+id/bootstrapSettingsExtensionsPageTabs"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/sillydroid_tab_height"
+                    android:layout_marginTop="@dimen/sillydroid_space_sm"
+                    app:tabGravity="fill"
+                    app:tabIndicatorFullWidth="false"
+                    app:tabIndicatorHeight="3dp"
+                    app:tabInlineLabel="true"
+                    app:tabMode="fixed"
+                    app:tabPaddingBottom="0dp"
+                    app:tabPaddingEnd="0dp"
+                    app:tabPaddingStart="0dp"
+                    app:tabPaddingTop="0dp"
+                    app:tabTextAppearance="@style/TextAppearance.SillyDroid.SettingsTab" />
+
+                <!-- 子页签固定在上方，下面的内容区单独滚动，避免父设置页滚动把页签一起卷走。 -->
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/bootstrapSettingsExtensionsContentScrollView"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_marginTop="@dimen/sillydroid_space_md"
+                    android:layout_weight="1"
+                    android:clipToPadding="false"
+                    android:fadeScrollbars="true"
+                    android:fillViewport="true"
+                    android:scrollbarSize="@dimen/sillydroid_scrollbar_size"
+                    android:scrollbarStyle="insideOverlay"
+                    android:scrollbarThumbVertical="@drawable/bg_bootstrap_settings_scrollbar_thumb"
+                    android:scrollbarTrackVertical="@drawable/bg_bootstrap_settings_scrollbar_track"
+                    android:scrollbars="vertical">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/bootstrapSettingsExtensionsEmpty"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_bootstrap_settings_nested_surface_rounded"
+                            android:paddingStart="@dimen/sillydroid_panel_padding"
+                            android:paddingTop="@dimen/sillydroid_panel_padding"
+                            android:paddingEnd="@dimen/sillydroid_panel_padding"
+                            android:paddingBottom="@dimen/sillydroid_panel_padding"
+                            android:text="@string/bootstrap_settings_extensions_empty"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:textSize="10sp"
+                            android:visibility="gone" />
+
+                        <LinearLayout
+                            android:id="@+id/bootstrapSettingsExtensionsListContainer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" />
+                    </LinearLayout>
+                </androidx.core.widget.NestedScrollView>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/bootstrapSettingsLogsPanel"

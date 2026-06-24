@@ -243,7 +243,9 @@ android {
     defaultConfig {
         applicationId = "com.jm.sillydroid"
         minSdk = 29
-        targetSdk = 36
+        // targetSdk 保持 28 是为了兼容 SillyTavern 动态后端插件自带的原生可执行文件；
+        // Android 10+ 对 target 29+ 禁止从 App 私有可写目录执行这类运行时插件二进制。
+        targetSdk = 28
         versionCode = androidVersionCode
         versionName = androidVersionName
         buildConfigField("String", "SILLYDROID_HOST_VERSION", quoteBuildConfigString(androidHostVersion))

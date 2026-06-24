@@ -60,7 +60,8 @@ class DefaultExtensionsInstallerLauncher(
             showError = { message -> showErrorDialog(message) },
             showBanner = { message -> showShortToast(message) },
             showMessage = { message -> showLongToast(message) },
-            onTavernUiReloadRequired = onTavernUiReloadRequired
+            onTavernUiReloadRequired = onTavernUiReloadRequired,
+            onServiceRestartRequired = { /* 默认前端扩展安装只需要刷新 Tavern UI，不触发服务重启按钮。 */ }
         )
         coordinator.initialize()
         coordinator.promptDefaultRepositoriesSelection()

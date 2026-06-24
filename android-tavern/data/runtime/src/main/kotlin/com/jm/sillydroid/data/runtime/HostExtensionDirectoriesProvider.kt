@@ -13,6 +13,7 @@ class HostExtensionDirectoriesProvider(context: Context) : ExtensionDirectoriesP
         return ExtensionDirectories(
             globalExtensionsDir = File(paths.serverDataDir, "extensions"),
             userExtensionsDir = File(File(paths.serverDataDir, "data"), "default-user/extensions"),
+            serverPluginsDir = File(paths.serverDataDir, "plugins"),
             bundledExtensionsDir = File(paths.bootstrapRoot, "bundled-extensions"),
             defaultExtensionsConfigFile = File(paths.bootstrapRoot, "default-extensions/sillydroid-build-config.json")
         )

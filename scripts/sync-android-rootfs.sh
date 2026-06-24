@@ -534,7 +534,7 @@ sync_termux_host_runtime_jni_libs() {
         -name 'lib*.so*' \
         -delete
 
-    # targetSdk 36 不能从可写 files/usr 目录直接 exec ELF；这些入口由 APK nativeLibraryDir 承载。
+    # targetSdk 29+ 不能从可写 files/usr 目录直接 exec ELF；这些入口由 APK nativeLibraryDir 承载。
     copy_termux_host_executable "$source_root/bin/node" "$destination_root/libtermux-node.so" 'node'
     copy_termux_host_executable "$source_root/libexec/git-core/git" "$destination_root/libtermux-git.so" 'git'
     copy_termux_host_executable "$source_root/libexec/git-core/git-remote-http" "$destination_root/libtermux-git-remote-http.so" 'git-remote-http'

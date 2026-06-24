@@ -4,7 +4,9 @@
 // shim lets npm run those JS bins through the APK native Node entry instead.
 (function installNpmLifecycleAndroidShim() {
   const mainScript = process.argv[1] || '';
-  if (!mainScript.endsWith('/lib/node_modules/npm/bin/npm-cli.js')) {
+  const isNpmCliProcess = mainScript.endsWith('/lib/node_modules/npm/bin/npm-cli.js');
+  const isNpmLifecycleProcess = Boolean(process.env.npm_lifecycle_event);
+  if (!isNpmCliProcess && !isNpmLifecycleProcess) {
     return;
   }
 
@@ -16,6 +18,10 @@
   if (!nodeBin) {
     return;
   }
+  const shellBin = process.env.TERMUX_SH_BIN || process.env.npm_config_script_shell || process.env.SHELL || '/system/bin/sh';
+  const prefixDir = process.env.HOST_PREFIX_DIR || process.env.PREFIX || '';
+  const npmCli = prefixDir ? path.join(prefixDir, 'lib/node_modules/npm/bin/npm-cli.js') : '';
+  const npxCli = prefixDir ? path.join(prefixDir, 'lib/node_modules/npm/bin/npx-cli.js') : '';
 
   function commandName(command) {
     if (typeof command !== 'string' || command.length === 0) {
@@ -78,9 +84,6 @@
     if (typeof command !== 'string') {
       return command;
     }
-    if (!/\b(prebuild-install|node-gyp)\b/.test(command)) {
-      return command;
-    }
     const cwd = options && typeof options.cwd === 'string' ? options.cwd : process.cwd();
     const prebuildInstall = findNodeModulesBin(cwd, 'prebuild-install');
     const nodeGypMessage = 'echo "node-gyp is not supported in SillyDroid Android runtime" >&2; exit 127';
@@ -88,17 +91,43 @@
     const commandEnd = '(?=$|[\\s;&|()])';
     return command
       .replace(
+        new RegExp(`${commandBoundary}(npm)${commandEnd}`, 'g'),
+        (_match, prefix) => npmCli ? `${prefix}${shellQuote(nodeBin)} ${shellQuote(npmCli)}` : _match
+      )
+      .replace(
+        new RegExp(`${commandBoundary}(npx)${commandEnd}`, 'g'),
+        (_match, prefix) => npxCli ? `${prefix}${shellQuote(nodeBin)} ${shellQuote(npxCli)}` : _match
+      )
+      .replace(
         new RegExp(`${commandBoundary}((?:[^\\s'";&|()]+/node_modules/\\.bin/)?prebuild-install)${commandEnd}`, 'g'),
         (_match, prefix, token) => `${prefix}${shellQuote(nodeBin)} ${shellQuote(token.includes('/node_modules/.bin/') ? token : prebuildInstall)}`
       )
       .replace(
         new RegExp(`${commandBoundary}((?:[^\\s'";&|()]+/node_modules/\\.bin/)?node-gyp)${commandEnd}`, 'g'),
         (_match, prefix) => `${prefix}/system/bin/sh -c ${shellQuote(nodeGypMessage)}`
+      )
+      .replace(
+        new RegExp(`${commandBoundary}([A-Za-z0-9_.@-]+)${commandEnd}`, 'g'),
+        (match, prefix, token) => {
+          const binPath = findNodeModulesBin(cwd, token);
+          return isJavascriptBin(binPath) ? `${prefix}${shellQuote(nodeBin)} ${shellQuote(binPath)}` : match;
+        }
       );
   }
 
+  function isShellCommand(command) {
+    if (typeof command !== 'string' || command.length === 0) {
+      return false;
+    }
+    return command === 'sh'
+      || command === '/system/bin/sh'
+      || command === shellBin
+      || commandName(command) === 'sh'
+      || commandName(command) === 'libtermux-sh.so';
+  }
+
   function rewriteShellArgs(command, args, options) {
-    if ((command !== 'sh' && command !== '/system/bin/sh') || !Array.isArray(args)) {
+    if (!isShellCommand(command) || !Array.isArray(args)) {
       return args;
     }
     const cIndex = args.indexOf('-c');
@@ -121,6 +150,16 @@
     const nextArgs = args.slice();
     nextArgs[scriptIndex] = rewrittenCommand;
     return nextArgs;
+  }
+
+  function withAndroidShell(options) {
+    if (options && typeof options === 'object') {
+      if (options.shell) {
+        return options;
+      }
+      return { ...options, shell: shellBin };
+    }
+    return { shell: shellBin };
   }
 
   const originalSpawn = childProcess.spawn;
@@ -169,5 +208,21 @@
     }
     args = rewriteShellArgs(file, args, options);
     return originalExecFileSync.call(this, file, args, options);
+  };
+
+  const originalExec = childProcess.exec;
+  childProcess.exec = function patchedExec(command, options, callback) {
+    if (typeof options === 'function') {
+      callback = options;
+      options = undefined;
+    }
+    const nextCommand = rewriteShellCommand(command, options);
+    return originalExec.call(this, nextCommand, withAndroidShell(options), callback);
+  };
+
+  const originalExecSync = childProcess.execSync;
+  childProcess.execSync = function patchedExecSync(command, options) {
+    const nextCommand = rewriteShellCommand(command, options);
+    return originalExecSync.call(this, nextCommand, withAndroidShell(options));
   };
 })();

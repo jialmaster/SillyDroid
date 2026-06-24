@@ -20,8 +20,12 @@ class ExtensionCommandExecutorTest {
         executor.installServerPluginDependencies(failureMessage = { it })
 
         val command = runner.lastRequest.commandContent
-        assertTrue(command.contains("const args = [npmCli, 'install', '--omit=dev'];"))
-        assertTrue(command.contains("npm install --omit=dev"))
+        assertTrue(command.contains("const args = [npmCliPath(), 'install'];"))
+        assertTrue(command.contains("npm install in"))
+        assertTrue(command.contains("const shellBinForNpm = process.env.TERMUX_SH_BIN;"))
+        assertTrue(command.contains("npm_config_script_shell: shellBinForNpm"))
+        assertTrue(command.contains("NPM_CONFIG_SCRIPT_SHELL: shellBinForNpm"))
+        assertFalse(command.contains("'--omit=dev'"))
         assertFalse(command.contains("npm_config_optional"))
         assertFalse(command.contains("await import('node:sqlite')"))
         assertFalse(command.contains("'--omit=optional'"))

@@ -28,14 +28,19 @@ import com.jm.sillydroid.core.model.extensions.ExtensionInstallPreview
 import com.jm.sillydroid.core.model.extensions.ExtensionKind
 import com.jm.sillydroid.core.model.extensions.ExtensionRuntimeProgress
 import com.jm.sillydroid.core.model.extensions.ManagedExtension
+import com.jm.sillydroid.core.model.extensions.ManagedPlugin
+import com.jm.sillydroid.core.model.extensions.ManagedRepositoryUpdate
 import com.jm.sillydroid.core.model.extensions.NormalizedExtensionRepository
+import com.jm.sillydroid.core.model.extensions.PluginInstallPreview
 import com.jm.sillydroid.domain.extensions.ExtensionsRepository
 import com.jm.sillydroid.feature.settings.R
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.google.android.material.tabs.TabLayout
 import com.jm.sillydroid.core.common.DispatcherProvider
 import com.jm.sillydroid.feature.settings.ui.createSettingsEditText
 import com.jm.sillydroid.feature.settings.ui.createSettingsDenseIconButton
@@ -75,6 +80,7 @@ class ViewExtensionInstallProgressHost(
 class BootstrapSettingsExtensionsCoordinator(
     private val activity: AppCompatActivity,
     private val dispatchers: DispatcherProvider,
+    private val pageTabs: TabLayout? = null,
     private val listContainer: LinearLayout,
     private val emptyView: TextView,
     private val installButton: ImageButton,
@@ -86,11 +92,13 @@ class BootstrapSettingsExtensionsCoordinator(
     private val showError: (String) -> Unit,
     private val showBanner: (String) -> Unit,
     private val showMessage: (String) -> Unit,
-    private val onTavernUiReloadRequired: () -> Unit
+    private val onTavernUiReloadRequired: () -> Unit,
+    private val onServiceRestartRequired: () -> Unit
 ) : DefaultLifecycleObserver {
     constructor(
         activity: AppCompatActivity,
         dispatchers: DispatcherProvider,
+        pageTabs: TabLayout,
         listContainer: LinearLayout,
         emptyView: TextView,
         installButton: ImageButton,
@@ -103,10 +111,12 @@ class BootstrapSettingsExtensionsCoordinator(
         showError: (String) -> Unit,
         showBanner: (String) -> Unit,
         showMessage: (String) -> Unit,
-        onTavernUiReloadRequired: () -> Unit
+        onTavernUiReloadRequired: () -> Unit,
+        onServiceRestartRequired: () -> Unit
     ) : this(
         activity = activity,
         dispatchers = dispatchers,
+        pageTabs = pageTabs,
         listContainer = listContainer,
         emptyView = emptyView,
         installButton = installButton,
@@ -118,7 +128,8 @@ class BootstrapSettingsExtensionsCoordinator(
         showError = showError,
         showBanner = showBanner,
         showMessage = showMessage,
-        onTavernUiReloadRequired = onTavernUiReloadRequired
+        onTavernUiReloadRequired = onTavernUiReloadRequired,
+        onServiceRestartRequired = onServiceRestartRequired
     )
 
     private enum class ExtensionInstallMode {
@@ -126,14 +137,25 @@ class BootstrapSettingsExtensionsCoordinator(
         SKIP
     }
 
+    private enum class ManagementPage {
+        EXTENSIONS,
+        PLUGINS
+    }
+
     private val progressController = ExtensionProgressController(activity, progressHost)
     private var extensions: List<ManagedExtension> = emptyList()
+    private var plugins: List<ManagedPlugin> = emptyList()
     private var bundledExtensions: List<BundledExtension> = emptyList()
+    private var selectedPage = ManagementPage.EXTENSIONS
     private var busy = false
 
     fun initialize() {
+        setupManagementPageTabs()
         installButton.setOnClickListener {
-            promptInstallExtension()
+            when (selectedPage) {
+                ManagementPage.EXTENSIONS -> promptInstallExtension()
+                ManagementPage.PLUGINS -> promptInstallPlugin()
+            }
         }
         batchDeleteButton.setOnClickListener {
             promptDeleteExtensionsBatch()
@@ -163,6 +185,7 @@ class BootstrapSettingsExtensionsCoordinator(
 
             result.onSuccess { inventory ->
                 extensions = inventory.installedExtensions
+                plugins = inventory.installedPlugins
                 bundledExtensions = inventory.bundledExtensions
                 renderExtensions()
             }.onFailure { exception ->
@@ -201,6 +224,12 @@ class BootstrapSettingsExtensionsCoordinator(
         reloadButton.isEnabled = !busy
         progressController.refresh()
         listContainer.removeAllViews()
+        syncManagementPageTabs()
+        if (selectedPage == ManagementPage.PLUGINS) {
+            renderPlugins()
+            return
+        }
+
         val missingBundledExtensions = bundledExtensions.filterNot { it.targetExists }
         val globalExtensions = extensions.filter { it.kind == ExtensionKind.GLOBAL }
         val userExtensions = extensions.filter { it.kind == ExtensionKind.USER }
@@ -309,6 +338,80 @@ class BootstrapSettingsExtensionsCoordinator(
         }
     }
 
+    private fun setupManagementPageTabs() {
+        val tabs = pageTabs ?: return
+        if (tabs.tabCount == 0) {
+            tabs.addTab(tabs.newTab().setText(R.string.bootstrap_settings_extensions_page_frontend))
+            tabs.addTab(tabs.newTab().setText(R.string.bootstrap_settings_extensions_page_backend))
+        }
+        tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                val nextPage = if (tab.position == 0) ManagementPage.EXTENSIONS else ManagementPage.PLUGINS
+                if (selectedPage != nextPage) {
+                    selectedPage = nextPage
+                    renderExtensions()
+                }
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+
+            override fun onTabReselected(tab: TabLayout.Tab) = Unit
+        })
+        syncManagementPageTabs()
+    }
+
+    private fun syncManagementPageTabs() {
+        val tabs = pageTabs ?: return
+        val selectedPosition = when (selectedPage) {
+            ManagementPage.EXTENSIONS -> 0
+            ManagementPage.PLUGINS -> 1
+        }
+        if (tabs.selectedTabPosition != selectedPosition) {
+            tabs.selectTab(tabs.getTabAt(selectedPosition))
+        }
+    }
+
+    private fun renderPlugins() {
+        emptyView.isVisible = false
+        listContainer.addView(createSectionHeader(
+            title = activity.getString(R.string.bootstrap_settings_plugins_installed_title),
+            summary = activity.getString(R.string.bootstrap_settings_plugins_installed_summary),
+            actionsView = buildPluginActionsRow()
+        ))
+
+        if (plugins.isEmpty()) {
+            listContainer.addView(TextView(activity).apply {
+                text = activity.getString(R.string.bootstrap_settings_plugins_empty)
+                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsMeta)
+                setTextColor(resolveColor(MaterialR.attr.colorOnSurfaceVariant))
+                setPadding(
+                    dimen(R.dimen.sillydroid_panel_padding),
+                    dimen(R.dimen.sillydroid_panel_padding),
+                    dimen(R.dimen.sillydroid_panel_padding),
+                    dimen(R.dimen.sillydroid_panel_padding)
+                )
+                setBackgroundResource(R.drawable.bg_bootstrap_settings_nested_surface_rounded)
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dimen(R.dimen.sillydroid_section_card_spacing)
+            })
+            return
+        }
+
+        plugins.forEachIndexed { index, plugin ->
+            listContainer.addView(createPluginCard(plugin), LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                if (index > 0) {
+                    topMargin = dimen(R.dimen.sillydroid_section_card_spacing)
+                }
+            })
+        }
+    }
+
     private fun buildGlobalExtensionsActionsRow(): LinearLayout {
         return LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -317,6 +420,7 @@ class BootstrapSettingsExtensionsCoordinator(
             // 只是把它们从 XML 顶部那个隐藏的 row 中重新挂到当前 “全局扩展” 标题右侧。
             val size = dimen(R.dimen.sillydroid_settings_dense_icon_button_size)
             listOf(installButton, batchDeleteButton, reloadButton).forEach { button ->
+                button.isVisible = true
                 (button.parent as? ViewGroup)?.removeView(button)
                 button.layoutParams = LinearLayout.LayoutParams(size, size).apply {
                     marginStart = dimen(R.dimen.sillydroid_space_xs)
@@ -462,14 +566,14 @@ class BootstrapSettingsExtensionsCoordinator(
             iconResId = R.drawable.ic_restore_defaults,
             contentDescriptionResId = R.string.bootstrap_settings_extensions_reinstall
         ) {
-            if (bundledReinstallSource != null) {
+            if (!extension.homePage.isNullOrBlank()) {
+                confirmReinstall(extension)
+            } else if (bundledReinstallSource != null) {
                 confirmReinstallBundled(extension, bundledReinstallSource)
             } else if (isHostExtension) {
                 confirmReinstallHost(extension)
-            } else if (extension.homePage.isNullOrBlank()) {
-                showError(activity.getString(R.string.bootstrap_settings_extensions_homepage_missing))
             } else {
-                confirmReinstall(extension)
+                showError(activity.getString(R.string.bootstrap_settings_extensions_homepage_missing))
             }
         }.apply {
             isEnabled = !busy && (bundledReinstallSource != null || isHostExtension || !extension.homePage.isNullOrBlank())
@@ -482,6 +586,119 @@ class BootstrapSettingsExtensionsCoordinator(
             tintAttr = MaterialR.attr.colorError
         ) {
             confirmDelete(extension)
+        }.apply {
+            isEnabled = !busy
+            (layoutParams as? LinearLayout.LayoutParams)?.marginStart = dimen(R.dimen.sillydroid_space_xs)
+        }
+        actionsRow.addView(deleteButton)
+
+        contentRow.addView(infoColumn)
+        contentRow.addView(actionsRow)
+        container.addView(contentRow)
+        card.addView(container)
+        return card
+    }
+
+    private fun createPluginCard(plugin: ManagedPlugin): MaterialCardView {
+        val card = MaterialCardView(activity).apply {
+            radius = dimenFloat(R.dimen.sillydroid_nested_card_radius)
+            strokeWidth = dp(1)
+            strokeColor = resolveColor(MaterialR.attr.colorOutlineVariant)
+            setCardBackgroundColor(resolveColor(MaterialR.attr.colorSurfaceContainerLow))
+        }
+
+        val container = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(
+                dimen(R.dimen.sillydroid_section_padding),
+                dimen(R.dimen.sillydroid_section_padding),
+                dimen(R.dimen.sillydroid_section_padding),
+                dimen(R.dimen.sillydroid_section_padding)
+            )
+        }
+
+        val contentRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+        }
+
+        val infoColumn = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        infoColumn.addView(TextView(activity).apply {
+            text = plugin.displayName
+            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsDenseCardTitle)
+            setTextColor(resolveColor(MaterialR.attr.colorOnSurface))
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        })
+
+        infoColumn.addView(TextView(activity).apply {
+            text = plugin.version ?: activity.getString(R.string.bootstrap_settings_extensions_version_unknown)
+            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsBody)
+            setTextColor(resolveColor(MaterialR.attr.colorOnSurfaceVariant))
+            setPadding(0, dimen(R.dimen.sillydroid_space_xs), 0, 0)
+        })
+
+        infoColumn.addView(TextView(activity).apply {
+            text = activity.getString(R.string.bootstrap_settings_extensions_folder, plugin.folderName)
+            TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsBody)
+            setTextColor(resolveColor(MaterialR.attr.colorOnSurfaceVariant))
+            setPadding(0, dimen(R.dimen.sillydroid_space_sm), 0, 0)
+        })
+
+        plugin.description?.takeIf { it.isNotBlank() }?.let { description ->
+            infoColumn.addView(TextView(activity).apply {
+                text = description
+                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsMeta)
+                setTextColor(resolveColor(MaterialR.attr.colorOnSurfaceVariant))
+                setPadding(0, dimen(R.dimen.sillydroid_space_xs), 0, 0)
+            })
+        }
+
+        plugin.repositoryUrl?.takeIf { it.isNotBlank() }?.let { repositoryUrl ->
+            infoColumn.addView(TextView(activity).apply {
+                text = activity.getString(R.string.bootstrap_settings_extensions_source, repositoryUrl)
+                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsMeta)
+                setTextColor(resolveColor(MaterialR.attr.colorOnSurfaceVariant))
+                setPadding(0, dimen(R.dimen.sillydroid_space_xs), 0, 0)
+            })
+        }
+
+        if (!plugin.packageHealthy || !plugin.packageMessage.isNullOrBlank()) {
+            infoColumn.addView(TextView(activity).apply {
+                text = plugin.packageMessage ?: activity.getString(R.string.bootstrap_settings_plugins_package_missing)
+                TextViewCompat.setTextAppearance(this, R.style.TextAppearance_SillyDroid_SettingsMeta)
+                setTextColor(resolveColor(MaterialR.attr.colorError))
+                setPadding(0, dimen(R.dimen.sillydroid_space_sm), 0, 0)
+            })
+        }
+
+        val actionsRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            layoutParams = LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dimen(R.dimen.sillydroid_space_sm)
+            }
+        }
+
+        val updateButton = createActionIconButton(
+            iconResId = R.drawable.ic_restore_defaults,
+            contentDescriptionResId = R.string.bootstrap_settings_extensions_reinstall
+        ) {
+            promptPluginMaintenanceAction(plugin)
+        }.apply {
+            isEnabled = !busy
+        }
+        actionsRow.addView(updateButton)
+
+        val deleteButton = createActionIconButton(
+            iconResId = R.drawable.ic_delete,
+            contentDescriptionResId = R.string.bootstrap_settings_extensions_delete,
+            tintAttr = MaterialR.attr.colorError
+        ) {
+            confirmDeletePlugin(plugin)
         }.apply {
             isEnabled = !busy
             (layoutParams as? LinearLayout.LayoutParams)?.marginStart = dimen(R.dimen.sillydroid_space_xs)
@@ -510,18 +727,23 @@ class BootstrapSettingsExtensionsCoordinator(
             .show()
     }
 
-    private fun confirmReinstall(extension: ManagedExtension) {
+    private fun confirmDeletePlugin(plugin: ManagedPlugin) {
         MaterialAlertDialogBuilder(activity)
-            .setTitle(R.string.bootstrap_settings_extensions_reinstall_confirm_title)
+            .setTitle(R.string.bootstrap_settings_plugins_delete_confirm_title)
             .setMessage(activity.getString(
-                R.string.bootstrap_settings_extensions_reinstall_confirm_message,
-                extension.displayName
+                R.string.bootstrap_settings_plugins_delete_confirm_message,
+                plugin.displayName,
+                plugin.folderName
             ))
             .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
-            .setPositiveButton(R.string.bootstrap_settings_extensions_reinstall) { _, _ ->
-                reinstallExtension(extension)
+            .setPositiveButton(R.string.bootstrap_settings_extensions_delete) { _, _ ->
+                deletePlugin(plugin)
             }
             .show()
+    }
+
+    private fun confirmReinstall(extension: ManagedExtension) {
+        checkExtensionUpdate(extension)
     }
 
     private fun confirmReinstallBundled(extension: ManagedExtension, bundledSource: BundledExtension) {
@@ -824,11 +1046,259 @@ class BootstrapSettingsExtensionsCoordinator(
                 showBanner(message)
                 showMessage(message)
                 onTavernUiReloadRequired()
+                onServiceRestartRequired()
                 reloadExtensions()
             }.onFailure { exception ->
                 showError(exception.message ?: activity.getString(R.string.bootstrap_settings_extensions_server_plugin_dependencies_failed))
                 reloadExtensions()
             }
+        }
+    }
+
+    private fun deletePlugin(plugin: ManagedPlugin) {
+        activity.lifecycleScope.launch {
+            setBusyState(true)
+            val result = withContext(dispatchers.io) {
+                runCatching {
+                    extensionsRepository.deletePlugin(plugin)
+                }
+            }
+            setBusyState(false)
+
+            result.onSuccess {
+                val message = activity.getString(R.string.bootstrap_settings_plugins_delete_success, plugin.displayName)
+                showBanner(message)
+                showMessage(message)
+                onTavernUiReloadRequired()
+                onServiceRestartRequired()
+                reloadExtensions()
+            }.onFailure { exception ->
+                showError(exception.message ?: activity.getString(R.string.bootstrap_settings_plugins_delete_failed))
+                renderExtensions()
+            }
+        }
+    }
+
+    private fun checkExtensionUpdate(extension: ManagedExtension) {
+        val repositoryUrl = extension.homePage ?: run {
+            showError(activity.getString(R.string.bootstrap_settings_extensions_homepage_missing))
+            return
+        }
+        val normalizedRepository = normalizeRepositoryUrl(repositoryUrl) ?: run {
+            showError(activity.getString(R.string.bootstrap_settings_extensions_homepage_invalid))
+            return
+        }
+
+        activity.lifecycleScope.launch {
+            progressController.setProgressState(
+                actionLabel = activity.getString(R.string.bootstrap_settings_extensions_reinstall),
+                stageLabel = activity.getString(R.string.bootstrap_settings_update_checking),
+                percent = null,
+                indeterminate = true
+            )
+            setBusyState(true)
+            val result = withContext(dispatchers.io) {
+                runCatching {
+                    extensionsRepository.checkExtensionUpdate(extension, normalizedRepository)
+                }
+            }
+            setBusyState(false)
+            progressController.clear()
+
+            result.onSuccess { update ->
+                if (!update.hasNewVersion) {
+                    showMessage(activity.getString(R.string.bootstrap_settings_update_none))
+                    renderExtensions()
+                    return@onSuccess
+                }
+                confirmExtensionUpdate(extension, update)
+            }.onFailure { exception ->
+                showError(exception.message ?: activity.getString(R.string.bootstrap_settings_extensions_reinstall_failed))
+                reloadExtensions()
+            }
+        }
+    }
+
+    private fun confirmExtensionUpdate(extension: ManagedExtension, update: ManagedRepositoryUpdate) {
+        val message = buildString {
+            append(activity.getString(R.string.bootstrap_settings_update_found_badge))
+            append("\n\n")
+            append(activity.getString(R.string.bootstrap_settings_extensions_update_confirm_message, extension.displayName))
+            appendUpdateSummary(update)
+        }
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.bootstrap_settings_update_confirm_title)
+            .setMessage(message)
+            .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
+            .setPositiveButton(R.string.bootstrap_settings_extensions_reinstall) { _, _ ->
+                reinstallExtension(extension)
+            }
+            .show()
+    }
+
+    private fun promptPluginMaintenanceAction(plugin: ManagedPlugin) {
+        // 后端插件 Git 更新与 npm install 必须拆开执行，避免依赖安装失败影响版本更新流程。
+        val buttonRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(
+                dimen(R.dimen.sillydroid_space_sm),
+                dimen(R.dimen.sillydroid_space_md),
+                dimen(R.dimen.sillydroid_space_sm),
+                dimen(R.dimen.sillydroid_space_lg)
+            )
+        }
+        val dialog = MaterialAlertDialogBuilder(activity)
+            .setTitle(activity.getString(R.string.bootstrap_settings_plugins_action_title, plugin.displayName))
+            .setMessage(R.string.bootstrap_settings_plugins_action_message)
+            .setView(buttonRow)
+            .create()
+
+        buttonRow.addView(createPluginMaintenanceButton(R.string.bootstrap_settings_import_confirm_cancel) {
+            dialog.dismiss()
+        })
+        buttonRow.addView(createPluginMaintenanceButton(R.string.bootstrap_settings_plugins_update_git) {
+            dialog.dismiss()
+            checkPluginUpdate(plugin)
+        })
+        buttonRow.addView(createPluginMaintenanceButton(R.string.bootstrap_settings_plugins_update_with_npm) {
+            dialog.dismiss()
+            installPluginDependencies(plugin)
+        })
+        dialog.show()
+    }
+
+    private fun createPluginMaintenanceButton(labelResId: Int, onClick: () -> Unit): MaterialButton {
+        return MaterialButton(activity, null, MaterialR.attr.borderlessButtonStyle).apply {
+            text = activity.getString(labelResId)
+            isSingleLine = true
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            letterSpacing = 0f
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            minWidth = 0
+            minHeight = dimen(R.dimen.sillydroid_control_min_height)
+            minimumWidth = 0
+            minimumHeight = 0
+            insetTop = 0
+            insetBottom = 0
+            setPadding(dimen(R.dimen.sillydroid_space_xs), 0, dimen(R.dimen.sillydroid_space_xs), 0)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                leftMargin = dimen(R.dimen.sillydroid_space_xs_half)
+                rightMargin = dimen(R.dimen.sillydroid_space_xs_half)
+            }
+            setOnClickListener {
+                onClick()
+            }
+        }
+    }
+
+    private fun checkPluginUpdate(plugin: ManagedPlugin) {
+        val repositoryUrl = plugin.repositoryUrl ?: run {
+            showError(activity.getString(R.string.bootstrap_settings_plugins_repository_missing))
+            return
+        }
+        val normalizedRepository = normalizeRepositoryUrl(repositoryUrl) ?: run {
+            showError(activity.getString(R.string.bootstrap_settings_plugins_install_invalid_url))
+            return
+        }
+
+        activity.lifecycleScope.launch {
+            progressController.setProgressState(
+                actionLabel = activity.getString(R.string.bootstrap_settings_extensions_reinstall),
+                stageLabel = activity.getString(R.string.bootstrap_settings_update_checking),
+                percent = null,
+                indeterminate = true
+            )
+            setBusyState(true)
+            val result = withContext(dispatchers.io) {
+                runCatching {
+                    extensionsRepository.checkPluginUpdate(plugin, normalizedRepository)
+                }
+            }
+            setBusyState(false)
+            progressController.clear()
+
+            result.onSuccess { update ->
+                if (!update.hasNewVersion) {
+                    showMessage(activity.getString(R.string.bootstrap_settings_update_none))
+                    renderExtensions()
+                    return@onSuccess
+                }
+                confirmPluginUpdate(plugin, normalizedRepository, update)
+            }.onFailure { exception ->
+                showError(exception.message ?: activity.getString(R.string.bootstrap_settings_plugins_install_failed))
+                reloadExtensions()
+            }
+        }
+    }
+
+    private fun confirmPluginUpdate(
+        plugin: ManagedPlugin,
+        repository: NormalizedExtensionRepository,
+        update: ManagedRepositoryUpdate
+    ) {
+        val message = buildString {
+            append(activity.getString(R.string.bootstrap_settings_update_found_badge))
+            append("\n\n")
+            append(activity.getString(R.string.bootstrap_settings_plugins_update_confirm_message, plugin.displayName))
+            appendUpdateSummary(update)
+        }
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.bootstrap_settings_update_confirm_title)
+            .setMessage(message)
+            .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
+            .setPositiveButton(R.string.bootstrap_settings_plugins_update_git) { _, _ ->
+                updatePluginRepository(plugin, repository)
+            }
+            .show()
+    }
+
+    private fun StringBuilder.appendUpdateSummary(update: ManagedRepositoryUpdate) {
+        val unknownValue = activity.getString(R.string.bootstrap_settings_update_unknown_value)
+        val localVersion = update.localVersion?.takeIf { it.isNotBlank() }
+        val remoteVersion = update.remoteVersion?.takeIf { it.isNotBlank() }
+        if (localVersion != null || remoteVersion != null) {
+            append("\n\n")
+            append(
+                activity.getString(
+                    R.string.bootstrap_settings_update_version_summary,
+                    localVersion ?: unknownValue,
+                    remoteVersion ?: unknownValue,
+                    update.versionSourceFile ?: unknownValue
+                )
+            )
+            return
+        }
+
+        val local = update.localRevision?.take(8)
+        val remote = update.remoteRevision?.take(8)
+        if (local != null || remote != null) {
+            append("\n\n")
+            append(
+                activity.getString(
+                    R.string.bootstrap_settings_update_revision_summary,
+                    local ?: unknownValue,
+                    remote ?: unknownValue
+                )
+            )
+        }
+    }
+
+    private fun buildPluginActionsRow(): LinearLayout {
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val size = dimen(R.dimen.sillydroid_settings_dense_icon_button_size)
+            listOf(installButton, reloadButton).forEach { button ->
+                button.isVisible = true
+                (button.parent as? ViewGroup)?.removeView(button)
+                button.layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                    marginStart = dimen(R.dimen.sillydroid_space_xs)
+                }
+                addView(button)
+            }
+            batchDeleteButton.isVisible = false
         }
     }
 
@@ -1152,6 +1622,124 @@ class BootstrapSettingsExtensionsCoordinator(
             }
         }
         dialog.show()
+    }
+
+    private fun promptInstallPlugin() {
+        if (busy) {
+            return
+        }
+
+        val inputLayout = activity.createSettingsTextInputLayout(
+            hintText = activity.getString(R.string.bootstrap_settings_plugins_install_prompt_hint),
+            helperTextValue = null
+        ).apply {
+            layoutParams = LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        val inputView = inputLayout.createSettingsEditText().apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+        }
+        inputLayout.addView(inputView)
+
+        val contentWrapper = FrameLayout(activity).apply {
+            setPadding(
+                dimen(R.dimen.sillydroid_dialog_content_padding_horizontal),
+                dimen(R.dimen.sillydroid_dialog_content_padding_vertical),
+                dimen(R.dimen.sillydroid_dialog_content_padding_horizontal),
+                dimen(R.dimen.sillydroid_dialog_content_padding_vertical)
+            )
+            addView(inputLayout)
+        }
+
+        inputView.doAfterTextChanged {
+            inputLayout.error = null
+        }
+
+        val dialog = MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.bootstrap_settings_plugins_install_prompt_title)
+            .setView(contentWrapper)
+            .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
+            .setPositiveButton(R.string.bootstrap_settings_plugins_install, null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val repositoryUrl = inputView.text?.toString().orEmpty().trim()
+                if (repositoryUrl.isBlank()) {
+                    inputLayout.error = activity.getString(R.string.bootstrap_settings_plugins_install_empty)
+                    return@setOnClickListener
+                }
+                val normalizedRepository = normalizeRepositoryUrl(repositoryUrl)
+                if (normalizedRepository == null) {
+                    inputLayout.error = activity.getString(R.string.bootstrap_settings_plugins_install_invalid_url)
+                    return@setOnClickListener
+                }
+
+                dialog.dismiss()
+                previewPluginInstall(repositoryUrl, normalizedRepository)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun previewPluginInstall(
+        repositoryUrl: String,
+        normalizedRepository: NormalizedExtensionRepository
+    ) {
+        activity.lifecycleScope.launch {
+            progressController.setProgressState(
+                actionLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_preview),
+                stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_prepare),
+                percent = null,
+                indeterminate = true
+            )
+            setBusyState(true)
+            val result = withContext(dispatchers.io) {
+                runCatching {
+                    extensionsRepository.buildPluginInstallPreview(repositoryUrl, normalizedRepository)
+                }
+            }
+            setBusyState(false)
+            progressController.clear()
+
+            result.onSuccess { preview ->
+                confirmInstallPlugin(preview)
+            }.onFailure { exception ->
+                showError(exception.message ?: activity.getString(R.string.bootstrap_settings_plugins_install_failed))
+                renderExtensions()
+            }
+        }
+    }
+
+    private fun confirmInstallPlugin(preview: PluginInstallPreview) {
+        val versionLabel = preview.version ?: activity.getString(R.string.bootstrap_settings_extensions_version_unknown)
+        val message = if (preview.targetExists) {
+            activity.getString(
+                R.string.bootstrap_settings_plugins_install_confirm_message_overwrite,
+                preview.displayName,
+                versionLabel,
+                preview.folderName
+            )
+        } else {
+            activity.getString(
+                R.string.bootstrap_settings_plugins_install_confirm_message_new,
+                preview.displayName,
+                versionLabel,
+                preview.folderName
+            )
+        }
+
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.bootstrap_settings_plugins_install_confirm_title)
+            .setMessage(message)
+            .setNegativeButton(R.string.bootstrap_settings_import_confirm_cancel, null)
+            .setPositiveButton(R.string.bootstrap_settings_plugins_install) { _, _ ->
+                installPreviewedPlugin(preview)
+            }
+            .show()
     }
 
     private fun promptInstallBundledExtension(bundledExtensions: List<BundledExtension>) {
@@ -1577,6 +2165,133 @@ class BootstrapSettingsExtensionsCoordinator(
                 reloadExtensions()
             }.onFailure { exception ->
                 showError(exception.message ?: activity.getString(R.string.bootstrap_settings_extensions_install_failed))
+                reloadExtensions()
+            }
+        }
+    }
+
+    private fun installPreviewedPlugin(preview: PluginInstallPreview) {
+        activity.lifecycleScope.launch {
+            progressController.setProgressState(
+                actionLabel = activity.getString(R.string.bootstrap_settings_plugins_install),
+                stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating),
+                percent = null,
+                indeterminate = true
+            )
+            setBusyState(true)
+            val result = withContext(dispatchers.io) {
+                runCatching {
+                    extensionsRepository.installPlugin(
+                        preview = preview,
+                        onProgress = { runtimeProgress ->
+                            progressController.publishRuntimeProgress(
+                                activity.getString(R.string.bootstrap_settings_plugins_install),
+                                runtimeProgress
+                            )
+                        },
+                        failureMessage = { failedLogPath ->
+                            activity.getString(R.string.bootstrap_settings_extensions_runtime_failed, failedLogPath)
+                        }
+                    )
+                }
+            }
+            setBusyState(false)
+            progressController.clear()
+
+            result.onSuccess {
+                val message = activity.getString(R.string.bootstrap_settings_plugins_install_success, preview.displayName)
+                showBanner(message)
+                showMessage(message)
+                onTavernUiReloadRequired()
+                onServiceRestartRequired()
+                reloadExtensions()
+            }.onFailure { exception ->
+                showError(exception.message ?: activity.getString(R.string.bootstrap_settings_plugins_install_failed))
+                reloadExtensions()
+            }
+        }
+    }
+
+    private fun installPluginDependencies(plugin: ManagedPlugin) {
+        activity.lifecycleScope.launch {
+            progressController.setProgressState(
+                actionLabel = activity.getString(R.string.bootstrap_settings_plugins_update_with_npm),
+                stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_action_install_server_plugin_dependencies),
+                percent = null,
+                indeterminate = true
+            )
+            setBusyState(true)
+            val result = withContext(dispatchers.io) {
+                runCatching {
+                    extensionsRepository.installPluginDependencies(
+                        folderName = plugin.folderName,
+                        onProgress = { runtimeProgress ->
+                            progressController.publishRuntimeProgress(
+                                activity.getString(R.string.bootstrap_settings_plugins_update_with_npm),
+                                runtimeProgress
+                            )
+                        },
+                        failureMessage = { failedLogPath ->
+                            activity.getString(R.string.bootstrap_settings_extensions_runtime_failed, failedLogPath)
+                        }
+                    )
+                }
+            }
+            setBusyState(false)
+            progressController.clear()
+
+            result.onSuccess {
+                val message = activity.getString(R.string.bootstrap_settings_plugins_update_npm_success, plugin.displayName)
+                showBanner(message)
+                showMessage(message)
+                onTavernUiReloadRequired()
+                onServiceRestartRequired()
+                reloadExtensions()
+            }.onFailure { exception ->
+                showError(exception.message ?: activity.getString(R.string.bootstrap_settings_plugins_install_failed))
+                reloadExtensions()
+            }
+        }
+    }
+
+    private fun updatePluginRepository(plugin: ManagedPlugin, repository: NormalizedExtensionRepository) {
+        activity.lifecycleScope.launch {
+            progressController.setProgressState(
+                actionLabel = activity.getString(R.string.bootstrap_settings_plugins_update_git),
+                stageLabel = activity.getString(R.string.bootstrap_settings_extensions_progress_stage_updating),
+                percent = null,
+                indeterminate = true
+            )
+            setBusyState(true)
+            val result = withContext(dispatchers.io) {
+                runCatching {
+                    extensionsRepository.updatePluginRepository(
+                        folderName = plugin.folderName,
+                        repository = repository,
+                        onProgress = { runtimeProgress ->
+                            progressController.publishRuntimeProgress(
+                                activity.getString(R.string.bootstrap_settings_plugins_update_git),
+                                runtimeProgress
+                            )
+                        },
+                        failureMessage = { failedLogPath ->
+                            activity.getString(R.string.bootstrap_settings_extensions_runtime_failed, failedLogPath)
+                        }
+                    )
+                }
+            }
+            setBusyState(false)
+            progressController.clear()
+
+            result.onSuccess {
+                val message = activity.getString(R.string.bootstrap_settings_plugins_update_git_success, plugin.displayName)
+                showBanner(message)
+                showMessage(message)
+                onTavernUiReloadRequired()
+                onServiceRestartRequired()
+                reloadExtensions()
+            }.onFailure { exception ->
+                showError(exception.message ?: activity.getString(R.string.bootstrap_settings_plugins_install_failed))
                 reloadExtensions()
             }
         }

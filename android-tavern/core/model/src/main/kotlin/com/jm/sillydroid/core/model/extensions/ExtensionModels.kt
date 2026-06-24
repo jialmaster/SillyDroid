@@ -21,6 +21,16 @@ data class ManagedExtension(
     val kind: ExtensionKind = ExtensionKind.GLOBAL
 )
 
+data class ManagedPlugin(
+    val folderName: String,
+    val displayName: String,
+    val version: String?,
+    val description: String?,
+    val repositoryUrl: String?,
+    val packageHealthy: Boolean,
+    val packageMessage: String?
+)
+
 data class BundledExtension(
     val folderName: String,
     val displayName: String,
@@ -43,6 +53,7 @@ data class BrokenExtensionDirectory(
 
 data class ExtensionInventory(
     val installedExtensions: List<ManagedExtension>,
+    val installedPlugins: List<ManagedPlugin>,
     val bundledExtensions: List<BundledExtension>
 )
 
@@ -55,6 +66,25 @@ data class ExtensionInstallPreview(
     val author: String?,
     val homePage: String?,
     val targetExists: Boolean
+)
+
+data class PluginInstallPreview(
+    val repositoryUrl: String,
+    val normalizedRepository: NormalizedExtensionRepository,
+    val folderName: String,
+    val displayName: String,
+    val version: String?,
+    val description: String?,
+    val targetExists: Boolean
+)
+
+data class ManagedRepositoryUpdate(
+    val hasNewVersion: Boolean,
+    val localRevision: String?,
+    val remoteRevision: String?,
+    val localVersion: String? = null,
+    val remoteVersion: String? = null,
+    val versionSourceFile: String? = null
 )
 
 data class BatchExtensionFailure(

@@ -79,6 +79,7 @@ class BootstrapSettingsScreenController(
     private var restartServicePending = false
     private var bottomActionBarVisible = false
     private val scrollBottomBasePadding = scrollView.paddingBottom
+    private val extensionsPanelBottomBasePadding = extensionsPanelView.paddingBottom
     private val logsPanelBottomBasePadding = logsPanelView.paddingBottom
     private val terminalPanelBottomBasePadding = terminalPanelView.paddingBottom
     private val bottomActionBarBottomBasePadding = bottomActionBarView.paddingBottom
@@ -98,7 +99,7 @@ class BootstrapSettingsScreenController(
 
     fun setBusy(busy: Boolean) {
         this.busy = busy
-        loadingIndicator.isVisible = busy
+        syncGlobalLoadingIndicator()
         // 宿主数据、扩展安装、日志导出、保存启动等任务不能并行触发；
         // busy 期间统一锁住所有会切页、写数据或发起异步任务的入口，避免状态交错。
         setTabNavigationEnabled(!busy)
@@ -365,11 +366,13 @@ class BootstrapSettingsScreenController(
         }
 
         selectedTab = tab
+        syncGlobalLoadingIndicator()
+        val isExtensionsTab = tab == SettingsTab.EXTENSIONS
         val isLogsTab = tab == SettingsTab.LOGS
         val isTerminalTab = tab == SettingsTab.TERMINAL
-        scrollView.isVisible = !isLogsTab && !isTerminalTab
+        scrollView.isVisible = !isExtensionsTab && !isLogsTab && !isTerminalTab
         dataPanelView.isVisible = tab == SettingsTab.DATA
-        extensionsPanelView.isVisible = tab == SettingsTab.EXTENSIONS
+        extensionsPanelView.isVisible = isExtensionsTab
         logsPanelView.isVisible = isLogsTab
         terminalPanelView.isVisible = isTerminalTab
         settingsPanelView.isVisible = tab == SettingsTab.SETTINGS
@@ -381,7 +384,7 @@ class BootstrapSettingsScreenController(
         syncPrimaryNavigationSelection()
         renderAboutEntryState()
         onTabChanged(tab)
-        if (!isLogsTab && !isTerminalTab) {
+        if (!isExtensionsTab && !isLogsTab && !isTerminalTab) {
             scrollView.post {
                 scrollView.scrollTo(0, 0)
             }
@@ -390,6 +393,11 @@ class BootstrapSettingsScreenController(
                 logsScrollView.fullScroll(android.view.View.FOCUS_DOWN)
             }
         }
+    }
+
+    private fun syncGlobalLoadingIndicator() {
+        // 扩展/插件管理页已有独立任务进度条，隐藏全局 busy 条避免同一任务显示两条横向进度。
+        loadingIndicator.isVisible = busy && selectedTab != SettingsTab.EXTENSIONS
     }
 
     private fun syncPrimaryNavigationSelection() {
@@ -461,6 +469,9 @@ class BootstrapSettingsScreenController(
         )
         logsPanelView.updatePadding(
             bottom = logsPanelBottomBasePadding + if (latestImeVisible) latestImeBottomInset else latestSystemBarsBottomInset
+        )
+        extensionsPanelView.updatePadding(
+            bottom = extensionsPanelBottomBasePadding + if (latestImeVisible) latestImeBottomInset else latestSystemBarsBottomInset
         )
         terminalPanelView.updatePadding(
             bottom = terminalPanelBottomBasePadding + terminalBottomInset
@@ -577,7 +588,7 @@ class BootstrapSettingsScreenController(
         saveStartButton.text = activity.getString(
             when {
                 hasUnsavedChanges -> R.string.bootstrap_settings_save_start_dirty
-                restartServicePending -> R.string.bootstrap_settings_host_runtime_patch_restart_service
+                restartServicePending -> R.string.bootstrap_settings_restart_service
                 else -> R.string.bootstrap_settings_save_start
             }
         )

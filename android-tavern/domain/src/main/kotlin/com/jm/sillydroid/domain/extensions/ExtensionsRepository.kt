@@ -11,8 +11,11 @@ import com.jm.sillydroid.core.model.extensions.ExtensionInstallMode
 import com.jm.sillydroid.core.model.extensions.ExtensionInstallPreview
 import com.jm.sillydroid.core.model.extensions.ExtensionKind
 import com.jm.sillydroid.core.model.extensions.ExtensionRuntimeProgress
+import com.jm.sillydroid.core.model.extensions.ManagedPlugin
 import com.jm.sillydroid.core.model.extensions.ManagedExtension
+import com.jm.sillydroid.core.model.extensions.ManagedRepositoryUpdate
 import com.jm.sillydroid.core.model.extensions.NormalizedExtensionRepository
+import com.jm.sillydroid.core.model.extensions.PluginInstallPreview
 
 interface ExtensionsRepository {
     fun loadInventory(): ExtensionInventory
@@ -22,6 +25,7 @@ interface ExtensionsRepository {
     fun extensionTargetExists(folderName: String): Boolean
     fun deleteExtension(extension: ManagedExtension)
     fun deleteExtensions(extensions: List<ManagedExtension>): Pair<List<String>, List<String>>
+    fun deletePlugin(plugin: ManagedPlugin)
     fun installBundledExtension(extension: BundledExtension)
     fun reinstallBundledExtension(extension: ManagedExtension, bundledSource: BundledExtension): BundledExtensionInstallResult
     fun findBrokenExtensionDirectories(): List<BrokenExtensionDirectory>
@@ -33,10 +37,29 @@ interface ExtensionsRepository {
     fun githubReachabilityFailures(normalizedRepositories: List<NormalizedExtensionRepository>): List<String>
     fun requiresGithubReachabilityCheck(repository: NormalizedExtensionRepository): Boolean
     fun validateRemoteManifestBeforeClone(repository: NormalizedExtensionRepository)
+    fun checkExtensionUpdate(extension: ManagedExtension, repository: NormalizedExtensionRepository): ManagedRepositoryUpdate
+    fun checkPluginUpdate(plugin: ManagedPlugin, repository: NormalizedExtensionRepository): ManagedRepositoryUpdate
     fun buildInstallPreview(repositoryUrl: String, normalizedRepository: NormalizedExtensionRepository): ExtensionInstallPreview
+    fun buildPluginInstallPreview(repositoryUrl: String, normalizedRepository: NormalizedExtensionRepository): PluginInstallPreview
     fun install(
         preview: ExtensionInstallPreview,
         kind: ExtensionKind = ExtensionKind.GLOBAL,
+        onProgress: ((ExtensionRuntimeProgress) -> Unit)? = null,
+        failureMessage: (String) -> String
+    )
+    fun installPlugin(
+        preview: PluginInstallPreview,
+        onProgress: ((ExtensionRuntimeProgress) -> Unit)? = null,
+        failureMessage: (String) -> String
+    )
+    fun updatePluginRepository(
+        folderName: String,
+        repository: NormalizedExtensionRepository,
+        onProgress: ((ExtensionRuntimeProgress) -> Unit)? = null,
+        failureMessage: (String) -> String
+    )
+    fun installPluginDependencies(
+        folderName: String,
         onProgress: ((ExtensionRuntimeProgress) -> Unit)? = null,
         failureMessage: (String) -> String
     )

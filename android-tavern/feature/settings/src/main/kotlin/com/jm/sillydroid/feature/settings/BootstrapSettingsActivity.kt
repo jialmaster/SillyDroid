@@ -142,6 +142,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var debugDiagnosticsSwitch: MaterialSwitch
     private lateinit var unrestrictedFileImportSelectionSwitch: MaterialSwitch
     private lateinit var extensionsPanelView: View
+    private lateinit var extensionsPageTabs: TabLayout
     private lateinit var extensionsListContainer: LinearLayout
     private lateinit var extensionsEmptyView: TextView
     private lateinit var extensionsInstallButton: ImageButton
@@ -383,6 +384,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         debugDiagnosticsSwitch = findViewById(R.id.bootstrapSettingsDebugDiagnosticsSwitch)
         unrestrictedFileImportSelectionSwitch = findViewById(R.id.bootstrapSettingsUnrestrictedFileImportSelectionSwitch)
         extensionsPanelView = findViewById(R.id.bootstrapSettingsExtensionsPanel)
+        extensionsPageTabs = findViewById(R.id.bootstrapSettingsExtensionsPageTabs)
         extensionsListContainer = findViewById(R.id.bootstrapSettingsExtensionsListContainer)
         extensionsEmptyView = findViewById(R.id.bootstrapSettingsExtensionsEmpty)
         extensionsInstallButton = findViewById(R.id.bootstrapSettingsExtensionsInstallButton)
@@ -608,6 +610,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         extensionsCoordinator = BootstrapSettingsExtensionsCoordinator(
             activity = this,
             dispatchers = appGraph.dispatchers,
+            pageTabs = extensionsPageTabs,
             listContainer = extensionsListContainer,
             emptyView = extensionsEmptyView,
             installButton = extensionsInstallButton,
@@ -622,6 +625,9 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             showMessage = screenController::showMessage,
             onTavernUiReloadRequired = {
                 updateResultFlags(shouldReloadTavernUi = true)
+            },
+            onServiceRestartRequired = {
+                screenController.updateRestartServicePending(true)
             }
         )
         logsCoordinator = BootstrapSettingsLogsCoordinator(

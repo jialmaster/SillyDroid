@@ -66,6 +66,11 @@ class BootstrapSettingsSettingsCoordinator(
     }
 
     fun saveAndStart() {
+        if (!screenController.hasPendingConfigurationChanges() && screenController.hasPendingRestartService()) {
+            restartServiceOnly()
+            return
+        }
+
         clearBlockingFeedback()
         val typedValues = collectTypedValuesOrShowError() ?: return
         val updatedRoot = buildUpdatedRoot(typedValues)
@@ -77,6 +82,26 @@ class BootstrapSettingsSettingsCoordinator(
         }
 
         saveUpdatedRootAndRestart(updatedRoot)
+    }
+
+    private fun restartServiceOnly() {
+        activity.lifecycleScope.launch {
+            screenController.setBusy(true)
+            val failureMessage = withContext(dispatchers.io) {
+                runCatching {
+                    stopBootstrapForSettings(activity.getString(R.string.bootstrap_settings_restart_stop_timeout))
+                }.exceptionOrNull()?.message
+            }
+            screenController.setBusy(false)
+
+            if (failureMessage != null) {
+                showValidationIssue(BootstrapSettingsValidationIssue(message = failureMessage))
+                return@launch
+            }
+
+            screenController.updateRestartServicePending(false)
+            onStartBootstrapConfirmed()
+        }
     }
 
     fun currentTypedValues(): LinkedHashMap<String, Any?>? {

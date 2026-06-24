@@ -247,7 +247,8 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         }
 
     override var floatingLogBubbleEnabled: Boolean
-        get() = preferences.getBoolean(floatingLogBubbleEnabledKey, false)
+        // 新装用户默认显示日志球；已保存过开关的用户继续尊重本地配置，不做迁移或覆盖。
+        get() = preferences.getBoolean(floatingLogBubbleEnabledKey, true)
         set(value) {
             preferences.edit()
                 .putBoolean(floatingLogBubbleEnabledKey, value)

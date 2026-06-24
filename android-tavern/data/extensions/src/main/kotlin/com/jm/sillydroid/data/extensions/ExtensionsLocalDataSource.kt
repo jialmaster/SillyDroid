@@ -6,6 +6,7 @@ import com.jm.sillydroid.core.model.extensions.BundledExtensionInstallResult
 import com.jm.sillydroid.core.model.extensions.DefaultExtensionRepository
 import com.jm.sillydroid.core.model.extensions.ExtensionInventory
 import com.jm.sillydroid.core.model.extensions.ExtensionKind
+import com.jm.sillydroid.core.model.extensions.ManagedPlugin
 import com.jm.sillydroid.core.model.extensions.ManagedExtension
 import com.jm.sillydroid.domain.extensions.ExtensionDirectories
 import com.jm.sillydroid.domain.extensions.ExtensionDirectoriesProvider
@@ -18,9 +19,11 @@ class ExtensionsLocalDataSource(
     fun loadInventory(): ExtensionInventory {
         val directories = directoriesProvider.directories()
         val installedExtensions = loadInstalledExtensions(directories)
+        val installedPlugins = loadInstalledPlugins(directories)
         val bundledExtensions = loadBundledExtensions(directories)
         return ExtensionInventory(
             installedExtensions = installedExtensions,
+            installedPlugins = installedPlugins,
             bundledExtensions = bundledExtensions
         )
     }
@@ -87,6 +90,13 @@ class ExtensionsLocalDataSource(
             }
         }
         return removed to failed
+    }
+
+    fun deletePlugin(plugin: ManagedPlugin) {
+        val targetDir = directoriesProvider.directories().serverPluginsDir.resolve(plugin.folderName)
+        if (!targetDir.deleteRecursively() && targetDir.exists()) {
+            throw IllegalStateException("删除后端插件失败：${plugin.folderName}")
+        }
     }
 
     fun installBundledExtension(extension: BundledExtension) {
@@ -179,6 +189,91 @@ class ExtensionsLocalDataSource(
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { extension -> extension.displayName })
     }
 
+    private fun loadInstalledPlugins(directories: ExtensionDirectories): List<ManagedPlugin> {
+        val pluginsRoot = directories.serverPluginsDir
+        if (!pluginsRoot.exists()) {
+            return emptyList()
+        }
+
+        return pluginsRoot.listFiles()
+            .orEmpty()
+            .filter { directory -> directory.isDirectory }
+            .map { directory ->
+                val packageFile = File(directory, "package.json")
+                if (!packageFile.exists()) {
+                    return@map ManagedPlugin(
+                        folderName = directory.name,
+                        displayName = directory.name,
+                        version = null,
+                        description = null,
+                        repositoryUrl = null,
+                        packageHealthy = false,
+                        packageMessage = "package.json 缺失。"
+                    )
+                }
+
+                runCatching {
+                    val packageJson = JSONObject(packageFile.readText())
+                    ManagedPlugin(
+                        folderName = directory.name,
+                        displayName = packageJson.optString("name").ifBlank { directory.name },
+                        version = packageJson.optString("version").ifBlank { null },
+                        description = packageJson.optString("description").ifBlank { null },
+                        repositoryUrl = resolvePackageRepositoryUrl(packageJson) ?: readGitOriginUrl(directory),
+                        packageHealthy = true,
+                        packageMessage = null
+                    )
+                }.getOrElse {
+                    ManagedPlugin(
+                        folderName = directory.name,
+                        displayName = directory.name,
+                        version = null,
+                        description = null,
+                        repositoryUrl = null,
+                        packageHealthy = false,
+                        packageMessage = "package.json 格式无效。"
+                    )
+                }
+            }
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { plugin -> plugin.displayName })
+    }
+
+    private fun resolvePackageRepositoryUrl(packageJson: JSONObject): String? {
+        val repository = packageJson.opt("repository") ?: return null
+        return when (repository) {
+            is String -> repository.trim().ifBlank { null }
+            is JSONObject -> repository.optString("url").trim().ifBlank { null }
+            else -> null
+        }?.removePrefix("git+")
+    }
+
+    private fun readGitOriginUrl(directory: File): String? {
+        val configFile = File(File(directory, ".git"), "config")
+        if (!configFile.isFile) {
+            return null
+        }
+
+        var inOriginBlock = false
+        return configFile.readLines().firstNotNullOfOrNull { rawLine ->
+            val line = rawLine.trim()
+            when {
+                line.startsWith("[") -> {
+                    inOriginBlock = line.equals("[remote \"origin\"]", ignoreCase = true)
+                    null
+                }
+
+                inOriginBlock && line.startsWith("url", ignoreCase = true) -> {
+                    line.substringAfter("=", missingDelimiterValue = "")
+                        .trim()
+                        .removePrefix("git+")
+                        .ifBlank { null }
+                }
+
+                else -> null
+            }
+        }
+    }
+
     private fun readExtensionsFromDirectory(root: File, kind: ExtensionKind): List<ManagedExtension> {
         if (!root.exists()) {
             return emptyList()
@@ -209,7 +304,7 @@ class ExtensionsLocalDataSource(
                         displayName = manifest.optString("display_name").ifBlank { directory.name },
                         version = manifest.optString("version").ifBlank { null },
                         author = manifest.optString("author").ifBlank { null },
-                        homePage = manifest.optString("homePage").ifBlank { null },
+                        homePage = manifest.optString("homePage").ifBlank { null } ?: readGitOriginUrl(directory),
                         manifestHealthy = true,
                         manifestMessage = null,
                         kind = kind

@@ -8,8 +8,11 @@ import com.jm.sillydroid.core.model.extensions.ExtensionInstallPreview
 import com.jm.sillydroid.core.model.extensions.ExtensionInventory
 import com.jm.sillydroid.core.model.extensions.ExtensionKind
 import com.jm.sillydroid.core.model.extensions.ExtensionRuntimeProgress
+import com.jm.sillydroid.core.model.extensions.ManagedPlugin
 import com.jm.sillydroid.core.model.extensions.ManagedExtension
+import com.jm.sillydroid.core.model.extensions.ManagedRepositoryUpdate
 import com.jm.sillydroid.core.model.extensions.NormalizedExtensionRepository
+import com.jm.sillydroid.core.model.extensions.PluginInstallPreview
 import com.jm.sillydroid.domain.extensions.ExtensionsRepository
 
 class ExtensionsRepositoryImpl(
@@ -43,6 +46,10 @@ class ExtensionsRepositoryImpl(
 
     override fun deleteExtensions(extensions: List<ManagedExtension>): Pair<List<String>, List<String>> {
         return localDataSource.deleteExtensions(extensions)
+    }
+
+    override fun deletePlugin(plugin: ManagedPlugin) {
+        localDataSource.deletePlugin(plugin)
     }
 
     override fun installBundledExtension(extension: BundledExtension) {
@@ -100,6 +107,46 @@ class ExtensionsRepositoryImpl(
         remoteManifestDataSource.fetchResolvedRemoteManifest(repository)
     }
 
+    override fun checkExtensionUpdate(
+        extension: ManagedExtension,
+        repository: NormalizedExtensionRepository
+    ): ManagedRepositoryUpdate {
+        val probe = extensionCommandExecutor.checkRepositoryUpdate(
+            folderName = extension.folderName,
+            repository = repository,
+            kind = extension.kind.toExtensionTargetKind(),
+            failureMessage = { failedLogPath -> "扩展更新检测失败，请查看日志：$failedLogPath" }
+        )
+        return ManagedRepositoryUpdate(
+            hasNewVersion = probe.hasNewVersion,
+            localRevision = probe.localRevision,
+            remoteRevision = probe.remoteRevision,
+            localVersion = probe.localVersion,
+            remoteVersion = probe.remoteVersion,
+            versionSourceFile = probe.versionSourceFile
+        )
+    }
+
+    override fun checkPluginUpdate(
+        plugin: ManagedPlugin,
+        repository: NormalizedExtensionRepository
+    ): ManagedRepositoryUpdate {
+        val probe = extensionCommandExecutor.checkRepositoryUpdate(
+            folderName = plugin.folderName,
+            repository = repository,
+            kind = ExtensionTargetKind.SERVER_PLUGIN,
+            failureMessage = { failedLogPath -> "后端插件更新检测失败，请查看日志：$failedLogPath" }
+        )
+        return ManagedRepositoryUpdate(
+            hasNewVersion = probe.hasNewVersion,
+            localRevision = probe.localRevision,
+            remoteRevision = probe.remoteRevision,
+            localVersion = probe.localVersion,
+            remoteVersion = probe.remoteVersion,
+            versionSourceFile = probe.versionSourceFile
+        )
+    }
+
     override fun buildInstallPreview(
         repositoryUrl: String,
         normalizedRepository: NormalizedExtensionRepository
@@ -122,6 +169,30 @@ class ExtensionsRepositoryImpl(
         )
     }
 
+    override fun buildPluginInstallPreview(
+        repositoryUrl: String,
+        normalizedRepository: NormalizedExtensionRepository
+    ): PluginInstallPreview {
+        val folderName = resolveExtensionFolderName(normalizedRepository)
+        if (folderName.isBlank()) {
+            throw IllegalStateException("插件仓库地址无法解析插件目录名。")
+        }
+        val probe = extensionCommandExecutor.previewPluginInstall(
+            folderName = folderName,
+            repository = normalizedRepository,
+            failureMessage = { failedLogPath -> "后端插件预检失败，请查看日志：$failedLogPath" }
+        )
+        return PluginInstallPreview(
+            repositoryUrl = repositoryUrl,
+            normalizedRepository = normalizedRepository,
+            folderName = folderName,
+            displayName = probe.displayName,
+            version = probe.version,
+            description = probe.description,
+            targetExists = pluginTargetExists(folderName)
+        )
+    }
+
     override fun install(
         preview: ExtensionInstallPreview,
         kind: ExtensionKind,
@@ -132,6 +203,45 @@ class ExtensionsRepositoryImpl(
             folderName = preview.folderName,
             repository = preview.normalizedRepository,
             kind = kind.toExtensionTargetKind(),
+            onProgress = onProgress,
+            failureMessage = failureMessage
+        )
+    }
+
+    override fun installPlugin(
+        preview: PluginInstallPreview,
+        onProgress: ((ExtensionRuntimeProgress) -> Unit)?,
+        failureMessage: (String) -> String
+    ) {
+        extensionCommandExecutor.installPlugin(
+            folderName = preview.folderName,
+            repository = preview.normalizedRepository,
+            onProgress = onProgress,
+            failureMessage = failureMessage
+        )
+    }
+
+    override fun updatePluginRepository(
+        folderName: String,
+        repository: NormalizedExtensionRepository,
+        onProgress: ((ExtensionRuntimeProgress) -> Unit)?,
+        failureMessage: (String) -> String
+    ) {
+        extensionCommandExecutor.updatePluginRepository(
+            folderName = folderName,
+            repository = repository,
+            onProgress = onProgress,
+            failureMessage = failureMessage
+        )
+    }
+
+    override fun installPluginDependencies(
+        folderName: String,
+        onProgress: ((ExtensionRuntimeProgress) -> Unit)?,
+        failureMessage: (String) -> String
+    ) {
+        extensionCommandExecutor.installPluginDependencies(
+            folderName = folderName,
             onProgress = onProgress,
             failureMessage = failureMessage
         )
@@ -165,6 +275,12 @@ class ExtensionsRepositoryImpl(
 
     private fun resolveExtensionFolderName(repository: NormalizedExtensionRepository): String {
         return extensionCommandExecutor.resolveExtensionFolderName(repository)
+    }
+
+    private fun pluginTargetExists(folderName: String): Boolean {
+        return localDataSource.loadInventory().installedPlugins.any { plugin ->
+            plugin.folderName.equals(folderName, ignoreCase = true)
+        }
     }
 
     private fun ExtensionKind.toExtensionTargetKind(): ExtensionTargetKind {

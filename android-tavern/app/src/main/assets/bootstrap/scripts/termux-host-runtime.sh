@@ -143,10 +143,16 @@ prepare_termux_host_runtime() {
 	export TMPDIR="$HOST_TMP_DIR"
 	export TMP="$HOST_TMP_DIR"
 	export TEMP="$HOST_TMP_DIR"
+	# npm lifecycle 默认 shell 来自 Termux 编译期 prefix，独立包名下会回到
+	# /data/data/com.termux/files/usr/bin/sh 并触发 EACCES；强制改用 APK native shell。
+	export SHELL="$TERMUX_SH_BIN"
+	export npm_config_script_shell="$TERMUX_SH_BIN"
+	export NPM_CONFIG_SCRIPT_SHELL="$TERMUX_SH_BIN"
 	export GIT_EXEC_PATH="${GIT_EXEC_PATH:-$HOST_TMP_DIR/git-core}"
 	export GIT_TEMPLATE_DIR="${GIT_TEMPLATE_DIR:-$HOST_PREFIX_DIR/share/git-core/templates}"
-	# Termux Git 编译期系统配置路径指向 com.termux；Android App 无权限读取时会让 clone/fetch 直接失败。
+	# Termux Git 编译期系统配置/属性路径指向 com.termux；Android App 无权限读取时会让 clone/fetch 报权限警告或失败。
 	export GIT_CONFIG_NOSYSTEM=1
+	export GIT_ATTR_NOSYSTEM=1
 	if [ -f "$HOST_PREFIX_DIR/etc/tls/cert.pem" ]; then
 		export SSL_CERT_FILE="$HOST_PREFIX_DIR/etc/tls/cert.pem"
 		export NODE_EXTRA_CA_CERTS="$HOST_PREFIX_DIR/etc/tls/cert.pem"

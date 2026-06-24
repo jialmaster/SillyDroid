@@ -151,7 +151,7 @@ sillydroid_run_npm_cli() {
 		return 127
 	fi
 	# 由 native node 读取 npm JS 入口，不从 app 私有可写目录直接 exec 脚本。
-	PREFIX="$HOST_PREFIX_DIR" command "$TERMUX_NODE_BIN" "$npm_cli" "$@"
+	PREFIX="$HOST_PREFIX_DIR" SHELL="$TERMUX_SH_BIN" npm_config_script_shell="$TERMUX_SH_BIN" NPM_CONFIG_SCRIPT_SHELL="$TERMUX_SH_BIN" command "$TERMUX_NODE_BIN" "$npm_cli" "$@"
 }
 
 sillydroid_run_npx_cli() {
@@ -160,7 +160,7 @@ sillydroid_run_npx_cli() {
 		printf '缺少 npx CLI：%s\n' "$npx_cli" >&2
 		return 127
 	fi
-	PREFIX="$HOST_PREFIX_DIR" command "$TERMUX_NODE_BIN" "$npx_cli" "$@"
+	PREFIX="$HOST_PREFIX_DIR" SHELL="$TERMUX_SH_BIN" npm_config_script_shell="$TERMUX_SH_BIN" NPM_CONFIG_SCRIPT_SHELL="$TERMUX_SH_BIN" command "$TERMUX_NODE_BIN" "$npx_cli" "$@"
 }
 
 npm() {
@@ -171,14 +171,26 @@ npx() {
 	sillydroid_run_npx_cli "$@"
 }
 
-export -f sillydroid_run_npm_cli sillydroid_run_npx_cli npm npx
+export -f \
+	sillydroid_canonical_path \
+	sillydroid_normalize_android_data_path \
+	sillydroid_format_path_alias \
+	sillydroid_prompt_path \
+	sillydroid_resolve_console_path \
+	cd \
+	sillydroid_run_npm_cli \
+	sillydroid_run_npx_cli \
+	npm \
+	npx
 
 bind 'set horizontal-scroll-mode off' 2>/dev/null || true
 shopt -s checkwinsize 2>/dev/null || true
 printf '\033[?7h'
 export PS1='$(sillydroid_prompt_path) > '
 EOF
-	exec "$TERMUX_CONSOLE_SHELL" --rcfile "$HOME/.sillydroid-bashrc" -i
+	# Termux bash 的编译期系统 rc 路径仍指向 /data/data/com.termux/files/usr，
+	# 独立包名下读取会报 Permission denied；这里跳过系统 rc，再显式加载宿主生成的 rc。
+	exec "$TERMUX_CONSOLE_SHELL" --noprofile --norc -c '. "$HOME/.sillydroid-bashrc"; exec "$SHELL" --noprofile --norc -O checkwinsize -i'
 fi
 
 printf '\033[?7h'
