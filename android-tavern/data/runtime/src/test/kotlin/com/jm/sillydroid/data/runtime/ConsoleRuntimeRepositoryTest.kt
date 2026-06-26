@@ -125,6 +125,13 @@ class ConsoleRuntimeRepositoryTest {
         assertTrue(shim.contains("rewriteShellArgs(command, args, options)"))
         assertTrue(shim.contains("childProcess.spawn"))
         assertTrue(shim.contains("childProcess.spawnSync"))
+        assertTrue(shim.contains("Third-party server plugins often pass a partial env"))
+        assertTrue(shim.contains("function mergeAndroidRuntimeEnv(env)"))
+        assertTrue(shim.contains("'PATH'"))
+        assertTrue(shim.contains("'GIT_EXEC_PATH'"))
+        assertTrue(shim.contains("'OPENSSL_CONF'"))
+        assertTrue(shim.contains("'SILLYDROID_HOST_COMMAND_PATH'"))
+        assertTrue(shim.contains("options = withAndroidRuntimeEnv(options)"))
         assertFalse(shim.contains("npm_config_optional"))
     }
 
