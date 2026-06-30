@@ -1737,6 +1737,7 @@ class ServerController(
     private val servicePort: Int,
     private val nodeMaxOldSpaceMb: Int,
     private val nodeMaxSemiSpaceMb: Int,
+    private val tavernServerFastLaunchEnabled: Boolean,
     private val tavernRuntimePatchEnabled: Boolean,
     private val tavernRuntimePatchDisabledModuleIds: Set<String>,
     private val tavernRuntimePatchSettingOverrides: RuntimePatchSettingOverrides,
@@ -1749,7 +1750,9 @@ class ServerController(
             // 0 表示自动；入口脚本仅在正数时才追加 --max-old-space-size。
             "TAVERN_NODE_MAX_OLD_SPACE_MB" to nodeMaxOldSpaceMb.toString(),
             // 0 表示自动；入口脚本仅在正数时才追加 --max-semi-space-size。
-            "TAVERN_NODE_MAX_SEMI_SPACE_MB" to nodeMaxSemiSpaceMb.toString()
+            "TAVERN_NODE_MAX_SEMI_SPACE_MB" to nodeMaxSemiSpaceMb.toString(),
+            // 快速启动只调整服务进程 PATH 中的宿主命令暴露范围，不改酒馆源码或 config.yaml。
+            "SILLYDROID_HOST_COMMAND_PROFILE" to if (tavernServerFastLaunchEnabled) "server-fast" else "full"
         )
         if (tavernRuntimePatchEnabled) {
             // 首版只暴露总开关；内部使用 performance 预设加载模块化 runtime patch。

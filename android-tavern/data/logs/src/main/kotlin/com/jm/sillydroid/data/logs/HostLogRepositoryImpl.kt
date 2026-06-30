@@ -125,7 +125,8 @@ class HostLogRepositoryImpl(context: Context) : HostLogRepository {
     }
 
     override suspend fun uploadCrashBundle(config: HostLogBundleUploadRequestConfig): HostLogBundleUploadResult {
-        // 自动崩溃上传只带默认非敏感日志集合，避免未经用户逐项确认时把酒馆聊天相关日志放进包里。
+        // 自动崩溃上传默认带酒馆服务启动片段，但 HostLogManager 会强制截到监听端口提示，
+        // 避免未经用户逐项确认时把后续聊天收发、请求访问等敏感运行日志放进包里。
         ApplicationExitInfoLogStore.refreshBlocking(appContext)
         val (archiveFile, _) = HostLogManager.exportCrashUploadBundleToCacheFile(
             context = appContext,
@@ -146,7 +147,8 @@ class HostLogRepositoryImpl(context: Context) : HostLogRepository {
         feedbackText: String?,
         attachments: List<HostLogBundleAttachment>
     ): HostLogBundleUploadResult {
-        // 用户反馈不是崩溃事故包，继续走轻量上传策略：默认不包含酒馆服务日志，并把图片放到 feedback/ 下。
+        // 用户反馈不是崩溃事故包，继续走轻量上传策略：酒馆服务日志只保留监听端口前的启动片段，
+        // 图片放到 feedback/ 下，后续聊天/请求日志仍不随默认反馈包上传。
         ApplicationExitInfoLogStore.refreshBlocking(appContext)
         val (archiveFile, _) = HostLogManager.exportCompactUploadBundleToCacheFile(
             context = appContext,

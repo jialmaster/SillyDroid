@@ -13,6 +13,7 @@ data class SettingsActivityUiState(
     val nodeMaxSemiSpaceMb: Int = 0,
     val backgroundOnlyModeEnabled: Boolean = false,
     val backgroundHealthCheckEnabled: Boolean = false,
+    val tavernServerFastLaunchEnabled: Boolean = true,
     val tavernRuntimePatchEnabled: Boolean = false,
     val tavernRuntimePatchDisabledModuleIds: Set<String> = emptySet(),
     val tavernRuntimePatchSettingOverrides: RuntimePatchSettingOverrides = emptyMap(),

@@ -64,6 +64,29 @@ install_termux_command_links() {
 	fi
 }
 
+install_termux_server_fast_command_links() {
+	link_dir="$1"
+	mkdir -p "$link_dir"
+	rm -f \
+		"$link_dir/node" \
+		"$link_dir/git" \
+		"$link_dir/curl" \
+		"$link_dir/sh" \
+		"$link_dir/bash" \
+		"$link_dir/npm" \
+		"$link_dir/npx" \
+		"$link_dir/remote-http" \
+		"$link_dir/remote-https" \
+		"$link_dir/remote-ftp" \
+		"$link_dir/remote-ftps"
+	ensure_symlink "$TERMUX_NODE_BIN" "$link_dir/node"
+	ensure_symlink "$TERMUX_CURL_BIN" "$link_dir/curl"
+	ensure_symlink "$TERMUX_SH_BIN" "$link_dir/sh"
+	if [ -n "${TERMUX_BASH_BIN:-}" ] && [ -f "$TERMUX_BASH_BIN" ]; then
+		ensure_symlink "$TERMUX_BASH_BIN" "$link_dir/bash"
+	fi
+}
+
 git_core_links_signature() {
 	printf 'layout=2|git=%s|remote-http=%s|git-core=%s' \
 		"$TERMUX_GIT_BIN" \
@@ -175,9 +198,19 @@ prepare_termux_host_runtime() {
 	fi
 
 	# Android 禁止从 app 私有可写目录直接 exec ELF；PATH 只暴露指向 APK nativeLibraryDir 的 symlink。
-	install_termux_command_links "$HOST_TMP_DIR/bin"
-	# git fetch/clone 会二次 exec remote helper，helper 同样必须从 APK nativeLibraryDir 进入。
-	install_git_core_links "$GIT_EXEC_PATH"
-	export SILLYDROID_HOST_COMMAND_PATH="$HOST_TMP_DIR/bin"
-	export PATH="$HOST_TMP_DIR/bin:$ANDROID_SYSTEM_PATH"
+	# Tavern 服务快速启动模式使用无 Git 命令目录，让上游启动期 Git 自动更新快速判定不可用；
+	# npm/simple-git 的 partial env 修复仍保留，完整模式或设置页终端仍可暴露完整 Git 环境。
+	case "${SILLYDROID_HOST_COMMAND_PROFILE:-full}" in
+		server-fast|no-git|fast)
+			install_termux_server_fast_command_links "$HOST_TMP_DIR/server-fast-bin"
+			export SILLYDROID_HOST_COMMAND_PATH="$HOST_TMP_DIR/server-fast-bin"
+			;;
+		*)
+			install_termux_command_links "$HOST_TMP_DIR/bin"
+			# git fetch/clone 会二次 exec remote helper，helper 同样必须从 APK nativeLibraryDir 进入。
+			install_git_core_links "$GIT_EXEC_PATH"
+			export SILLYDROID_HOST_COMMAND_PATH="$HOST_TMP_DIR/bin"
+			;;
+	esac
+	export PATH="$SILLYDROID_HOST_COMMAND_PATH:$ANDROID_SYSTEM_PATH"
 }

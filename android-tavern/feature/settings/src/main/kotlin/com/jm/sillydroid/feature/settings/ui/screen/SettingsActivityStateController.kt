@@ -25,6 +25,7 @@ class SettingsActivityStateController(
     private val floatingLogsSwitch: MaterialSwitch,
     private val backgroundOnlyModeSwitch: MaterialSwitch,
     private val backgroundHealthCheckSwitch: MaterialSwitch,
+    private val fastLaunchSwitch: MaterialSwitch,
     private val tavernRuntimePatchRow: View,
     private val tavernRuntimePatchConfigureButton: MaterialButton,
     private val tavernRuntimePatchSwitch: MaterialSwitch,
@@ -62,6 +63,18 @@ class SettingsActivityStateController(
                 Toast.makeText(
                     activity,
                     R.string.bootstrap_settings_host_service_restart_hint,
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+        fastLaunchSwitch.isChecked = initialState.tavernServerFastLaunchEnabled
+        fastLaunchSwitch.setOnCheckedChangeListener { _, isChecked ->
+            val changed = viewModel.setTavernServerFastLaunchEnabled(isChecked)
+            if (changed) {
+                onServiceRestartRequired()
+                Toast.makeText(
+                    activity,
+                    R.string.bootstrap_settings_host_fast_launch_restart_hint,
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -132,6 +145,9 @@ class SettingsActivityStateController(
         }
         if (backgroundHealthCheckSwitch.isChecked != state.backgroundHealthCheckEnabled) {
             backgroundHealthCheckSwitch.isChecked = state.backgroundHealthCheckEnabled
+        }
+        if (fastLaunchSwitch.isChecked != state.tavernServerFastLaunchEnabled) {
+            fastLaunchSwitch.isChecked = state.tavernServerFastLaunchEnabled
         }
         if (tavernRuntimePatchSwitch.isChecked != state.tavernRuntimePatchEnabled) {
             tavernRuntimePatchSwitch.isChecked = state.tavernRuntimePatchEnabled

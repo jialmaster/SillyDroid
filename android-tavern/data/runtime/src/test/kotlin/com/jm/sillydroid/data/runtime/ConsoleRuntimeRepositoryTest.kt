@@ -103,6 +103,9 @@ class ConsoleRuntimeRepositoryTest {
         assertTrue(script.contains("npm-lifecycle-android-shim.cjs"))
         assertTrue(script.contains("""npm_lifecycle_android_shim="${'$'}(cd "${'$'}BOOTSTRAP_ROOT/scripts" 2>/dev/null && pwd -P)/npm-lifecycle-android-shim.cjs""""))
         assertTrue(script.contains("""NODE_OPTIONS="--require ${'$'}npm_lifecycle_android_shim ${'$'}{NODE_OPTIONS:-}""""))
+        assertTrue(script.contains("SILLYDROID_HOST_COMMAND_PROFILE"))
+        assertTrue(script.contains("install_termux_server_fast_command_links"))
+        assertTrue(script.contains("""export SILLYDROID_HOST_COMMAND_PATH="${'$'}HOST_TMP_DIR/server-fast-bin""""))
         assertTrue(script.contains("""export SHELL="${'$'}TERMUX_SH_BIN""""))
         assertTrue(script.contains("""export npm_config_script_shell="${'$'}TERMUX_SH_BIN""""))
         assertTrue(script.contains("""export NPM_CONFIG_SCRIPT_SHELL="${'$'}TERMUX_SH_BIN""""))
@@ -133,6 +136,21 @@ class ConsoleRuntimeRepositoryTest {
         assertTrue(shim.contains("'SILLYDROID_HOST_COMMAND_PATH'"))
         assertTrue(shim.contains("options = withAndroidRuntimeEnv(options)"))
         assertFalse(shim.contains("npm_config_optional"))
+    }
+
+    @Test
+    fun `server startup defaults to fast host command profile without changing tavern config`() {
+        val startServerScript = resolveAndroidProjectFile(
+            "app/src/main/assets/bootstrap/scripts/start-server.sh"
+        ).readText()
+        val entrypointScript = resolveAndroidProjectFile(
+            "app/src/main/assets/bootstrap/scripts/tavern-entrypoint.sh"
+        ).readText()
+
+        assertTrue(startServerScript.contains("""SILLYDROID_HOST_COMMAND_PROFILE="${'$'}{SILLYDROID_HOST_COMMAND_PROFILE:-server-fast}""""))
+        assertTrue(startServerScript.contains("export SILLYDROID_HOST_COMMAND_PROFILE"))
+        assertFalse(entrypointScript.contains("enableServerPluginsAutoUpdate"))
+        assertFalse(entrypointScript.contains("config.yaml.sillydroid-fast"))
     }
 
     @Test

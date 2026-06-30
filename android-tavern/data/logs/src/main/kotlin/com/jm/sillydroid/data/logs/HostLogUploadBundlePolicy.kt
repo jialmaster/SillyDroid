@@ -4,6 +4,7 @@ import java.io.File
 
 internal object HostLogUploadBundlePolicy {
     private const val tavernServerLogPrefix = "sillydroid-server-"
+    private const val tavernServerOpenUrlPrefix = "Go to:"
     const val maxCompactLogArchiveBytes: Long = 10L * 1024L * 1024L
     const val tavernServerHeadLines = 50
     const val compactMaxBytes = 96 * 1024
@@ -12,7 +13,6 @@ internal object HostLogUploadBundlePolicy {
 
     fun defaultUploadRelativePaths(logFiles: List<File>, logsDir: File): Set<String> {
         return logFiles
-            .filterNot { file -> isTavernServerLog(file.name) }
             .map { file -> file.relativeTo(logsDir).invariantSeparatorsPath }
             .toSet()
     }
@@ -23,6 +23,7 @@ internal object HostLogUploadBundlePolicy {
         }
         var lineCount = 0
         var truncated = false
+        var reachedOpenUrlLine = false
         val content = buildString {
             logFile.bufferedReader(Charsets.UTF_8).useLines { lines ->
                 for (line in lines) {
@@ -35,6 +36,13 @@ internal object HostLogUploadBundlePolicy {
                     }
                     append(line)
                     lineCount += 1
+                    if (reachedOpenUrlLine && line.startsWith("===")) {
+                        truncated = true
+                        break
+                    }
+                    if (line.startsWith(tavernServerOpenUrlPrefix) && line.contains("to open SillyTavern")) {
+                        reachedOpenUrlLine = true
+                    }
                 }
             }
         }
@@ -42,7 +50,7 @@ internal object HostLogUploadBundlePolicy {
             return content
         }
         return buildString {
-            appendLine("酒馆服务日志可能包含聊天收发内容，上传包只保留开头 $maxLines 行。")
+            appendLine("酒馆服务日志可能包含聊天收发内容，上传包只保留服务监听完成前的启动片段。")
             appendLine()
             append(content)
         }

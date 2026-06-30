@@ -26,6 +26,7 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         private const val browserPageZoomPercentKey = "browser-page-zoom-percent"
         private const val launchWebViewOnReadyKey = "launch-webview-on-ready"
         private const val backgroundHealthCheckEnabledKey = "background-health-check-enabled"
+        private const val tavernServerFastLaunchEnabledKey = "tavern-server-fast-launch-enabled"
         private const val tavernRuntimePatchEnabledKey = "tavern-runtime-patch-enabled"
         private const val tavernRuntimePatchDisabledModuleIdsKey = "tavern-runtime-patch-disabled-module-ids"
         private const val tavernRuntimePatchSettingOverridesKey = "tavern-runtime-patch-setting-overrides"
@@ -153,6 +154,14 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         set(value) {
             preferences.edit()
                 .putBoolean(backgroundHealthCheckEnabledKey, value)
+                .apply()
+        }
+
+    override var tavernServerFastLaunchEnabled: Boolean
+        get() = preferences.getBoolean(tavernServerFastLaunchEnabledKey, true)
+        set(value) {
+            preferences.edit()
+                .putBoolean(tavernServerFastLaunchEnabledKey, value)
                 .apply()
         }
 

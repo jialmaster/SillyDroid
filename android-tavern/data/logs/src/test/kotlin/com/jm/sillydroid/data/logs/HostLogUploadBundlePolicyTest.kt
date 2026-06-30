@@ -9,7 +9,7 @@ import org.junit.Test
 
 class HostLogUploadBundlePolicyTest {
     @Test
-    fun defaultUploadRelativePathsExcludeTavernServerLogs() {
+    fun defaultUploadRelativePathsIncludeTavernServerLogsForSafeStartupSlice() {
         val logsDir = createTempDirectory(prefix = "host-log-upload-default").toFile()
         try {
             val startup = File(logsDir, "startup-20260605-010101-001.log").apply { writeText("startup") }
@@ -24,6 +24,7 @@ class HostLogUploadBundlePolicyTest {
             assertEquals(
                 setOf(
                     "startup-20260605-010101-001.log",
+                    "sillydroid-server-20260605-010101-001.log",
                     "host-diagnostics-20260605-010101-001.log"
                 ),
                 relativePaths
@@ -53,7 +54,8 @@ class HostLogUploadBundlePolicyTest {
             assertEquals(
                 setOf(
                     HostLogManager.exitInfoLogFileName,
-                    "${HostLogManager.exitInfoTraceDirectoryName}/history-0-1000-pid-123-reason-crash_native-webview.trace"
+                    "${HostLogManager.exitInfoTraceDirectoryName}/history-0-1000-pid-123-reason-crash_native-webview.trace",
+                    "sillydroid-server-20260605-010101-001.log"
                 ),
                 relativePaths
             )
@@ -63,7 +65,43 @@ class HostLogUploadBundlePolicyTest {
     }
 
     @Test
-    fun compactTavernServerLogContentKeepsOnlyFirstFiftyLines() {
+    fun compactTavernServerLogContentStopsAfterOpenUrlSeparator() {
+        val logsDir = createTempDirectory(prefix = "host-log-upload-tavern-listen").toFile()
+        try {
+            val tavern = File(logsDir, "sillydroid-server-20260605-010101-001.log").apply {
+                writeText(
+                    listOf(
+                        "SillyTavern 1.18.0",
+                        "Compiling frontend libraries...",
+                        "webpack 5.105.4 compiled successfully in 2720 ms",
+                        "SillyTavern is listening on IPv4: 0.0.0.0:8000",
+                        "",
+                        "=================================================",
+                        "",
+                        "Go to: http://127.0.0.1:8000/ to open SillyTavern",
+                        "",
+                        "=================================================",
+                        "",
+                        "New connection from 127.0.0.1; User Agent: Dalvik/2.1.0",
+                        "chat payload should not be uploaded"
+                    ).joinToString(separator = "\n")
+                )
+            }
+
+            val content = HostLogUploadBundlePolicy.compactTavernServerLogContent(tavern)
+
+            assertTrue(content.contains("上传包只保留服务监听完成前的启动片段"))
+            assertTrue(content.contains("SillyTavern is listening on IPv4: 0.0.0.0:8000"))
+            assertTrue(content.contains("Go to: http://127.0.0.1:8000/ to open SillyTavern"))
+            assertFalse(content.contains("New connection from 127.0.0.1"))
+            assertFalse(content.contains("chat payload should not be uploaded"))
+        } finally {
+            logsDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun compactTavernServerLogContentFallsBackToLineLimitWhenOpenUrlIsMissing() {
         val logsDir = createTempDirectory(prefix = "host-log-upload-tavern-head").toFile()
         try {
             val tavern = File(logsDir, "sillydroid-server-20260605-010101-001.log").apply {
@@ -72,7 +110,7 @@ class HostLogUploadBundlePolicyTest {
 
             val content = HostLogUploadBundlePolicy.compactTavernServerLogContent(tavern)
 
-            assertTrue(content.contains("上传包只保留开头 50 行"))
+            assertTrue(content.contains("上传包只保留服务监听完成前的启动片段"))
             assertTrue(content.contains("line-1"))
             assertTrue(content.contains("line-50"))
             assertFalse(content.contains("line-51"))

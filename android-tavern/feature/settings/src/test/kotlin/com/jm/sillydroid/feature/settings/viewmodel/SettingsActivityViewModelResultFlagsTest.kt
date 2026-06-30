@@ -104,6 +104,22 @@ class SettingsActivityViewModelResultFlagsTest {
     }
 
     @Test
+    fun `server fast launch defaults on and persists toggle`() {
+        val repository = FakeHostPreferencesRepository()
+        val viewModel = SettingsActivityViewModel(repository)
+
+        assertTrue(viewModel.uiState.value.tavernServerFastLaunchEnabled)
+
+        val changed = viewModel.setTavernServerFastLaunchEnabled(false)
+        val unchanged = viewModel.setTavernServerFastLaunchEnabled(false)
+
+        assertTrue(changed)
+        assertFalse(unchanged)
+        assertFalse(repository.tavernServerFastLaunchEnabled)
+        assertFalse(viewModel.uiState.value.tavernServerFastLaunchEnabled)
+    }
+
+    @Test
     fun `runtime patch module toggle persists disabled ids`() {
         val repository = FakeHostPreferencesRepository()
         val viewModel = SettingsActivityViewModel(repository)
@@ -149,6 +165,7 @@ class SettingsActivityViewModelResultFlagsTest {
         override var browserPageZoomPercent: Int = 100
         override var launchWebViewOnReady: Boolean = true
         override var backgroundHealthCheckEnabled: Boolean = false
+        override var tavernServerFastLaunchEnabled: Boolean = true
         override var tavernRuntimePatchEnabled: Boolean = false
         override var tavernRuntimePatchDisabledModuleIds: Set<String> = emptySet()
         override var tavernRuntimePatchSettingOverrides: RuntimePatchSettingOverrides = emptyMap()

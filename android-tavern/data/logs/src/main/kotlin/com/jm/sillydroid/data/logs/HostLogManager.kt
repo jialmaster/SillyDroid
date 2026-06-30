@@ -546,7 +546,8 @@ object HostLogManager {
         compactForUpload: Boolean = false,
         feedbackText: String? = null,
         attachments: List<HostLogBundleAttachment> = emptyList(),
-        maxArchiveSizeBytes: Long? = null
+        maxArchiveSizeBytes: Long? = null,
+        compactTavernServerLogs: Boolean = compactForUpload
     ): Pair<File, HostLogBundleExportResult> {
         val cacheDir = File(context.applicationContext.cacheDir, "host-log-upload").apply { mkdirs() }
         val targetFile = File(cacheDir, bundleFileName)
@@ -560,6 +561,7 @@ object HostLogManager {
                     bundleFileName = bundleFileName,
                     includedRelativePaths = includedRelativePaths,
                     compactForUpload = compactForUpload,
+                    compactTavernServerLogs = compactTavernServerLogs,
                     feedbackText = feedbackText,
                     attachments = attachments
                 )
@@ -570,6 +572,7 @@ object HostLogManager {
                     targetFile = targetFile,
                     bundleFileName = bundleFileName,
                     includedRelativePaths = includedRelativePaths,
+                    compactTavernServerLogs = compactTavernServerLogs,
                     feedbackText = feedbackText,
                     attachments = attachments,
                     logLimitBytes = logLimitBytes
@@ -593,6 +596,7 @@ object HostLogManager {
         targetFile: File,
         bundleFileName: String,
         includedRelativePaths: Set<String>?,
+        compactTavernServerLogs: Boolean,
         feedbackText: String?,
         attachments: List<HostLogBundleAttachment>,
         logLimitBytes: Long
@@ -632,6 +636,7 @@ object HostLogManager {
                 output = output,
                 bundleFileName = bundleFileName,
                 compactForUpload = true,
+                compactTavernServerLogs = compactTavernServerLogs,
                 feedbackText = feedbackText,
                 attachments = attachments,
                 logFilesOverride = prioritizedLogFiles.take(selectedLogCount)
@@ -681,7 +686,8 @@ object HostLogManager {
         return exportToCacheFile(
             context = context,
             includedRelativePaths = includedRelativePaths,
-            compactForUpload = false
+            compactForUpload = false,
+            compactTavernServerLogs = true
         )
     }
 
@@ -1110,6 +1116,7 @@ object HostLogManager {
         bundleFileName: String,
         includedRelativePaths: Set<String>? = null,
         compactForUpload: Boolean = false,
+        compactTavernServerLogs: Boolean = compactForUpload,
         feedbackText: String? = null,
         attachments: List<HostLogBundleAttachment> = emptyList(),
         logFilesOverride: List<File>? = null
@@ -1136,7 +1143,7 @@ object HostLogManager {
             logFiles.forEach { logFile ->
                 val relativePath = logFile.relativeTo(logsDir).invariantSeparatorsPath
                 zipOut.putNextEntry(ZipEntry(relativePath))
-                if (compactForUpload && logFile.extension.equals("log", ignoreCase = true)) {
+                if (shouldWriteCompactUploadLogEntry(compactForUpload, compactTavernServerLogs, logFile)) {
                     writeCompactUploadLogEntry(context, logFile, zipOut)
                 } else {
                     logFile.inputStream().use { input ->
@@ -1170,6 +1177,17 @@ object HostLogManager {
             bundleFileName = bundleFileName,
             logFileCount = logFiles.size
         )
+    }
+
+    private fun shouldWriteCompactUploadLogEntry(
+        compactForUpload: Boolean,
+        compactTavernServerLogs: Boolean,
+        logFile: File
+    ): Boolean {
+        if (!logFile.extension.equals("log", ignoreCase = true)) {
+            return false
+        }
+        return compactForUpload || (compactTavernServerLogs && HostLogUploadBundlePolicy.isTavernServerLog(logFile.name))
     }
 
     private fun writeCompactUploadLogEntry(context: Context, logFile: File, output: OutputStream) {

@@ -43,6 +43,8 @@ interface HostPreferencesRepository {
     var browserPageZoomPercent: Int
     var launchWebViewOnReady: Boolean
     var backgroundHealthCheckEnabled: Boolean
+    // Tavern 服务快速启动模式只调整宿主暴露给服务进程的命令环境，不改写酒馆源码或 config.yaml。
+    var tavernServerFastLaunchEnabled: Boolean
     // 是否启用 SillyDroid 对 Tavern 的运行时 patch 预设；默认关，开启后需重启本地服务生效。
     var tavernRuntimePatchEnabled: Boolean
     // 用户在 runtime patch 总开关开启后，手动关闭的模块 id；默认空表示使用预设默认模块。

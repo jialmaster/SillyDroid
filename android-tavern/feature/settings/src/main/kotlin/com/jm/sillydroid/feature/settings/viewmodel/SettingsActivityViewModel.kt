@@ -28,6 +28,7 @@ class SettingsActivityViewModel(
             nodeMaxSemiSpaceMb = hostPreferencesRepository.nodeMaxSemiSpaceMb,
             backgroundOnlyModeEnabled = !hostPreferencesRepository.launchWebViewOnReady,
             backgroundHealthCheckEnabled = hostPreferencesRepository.backgroundHealthCheckEnabled,
+            tavernServerFastLaunchEnabled = hostPreferencesRepository.tavernServerFastLaunchEnabled,
             tavernRuntimePatchEnabled = hostPreferencesRepository.tavernRuntimePatchEnabled,
             tavernRuntimePatchDisabledModuleIds = hostPreferencesRepository.tavernRuntimePatchDisabledModuleIds,
             tavernRuntimePatchSettingOverrides = hostPreferencesRepository.tavernRuntimePatchSettingOverrides,
@@ -115,6 +116,16 @@ class SettingsActivityViewModel(
             hostPreferencesRepository.backgroundHealthCheckEnabled = enabled
         }
         _uiState.update { current -> current.copy(backgroundHealthCheckEnabled = enabled) }
+        return changed
+    }
+
+    fun setTavernServerFastLaunchEnabled(enabled: Boolean): Boolean {
+        // 快速启动模式只切换服务进程的宿主命令 profile；需要重启 Node 服务后 PATH 才会重建。
+        val changed = hostPreferencesRepository.tavernServerFastLaunchEnabled != enabled
+        if (changed) {
+            hostPreferencesRepository.tavernServerFastLaunchEnabled = enabled
+        }
+        _uiState.update { current -> current.copy(tavernServerFastLaunchEnabled = enabled) }
         return changed
     }
 

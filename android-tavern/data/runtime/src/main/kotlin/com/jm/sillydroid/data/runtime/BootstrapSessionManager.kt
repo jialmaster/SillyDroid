@@ -514,6 +514,7 @@ class BootstrapSessionManager(
                 servicePort = servicePort,
                 nodeMaxOldSpaceMb = hostPreferences.nodeMaxOldSpaceMb,
                 nodeMaxSemiSpaceMb = hostPreferences.nodeMaxSemiSpaceMb,
+                tavernServerFastLaunchEnabled = hostPreferences.tavernServerFastLaunchEnabled,
                 tavernRuntimePatchEnabled = hostPreferences.tavernRuntimePatchEnabled,
                 tavernRuntimePatchDisabledModuleIds = hostPreferences.tavernRuntimePatchDisabledModuleIds,
                 tavernRuntimePatchSettingOverrides = hostPreferences.tavernRuntimePatchSettingOverrides,

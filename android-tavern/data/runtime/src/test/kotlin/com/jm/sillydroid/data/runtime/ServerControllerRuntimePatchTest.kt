@@ -23,6 +23,7 @@ class ServerControllerRuntimePatchTest {
                 servicePort = 8000,
                 nodeMaxOldSpaceMb = 3072,
                 nodeMaxSemiSpaceMb = 64,
+                tavernServerFastLaunchEnabled = true,
                 tavernRuntimePatchEnabled = false,
                 tavernRuntimePatchDisabledModuleIds = setOf("character-all-limited-concurrency"),
                 tavernRuntimePatchSettingOverrides = mapOf(
@@ -34,6 +35,7 @@ class ServerControllerRuntimePatchTest {
             val environment = launcher.requests.single().environment
             assertEquals("3072", environment["TAVERN_NODE_MAX_OLD_SPACE_MB"])
             assertEquals("64", environment["TAVERN_NODE_MAX_SEMI_SPACE_MB"])
+            assertEquals("server-fast", environment["SILLYDROID_HOST_COMMAND_PROFILE"])
             assertFalse(environment.containsKey("SILLYDROID_TAVERN_PATCH_PRESET"))
             assertFalse(environment.containsKey("SILLYDROID_TAVERN_PATCH_DISABLED_MODULES"))
             assertFalse(environment.containsKey("SILLYDROID_TAVERN_PATCH_SETTINGS"))
@@ -55,6 +57,7 @@ class ServerControllerRuntimePatchTest {
                 servicePort = 8000,
                 nodeMaxOldSpaceMb = 4096,
                 nodeMaxSemiSpaceMb = 128,
+                tavernServerFastLaunchEnabled = true,
                 tavernRuntimePatchEnabled = true,
                 tavernRuntimePatchDisabledModuleIds = setOf("character-all-limited-concurrency"),
                 tavernRuntimePatchSettingOverrides = mapOf(
@@ -66,12 +69,39 @@ class ServerControllerRuntimePatchTest {
             val environment = launcher.requests.single().environment
             assertEquals("4096", environment["TAVERN_NODE_MAX_OLD_SPACE_MB"])
             assertEquals("128", environment["TAVERN_NODE_MAX_SEMI_SPACE_MB"])
+            assertEquals("server-fast", environment["SILLYDROID_HOST_COMMAND_PROFILE"])
             assertEquals("performance", environment["SILLYDROID_TAVERN_PATCH_PRESET"])
             assertEquals("character-all-limited-concurrency", environment["SILLYDROID_TAVERN_PATCH_DISABLED_MODULES"])
             assertEquals(
                 """{"character-all-limited-concurrency":{"concurrency":"4"}}""",
                 environment["SILLYDROID_TAVERN_PATCH_SETTINGS"]
             )
+        } finally {
+            rootDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `start can opt into full host command profile for server git integration`() {
+        val rootDirectory = createServerControllerTempDirectory(prefix = "full-host-commands")
+        try {
+            val paths = createServerControllerHostPaths(rootDirectory)
+            val launcher = RuntimePatchRecordingLinuxRuntimeLauncher(paths)
+
+            ServerController(
+                launcher = launcher,
+                paths = paths,
+                servicePort = 8000,
+                nodeMaxOldSpaceMb = 0,
+                nodeMaxSemiSpaceMb = 0,
+                tavernServerFastLaunchEnabled = false,
+                tavernRuntimePatchEnabled = false,
+                tavernRuntimePatchDisabledModuleIds = emptySet(),
+                tavernRuntimePatchSettingOverrides = emptyMap(),
+                logFileName = "server.log"
+            ).start()
+
+            assertEquals("full", launcher.requests.single().environment["SILLYDROID_HOST_COMMAND_PROFILE"])
         } finally {
             rootDirectory.deleteRecursively()
         }

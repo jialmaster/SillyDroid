@@ -63,6 +63,9 @@
     <string name="bootstrap_settings_host_background_only_mode_summary">打开为纯后台模式，不提供 App 内部浏览器功能；服务就绪后会自动在系统浏览器打开。</string>
     <string name="bootstrap_settings_host_background_health_check_title">后台检查</string>
     <string name="bootstrap_settings_host_background_health_check_summary">后台检测服务和浏览器的可用性。</string>
+    <string name="bootstrap_settings_host_fast_launch_title">快速启动模式</string>
+    <string name="bootstrap_settings_host_fast_launch_summary">启动酒馆时隐藏 Git 等外部命令，跳过后端插件自动更新；不改酒馆配置，手动安装/更新仍可使用完整 Git 环境。</string>
+    <string name="bootstrap_settings_host_fast_launch_restart_hint">快速启动模式已更新，重启服务后生效。</string>
     <string name="bootstrap_settings_host_floating_logs_title">日志球</string>
     <string name="bootstrap_settings_host_floating_logs_summary">悬浮工具球，包含实时查看日志，以及部分快捷功能。</string>
     <string name="bootstrap_settings_host_debug_diagnostics_title">调试模式</string>
