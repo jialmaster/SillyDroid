@@ -273,7 +273,9 @@ object HostLogManager {
                     file.extension.equals("log", ignoreCase = true) &&
                     (
                         isCurrentSessionHostLogFileName(context, file.name) ||
-                            file.name.lowercase(Locale.ROOT) in visibleFixedLogFileNames
+                            file.name.lowercase(Locale.ROOT) in visibleFixedLogFileNames ||
+                            // 扩展/插件维护命令不带启动会话号；只把已有内容的命令日志补进日志 Tab。
+                            (file.length() > 0L && HostLogExportPlanner.isVisibleInLogTab(file.name))
                         )
             }
             .map { file ->

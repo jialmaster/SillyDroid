@@ -13,6 +13,10 @@ import com.jm.sillydroid.domain.extensions.ExtensionDirectoriesProvider
 import java.io.File
 import org.json.JSONObject
 
+/**
+ * 读取本机已安装扩展/后端插件清单，只负责把磁盘上的插件元数据转换为设置页模型。
+ * 后端插件的 package.json 仅代表 npm 依赖安装能力，不能作为插件目录是否有效的必选契约。
+ */
 class ExtensionsLocalDataSource(
     private val directoriesProvider: ExtensionDirectoriesProvider
 ) {
@@ -189,6 +193,9 @@ class ExtensionsLocalDataSource(
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { extension -> extension.displayName })
     }
 
+    /**
+     * 扫描 server/plugins 目录；manifest.json 用于展示元数据，package.json 只用于 npm 与仓库字段补充。
+     */
     private fun loadInstalledPlugins(directories: ExtensionDirectories): List<ManagedPlugin> {
         val pluginsRoot = directories.serverPluginsDir
         if (!pluginsRoot.exists()) {
@@ -199,16 +206,17 @@ class ExtensionsLocalDataSource(
             .orEmpty()
             .filter { directory -> directory.isDirectory }
             .map { directory ->
+                val manifestMetadata = readPluginManifestMetadata(directory)
                 val packageFile = File(directory, "package.json")
                 if (!packageFile.exists()) {
                     return@map ManagedPlugin(
                         folderName = directory.name,
-                        displayName = directory.name,
-                        version = null,
-                        description = null,
-                        repositoryUrl = null,
-                        packageHealthy = false,
-                        packageMessage = "package.json 缺失。"
+                        displayName = manifestMetadata?.displayName ?: directory.name,
+                        version = manifestMetadata?.version,
+                        description = manifestMetadata?.description,
+                        repositoryUrl = manifestMetadata?.repositoryUrl ?: readGitOriginUrl(directory),
+                        packageHealthy = true,
+                        packageMessage = null
                     )
                 }
 
@@ -216,26 +224,53 @@ class ExtensionsLocalDataSource(
                     val packageJson = JSONObject(packageFile.readText())
                     ManagedPlugin(
                         folderName = directory.name,
-                        displayName = packageJson.optString("name").ifBlank { directory.name },
-                        version = packageJson.optString("version").ifBlank { null },
-                        description = packageJson.optString("description").ifBlank { null },
-                        repositoryUrl = resolvePackageRepositoryUrl(packageJson) ?: readGitOriginUrl(directory),
+                        displayName = packageJson.optMeaningfulString("name")
+                            ?: manifestMetadata?.displayName
+                            ?: directory.name,
+                        version = packageJson.optMeaningfulString("version") ?: manifestMetadata?.version,
+                        description = packageJson.optMeaningfulString("description") ?: manifestMetadata?.description,
+                        repositoryUrl = resolvePackageRepositoryUrl(packageJson)
+                            ?: manifestMetadata?.repositoryUrl
+                            ?: readGitOriginUrl(directory),
                         packageHealthy = true,
                         packageMessage = null
                     )
                 }.getOrElse {
                     ManagedPlugin(
                         folderName = directory.name,
-                        displayName = directory.name,
-                        version = null,
-                        description = null,
-                        repositoryUrl = null,
+                        displayName = manifestMetadata?.displayName ?: directory.name,
+                        version = manifestMetadata?.version,
+                        description = manifestMetadata?.description,
+                        repositoryUrl = manifestMetadata?.repositoryUrl ?: readGitOriginUrl(directory),
                         packageHealthy = false,
                         packageMessage = "package.json 格式无效。"
                     )
                 }
             }
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { plugin -> plugin.displayName })
+    }
+
+    /**
+     * 读取后端插件 manifest 展示字段；manifest 可选，失败时不阻断纯后端插件目录展示。
+     */
+    private fun readPluginManifestMetadata(directory: File): PluginManifestMetadata? {
+        val manifestFile = File(directory, "manifest.json")
+        if (!manifestFile.isFile) {
+            return null
+        }
+
+        return runCatching {
+            val manifest = JSONObject(manifestFile.readText())
+            PluginManifestMetadata(
+                displayName = manifest.optMeaningfulString("display_name")
+                    ?: manifest.optMeaningfulString("name"),
+                version = manifest.optMeaningfulString("version"),
+                description = manifest.optMeaningfulString("description"),
+                repositoryUrl = manifest.optMeaningfulString("homePage")
+                    ?: manifest.optMeaningfulString("homepage")
+                    ?: resolvePackageRepositoryUrl(manifest)
+            )
+        }.getOrNull()
     }
 
     private fun resolvePackageRepositoryUrl(packageJson: JSONObject): String? {
@@ -369,4 +404,15 @@ class ExtensionsLocalDataSource(
         }
         return sourceDirectory
     }
+}
+
+private data class PluginManifestMetadata(
+    val displayName: String?,
+    val version: String?,
+    val description: String?,
+    val repositoryUrl: String?
+)
+
+private fun JSONObject.optMeaningfulString(key: String): String? {
+    return optString(key).trim().ifBlank { null }
 }

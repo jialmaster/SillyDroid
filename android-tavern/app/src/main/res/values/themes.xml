@@ -27,6 +27,9 @@
         <item name="android:editTextStyle">@style/Widget.SillyDroid.SettingsTextInputEditText</item>
         <item name="editTextStyle">@style/Widget.SillyDroid.SettingsTextInputEditText</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.SillyDroid.MaterialAlertDialog.Material3</item>
+        <!-- TabLayout reads this during inflate. Material3's default uses pathData,
+             which crashes on some Android 13/16 builds while parsing the initial M command. -->
+        <item name="motionEasingEmphasizedInterpolator">@interpolator/sillydroid_settings_emphasized_motion</item>
     </style>
 
     <!--

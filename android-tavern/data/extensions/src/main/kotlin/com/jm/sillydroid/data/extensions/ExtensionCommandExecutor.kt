@@ -28,6 +28,10 @@ data class PluginInstallProbe(
     val description: String?
 )
 
+/**
+ * 负责把设置页里的扩展、后端插件维护操作转换为宿主 Node 命令。
+ * 允许做仓库克隆、预检、安装、更新与依赖安装；不允许把可选元数据文件提升为所有插件的必选契约。
+ */
 class ExtensionCommandExecutor(
     private val commandRunner: ExtensionCommandRunner,
     private val remoteManifestDataSource: RemoteManifestDataSource
@@ -322,6 +326,10 @@ class ExtensionCommandExecutor(
         }
     }
 
+    /**
+     * 生成安装/更新仓库命令；前端扩展必须有 manifest，后端插件允许没有 package.json。
+     * 后端插件的 package.json 只表示需要 npm install，不是插件仓库是否有效的必选契约。
+     */
     private fun repositoryInstallCommand(): String {
         return """
             import fs from 'node:fs';
@@ -375,16 +383,8 @@ class ExtensionCommandExecutor(
                 writeProgress({ step: 'validate', indeterminate: true });
                 const manifestPath = path.join(tempDir, 'manifest.json');
                 const packagePath = path.join(tempDir, 'package.json');
-                if (targetKind === 'SERVER_PLUGIN' && !fs.existsSync(packagePath)) {
-                    throw new Error('package.json not found at ' + packagePath);
-                }
-
                 if (targetKind !== 'SERVER_PLUGIN' && !fs.existsSync(manifestPath)) {
                     throw new Error('Manifest file not found at ' + manifestPath);
-                }
-
-                if (runNpmInstall && !fs.existsSync(packagePath)) {
-                    throw new Error('package.json not found at ' + packagePath);
                 }
 
                 if (fs.existsSync(manifestPath)) {
@@ -517,6 +517,9 @@ class ExtensionCommandExecutor(
         """.trimIndent()
     }
 
+    /**
+     * 生成后端插件预检命令；package.json 与 manifest.json 都只是展示/依赖元数据，不是后端插件必选文件。
+     */
     private fun pluginInstallPreviewCommand(): String {
         return """
             import fs from 'node:fs';
@@ -560,20 +563,40 @@ class ExtensionCommandExecutor(
 
                 writeProgress({ step: 'validating', indeterminate: true });
                 const packagePath = path.join(tempDir, 'package.json');
-                if (!fs.existsSync(packagePath)) {
-                    throw new Error('后端插件仓库根目录缺少 package.json。');
+                const manifestPath = path.join(tempDir, 'manifest.json');
+                let packageJson = null;
+                let manifestJson = null;
+                if (fs.existsSync(packagePath)) {
+                    packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+                }
+                if (fs.existsSync(manifestPath)) {
+                    manifestJson = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
                 }
 
-                const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
-                const displayName = typeof packageJson.name === 'string' && packageJson.name.trim()
-                    ? packageJson.name.trim()
-                    : path.basename(repoUrl).replace(/\.git$/i, '');
-                const version = typeof packageJson.version === 'string' && packageJson.version.trim()
-                    ? packageJson.version.trim()
-                    : null;
-                const description = typeof packageJson.description === 'string' && packageJson.description.trim()
-                    ? packageJson.description.trim()
-                    : null;
+                function readString(source, keys) {
+                    if (!source) {
+                        return null;
+                    }
+                    for (const key of keys) {
+                        const value = source[key];
+                        if (typeof value === 'string' && value.trim()) {
+                            return value.trim();
+                        }
+                    }
+                    return null;
+                }
+
+                const fallbackName = path.basename(repoUrl).replace(/\.git$/i, '');
+                const displayName =
+                    readString(packageJson, ['name']) ||
+                    readString(manifestJson, ['display_name', 'name']) ||
+                    fallbackName;
+                const version =
+                    readString(packageJson, ['version']) ||
+                    readString(manifestJson, ['version']);
+                const description =
+                    readString(packageJson, ['description']) ||
+                    readString(manifestJson, ['description']);
                 console.log('SILLYDROID_PLUGIN_INSTALL_PREVIEW=' + JSON.stringify({ displayName, version, description }));
                 writeProgress({ step: 'completed', loaded: 1, total: 1 });
             } finally {

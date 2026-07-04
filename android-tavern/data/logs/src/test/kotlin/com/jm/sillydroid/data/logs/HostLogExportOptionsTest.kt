@@ -117,4 +117,47 @@ class HostLogExportOptionsTest {
             logsDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun buildExportOptionsGroupsPluginMaintenanceLogs() {
+        val logsDir = createTempDirectory(prefix = "host-log-export-plugin-maintenance").toFile()
+        try {
+            val previewLog = File(logsDir, "plugin-preview-auto-continue-1783171329475.log").apply { writeText("preview") }
+            val installLog = File(logsDir, "plugin-install-auto-continue-1783171329476.log").apply { writeText("install") }
+            val updateLog = File(logsDir, "repository-update-check-auto-continue-1783171329477.log").apply { writeText("update") }
+            val npmLog = File(logsDir, "server-plugin-npm-install-auto-continue-1783171329478.log").apply { writeText("npm") }
+
+            val options = HostLogExportPlanner.buildExportOptions(
+                logFiles = listOf(previewLog, installLog, updateLog, npmLog),
+                logsDir = logsDir
+            )
+
+            assertEquals(
+                setOf("plugin-preview-auto-continue-1783171329475.log"),
+                options.first { it.displayName == "插件预检日志" }.relativePaths
+            )
+            assertEquals(
+                setOf("plugin-install-auto-continue-1783171329476.log"),
+                options.first { it.displayName == "插件安装日志" }.relativePaths
+            )
+            assertEquals(
+                setOf("repository-update-check-auto-continue-1783171329477.log"),
+                options.first { it.displayName == "仓库更新检测日志" }.relativePaths
+            )
+            assertEquals(
+                setOf("server-plugin-npm-install-auto-continue-1783171329478.log"),
+                options.first { it.displayName == "插件依赖安装日志" }.relativePaths
+            )
+        } finally {
+            logsDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun logTabShowsPluginMaintenanceLogs() {
+        assertTrue(HostLogExportPlanner.isVisibleInLogTab("plugin-preview-auto-continue-1783171329475.log"))
+        assertTrue(HostLogExportPlanner.isVisibleInLogTab("plugin-install-auto-continue-1783171329476.log"))
+        assertTrue(HostLogExportPlanner.isVisibleInLogTab("repository-update-check-auto-continue-1783171329477.log"))
+        assertTrue(HostLogExportPlanner.isVisibleInLogTab("server-plugin-npm-install-auto-continue-1783171329478.log"))
+    }
 }

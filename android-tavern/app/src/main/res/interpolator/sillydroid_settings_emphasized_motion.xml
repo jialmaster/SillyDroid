@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings avoids Material3's pathData-based emphasized interpolator because
+     some Android builds crash while parsing it during TabLayout inflation. -->
+<pathInterpolator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:controlX1="0.2"
+    android:controlY1="0"
+    android:controlX2="0"
+    android:controlY2="1" />

@@ -18,9 +18,15 @@ internal object HostLogExportPlanner {
     private const val exportTypeJsError = "js_error"
     private const val exportTypeCrash = "crash"
     private const val exportTypeExitInfo = "exit_info"
+    private const val exportTypeRepositoryUpdate = "repository_update"
     private const val exportTypeExtensionPreview = "extension_preview"
+    private const val exportTypeExtensionInstall = "extension_install"
     private const val exportTypeExtensionReinstall = "extension_reinstall"
     private const val exportTypeExtensionRuntime = "extension_runtime"
+    private const val exportTypePluginPreview = "plugin_preview"
+    private const val exportTypePluginInstall = "plugin_install"
+    private const val exportTypePluginUpdate = "plugin_update"
+    private const val exportTypePluginDependency = "plugin_dependency"
     private const val exportTypeOther = "other"
     // 导出弹窗需要稳定展示一套固定的“日志类型”选择项，避免因为某类日志尚未落盘就把整项隐藏掉，
     // 让用户误以为该类型根本不支持导出。
@@ -32,9 +38,27 @@ internal object HostLogExportPlanner {
         exportTypeJsError,
         exportTypeCrash,
         exportTypeExitInfo,
+        exportTypeRepositoryUpdate,
         exportTypeExtensionPreview,
+        exportTypeExtensionInstall,
         exportTypeExtensionReinstall,
-        exportTypeExtensionRuntime
+        exportTypeExtensionRuntime,
+        exportTypePluginPreview,
+        exportTypePluginInstall,
+        exportTypePluginUpdate,
+        exportTypePluginDependency
+    )
+
+    private val logTabVisibleMaintenanceTypeKeys = setOf(
+        exportTypeRepositoryUpdate,
+        exportTypeExtensionPreview,
+        exportTypeExtensionInstall,
+        exportTypeExtensionReinstall,
+        exportTypeExtensionRuntime,
+        exportTypePluginPreview,
+        exportTypePluginInstall,
+        exportTypePluginUpdate,
+        exportTypePluginDependency
     )
 
     fun resolveDisplayName(fileName: String): String {
@@ -43,6 +67,11 @@ internal object HostLogExportPlanner {
 
     fun displayOrder(fileName: String): Int {
         return exportTypeOrder(resolveExportTypeKey(fileName))
+    }
+
+    fun isVisibleInLogTab(fileName: String): Boolean {
+        // 日志 Tab 默认只看当前启动日志；扩展/插件维护命令没有会话号，必须按文件名前缀单独放行。
+        return resolveExportTypeKey(fileName) in logTabVisibleMaintenanceTypeKeys
     }
 
     fun buildExportOptions(logFiles: List<File>, logsDir: File): List<HostLogExportOption> {
@@ -119,8 +148,14 @@ internal object HostLogExportPlanner {
             normalizedName.startsWith(jsErrorLogPrefix) -> exportTypeJsError
             normalizedName == HostLogManager.crashLogFileName -> exportTypeCrash
             normalizedName == HostLogManager.exitInfoLogFileName -> exportTypeExitInfo
+            normalizedName.startsWith("repository-update-check-") -> exportTypeRepositoryUpdate
             normalizedName.startsWith("extension-install-preview-") -> exportTypeExtensionPreview
+            normalizedName.startsWith("extension-install-") -> exportTypeExtensionInstall
             normalizedName.startsWith("extension-reinstall-") -> exportTypeExtensionReinstall
+            normalizedName.startsWith("plugin-preview-") -> exportTypePluginPreview
+            normalizedName.startsWith("plugin-install-") -> exportTypePluginInstall
+            normalizedName.startsWith("plugin-git-update-") || normalizedName.startsWith("plugin-update-") -> exportTypePluginUpdate
+            normalizedName.startsWith("server-plugin-npm-install-") -> exportTypePluginDependency
             normalizedName.startsWith("extension-") -> exportTypeExtensionRuntime
             else -> exportTypeOther
         }
@@ -145,9 +180,15 @@ internal object HostLogExportPlanner {
             exportTypeJsError -> "WebView JS 报错"
             exportTypeCrash -> "应用崩溃日志"
             exportTypeExitInfo -> "应用退出信息"
+            exportTypeRepositoryUpdate -> "仓库更新检测日志"
             exportTypeExtensionPreview -> "扩展预检日志"
+            exportTypeExtensionInstall -> "扩展安装日志"
             exportTypeExtensionReinstall -> "扩展重装日志"
             exportTypeExtensionRuntime -> "扩展运行日志"
+            exportTypePluginPreview -> "插件预检日志"
+            exportTypePluginInstall -> "插件安装日志"
+            exportTypePluginUpdate -> "插件更新日志"
+            exportTypePluginDependency -> "插件依赖安装日志"
             else -> "其他日志"
         }
     }
@@ -161,9 +202,15 @@ internal object HostLogExportPlanner {
             exportTypeJsError -> 4
             exportTypeCrash -> 5
             exportTypeExitInfo -> 6
-            exportTypeExtensionPreview -> 7
-            exportTypeExtensionReinstall -> 8
-            exportTypeExtensionRuntime -> 9
+            exportTypeRepositoryUpdate -> 7
+            exportTypeExtensionPreview -> 8
+            exportTypeExtensionInstall -> 9
+            exportTypeExtensionReinstall -> 10
+            exportTypeExtensionRuntime -> 11
+            exportTypePluginPreview -> 12
+            exportTypePluginInstall -> 13
+            exportTypePluginUpdate -> 14
+            exportTypePluginDependency -> 15
             else -> Int.MAX_VALUE
         }
     }

@@ -20,6 +20,24 @@ assert_dir() {
 	fi
 }
 
+ensure_openssl_conf() {
+	bundled_conf="$HOST_PREFIX_DIR/etc/tls/openssl.cnf"
+	fallback_conf="$HOST_TMP_DIR/openssl.cnf"
+	if [ -f "$bundled_conf" ]; then
+		export OPENSSL_CONF="$bundled_conf"
+		return 0
+	fi
+
+	# Termux Node/OpenSSL 的编译期默认配置路径仍指向 /data/data/com.termux/...；
+	# 独立包名下若没有显式配置，会回退去读旧路径并触发 Permission denied。
+	cat > "$fallback_conf" <<'EOF'
+openssl_conf = default_conf
+
+[default_conf]
+EOF
+	export OPENSSL_CONF="$fallback_conf"
+}
+
 link_target_matches() {
 	[ -L "$1" ] && [ "$(readlink "$1" 2>/dev/null || true)" = "$2" ]
 }
@@ -181,9 +199,7 @@ prepare_termux_host_runtime() {
 		export NODE_EXTRA_CA_CERTS="$HOST_PREFIX_DIR/etc/tls/cert.pem"
 		export GIT_SSL_CAINFO="$HOST_PREFIX_DIR/etc/tls/cert.pem"
 	fi
-	if [ -f "$HOST_PREFIX_DIR/etc/tls/openssl.cnf" ]; then
-		export OPENSSL_CONF="$HOST_PREFIX_DIR/etc/tls/openssl.cnf"
-	fi
+	ensure_openssl_conf
 	npm_lifecycle_android_shim="$(cd "$BOOTSTRAP_ROOT/scripts" 2>/dev/null && pwd -P)/npm-lifecycle-android-shim.cjs"
 	if [ -f "$npm_lifecycle_android_shim" ]; then
 		case " ${NODE_OPTIONS:-} " in
