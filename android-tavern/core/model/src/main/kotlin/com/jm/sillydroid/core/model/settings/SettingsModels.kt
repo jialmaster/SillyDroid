@@ -57,6 +57,16 @@ data class FloatingLogBubblePosition(
     val verticalFraction: Float
 )
 
+/**
+ * 后台悬浮浏览器球在可用屏幕中的归一化位置。
+ *
+ * 该位置只服务系统 overlay 窗口，不允许与应用内悬浮日志球共用，避免两个独立窗口互相覆盖配置。
+ */
+data class FloatingBrowserPosition(
+    val horizontalFraction: Float,
+    val verticalFraction: Float
+)
+
 object FloatingLogRefreshIntervals {
     const val REALTIME_MILLIS: Int = 250
     const val ONE_SECOND_MILLIS: Int = 1_000

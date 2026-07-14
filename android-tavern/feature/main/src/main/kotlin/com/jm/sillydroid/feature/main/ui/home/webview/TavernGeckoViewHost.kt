@@ -30,6 +30,7 @@ import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 import com.jm.sillydroid.feature.main.R
 import com.jm.sillydroid.feature.main.diagnostics.formatTrimMemoryLevel
 import com.jm.sillydroid.feature.main.diagnostics.normalizeDiagnosticValue
+import com.jm.sillydroid.feature.main.floatingbrowser.FloatingBrowserSurfaceStore
 import com.jm.sillydroid.feature.main.model.download.BrowserResponseDownloadRequest
 import com.jm.sillydroid.feature.main.ui.home.HomeViewModel
 import com.jm.sillydroid.feature.main.ui.home.bridge.BrowserHostBridgeInstaller
@@ -75,6 +76,7 @@ class TavernGeckoViewHost(
     private val hostDiagnosticSink: HostDiagnosticSink = HostDiagnosticSink { _, _ -> },
     private val criticalHostDiagnosticSink: HostDiagnosticSink = HostDiagnosticSink { _, _ -> },
     private val filePromptUriMaterializer: GeckoFilePromptUriMaterializer = GeckoFilePromptUriMaterializer(activity),
+    private val floatingBrowserSurfaceStore: FloatingBrowserSurfaceStore = FloatingBrowserSurfaceStore(),
 ) : TavernBrowserHost {
     companion object {
         private var sharedRuntime: GeckoRuntime? = null
@@ -109,32 +111,19 @@ class TavernGeckoViewHost(
 
     override val browserEngine: BrowserEngine = BrowserEngine.GECKOVIEW
     private val browserFrame: ViewGroup = activity.findViewById(R.id.webViewRefreshLayout)
-    private val geckoView: GeckoView = GeckoView(activity).also { createdView ->
-        createdView.layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
+    private val retainedGeckoSurface = floatingBrowserSurfaceStore.acquireGecko(activity, browserFrame)
+    private val geckoView: GeckoView = retainedGeckoSurface.geckoView.also { retainedView ->
         // GeckoView 作为替代内核的关键目标是减少系统 WebView renderer gone，同时保持 GPU 合成路径常驻。
-        createdView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-        createdView.setBackgroundColor(ContextCompat.getColor(activity, R.color.tavern_webview_background))
-        browserFrame.addView(createdView)
+        retainedView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        retainedView.setBackgroundColor(ContextCompat.getColor(activity, R.color.tavern_webview_background))
     }
     private val bootstrapOverlay: View = activity.findViewById(R.id.bootstrapOverlay)
     private val activityManager by lazy {
         activity.getSystemService(ActivityManager::class.java)
     }
-    private val session: GeckoSession = GeckoSession(
-        GeckoSessionSettings.Builder()
-            .allowJavascript(true)
-            .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
-            .userAgentMode(GeckoSessionSettings.USER_AGENT_MODE_MOBILE)
-            .displayMode(GeckoSessionSettings.DISPLAY_MODE_BROWSER)
-            .useTrackingProtection(false)
-            .suspendMediaWhenInactive(false)
-            .build()
-    )
+    private val session: GeckoSession = retainedGeckoSurface.session
 
-    private var currentUrl: String = ""
+    private var currentUrl: String = retainedGeckoSurface.currentUrl
     private var configured = false
     private var waitingForInitialPagePaint = false
     private val httpAuthPromptController by lazy {
@@ -151,6 +140,9 @@ class TavernGeckoViewHost(
 
     override val browserSurface: View
         get() = geckoView
+    override val browserSessionIdentity: String
+        get() = "${browserEngine.name}:${System.identityHashCode(session)}"
+    private var browserSurfaceDestroyed = false
 
     override fun currentBrowserRuntimeInfo(): BrowserRuntimeInfo {
         val coreVersion = GeckoBuildConfig.GRE_MILESTONE.trim()
@@ -185,8 +177,12 @@ class TavernGeckoViewHost(
         configured = true
         browserFrame.setBackgroundColor(ContextCompat.getColor(activity, R.color.tavern_webview_background))
         installDelegates()
-        session.open(runtime(activity))
-        geckoView.setSession(session)
+        if (!session.isOpen) {
+            session.open(runtime(activity))
+        }
+        if (geckoView.session !== session) {
+            geckoView.setSession(session)
+        }
         bridgeInstaller.install(buildBridgeTarget())
         filePromptUriMaterializer.cleanPreparedFiles()
         setBrowserZoomPercent(hostConfigStore.browserZoomPercent)
@@ -267,7 +263,7 @@ class TavernGeckoViewHost(
             return
         }
         showInitialPagePaintCover(reason = "initial_load")
-        currentUrl = targetUrl
+        updateCurrentUrl(targetUrl)
         homeViewModel.loadedUrl = targetUrl
         bridgeInstaller.install(buildBridgeTarget()) {
             recordCriticalHostDiagnostic(
@@ -341,22 +337,49 @@ class TavernGeckoViewHost(
     }
 
     override fun onDestroy() {
+        if (browserSurfaceDestroyed) {
+            return
+        }
+        releaseGeckoActivityBindings(reason = "permanent_destroy", closeProcessBridge = true)
         recordCriticalHostDiagnostic(
             category = "geckoview",
             body = "event=destroy_geckoview_started ${currentGeckoDiagnosticState()} ${currentHostMemoryDiagnosticState()}"
         )
-        httpAuthPromptController.dismissActivePrompt(reason = "geckoview_destroy")
-        bridgeInstaller.close()
-        filePromptUriMaterializer.cleanPreparedFiles()
-        runCatching { session.stop() }
-        runCatching { session.setActive(false) }
-        runCatching { session.setFocused(false) }
-        runCatching { session.close() }
-        runCatching { (geckoView.parent as? ViewGroup)?.removeView(geckoView) }
+        floatingBrowserSurfaceStore.destroyGeckoIfSame(geckoView = geckoView, session = session)
+        browserSurfaceDestroyed = true
         recordCriticalHostDiagnostic(
             category = "geckoview",
             body = "event=destroy_geckoview_finished ${currentHostMemoryDiagnosticState()}"
         )
+    }
+
+    /** Activity 销毁时解除窗口 delegate 和旧容器，但保留进程级 GeckoSession。 */
+    override fun releaseActivityBindings() {
+        if (!browserSurfaceDestroyed) {
+            releaseGeckoActivityBindings(reason = "activity_destroy", closeProcessBridge = false)
+        }
+        floatingBrowserSurfaceStore.releaseActivityBinding(geckoView, browserFrame)
+        if (!browserSurfaceDestroyed) {
+            recordCriticalHostDiagnostic(
+                category = "geckoview",
+                body = "event=activity_bindings_released session=$browserSessionIdentity ${currentGeckoDiagnosticState()}"
+            )
+        }
+    }
+
+    /** 释放 Activity delegate；普通销毁必须保留进程安全 native bridge，renderer 销毁才关闭。 */
+    private fun releaseGeckoActivityBindings(reason: String, closeProcessBridge: Boolean) {
+        httpAuthPromptController.dismissActivePrompt(reason = "geckoview_$reason")
+        if (closeProcessBridge) {
+            bridgeInstaller.close()
+        }
+        filePromptUriMaterializer.cleanPreparedFiles()
+        // Session/页面继续由进程 store 持有；所有 Activity delegate 必须解除，等待下个 Activity 重新注册。
+        session.navigationDelegate = null
+        session.progressDelegate = null
+        session.contentDelegate = null
+        session.permissionDelegate = null
+        session.promptDelegate = null
     }
 
     override fun openCurrentPageInExternalBrowser(): Boolean {
@@ -431,7 +454,8 @@ class TavernGeckoViewHost(
 
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
-                currentUrl = url
+                floatingBrowserSurfaceStore.incrementPageLoadCount(geckoView)
+                updateCurrentUrl(url)
                 homeViewModel.loadedUrl = url
                 recordHostDiagnostic(
                     category = "geckoview",
@@ -969,11 +993,21 @@ class TavernGeckoViewHost(
     }
 
     private fun recordGeckoRendererGone(didCrash: Boolean, source: String) {
+        if (browserSurfaceDestroyed) {
+            return
+        }
+        val recoveryUrl = currentUrl
         recordCriticalHostDiagnostic(
             category = "geckoview",
             body = "event=renderer_gone source=$source didCrash=$didCrash ${currentGeckoDiagnosticState()} ${currentHostMemoryDiagnosticState()}"
         )
         homeViewModel.isPullGestureRefreshing = false
+        if (recoveryUrl.isNotBlank()) {
+            homeViewModel.loadedUrl = recoveryUrl
+        }
+        releaseGeckoActivityBindings(reason = "renderer_gone", closeProcessBridge = true)
+        floatingBrowserSurfaceStore.destroyGeckoIfSame(geckoView = geckoView, session = session)
+        browserSurfaceDestroyed = true
         if (!activity.isFinishing && !activity.isDestroyed) {
             browserFrame.post { activity.recreate() }
         }
@@ -1067,7 +1101,7 @@ class TavernGeckoViewHost(
         homeViewModel.shouldForceFreshWebViewLoad = false
         homeViewModel.browserDataClearMask = 0
         homeViewModel.pendingLocalRetryAttempts = 0
-        currentUrl = ""
+        updateCurrentUrl("")
         homeViewModel.loadedUrl = targetUrl
 
         // Gecko 的 IndexedDB / LocalStorage / Cache 不归 Android WebStorage 管，必须走 GeckoRuntime StorageController。
@@ -1099,6 +1133,53 @@ class TavernGeckoViewHost(
             category = "geckoview",
             body = "event=initial_paint_cover_show reason=$reason ${currentGeckoDiagnosticState()}"
         )
+    }
+
+    /** 只根据进程级 GeckoSession 与 GeckoView 的真实状态判断迁移资格。 */
+    override fun canAttachToFloatingBrowser(): Boolean {
+        // Activity 可能在 overlay 期间销毁；迁移资格只由进程级 Session 和 View 状态决定。
+        return retainedGeckoSurface.canAttachToOverlay()
+    }
+
+    /** 把同一 GeckoView/Session 移入 overlay，保持会话 active 且不调用 loadUri。 */
+    override fun attachToFloatingBrowser(container: ViewGroup): Boolean {
+        // GeckoView 的真实页面状态由当前 GeckoSession 持有；迁移 View 时保持 session active 且不调用 loadUri。
+        val attached = retainedGeckoSurface.attachToOverlay(container)
+        if (attached) {
+            recordCriticalHostDiagnostic(
+                category = "geckoview",
+                body = "event=floating_browser_attached session=$browserSessionIdentity currentUrl=${normalizeDiagnosticValue(currentUrl)} pageLoadCount=${retainedGeckoSurface.pageLoadCount}"
+            )
+        }
+        return attached
+    }
+
+    /** overlay 真正可绘制后通过内置扩展记录 Gecko 文档可见性，不读取页面内容。 */
+    override fun onFloatingBrowserWindowVisible() {
+        val requested = bridgeInstaller.requestDocumentVisibilityDiagnostic("floating_browser_window_visible")
+        if (!requested) {
+            recordCriticalHostDiagnostic(
+                category = "geckoview",
+                body = "event=document_visibility_request_unavailable reason=floating_browser_window_visible session=$browserSessionIdentity pageLoadCount=${retainedGeckoSurface.pageLoadCount}"
+            )
+        }
+    }
+
+    /** 把同一 GeckoView/Session 恢复到仍存活的 Activity 容器。 */
+    override fun attachToActivityBrowser(): Boolean {
+        val attached = retainedGeckoSurface.restoreToActivity()
+        if (attached) {
+            browserFrame.isVisible = true
+            geckoView.isVisible = true
+            session.setActive(true)
+            session.setFocused(true)
+            updateRefreshLayoutEnabled()
+            recordCriticalHostDiagnostic(
+                category = "geckoview",
+                body = "event=floating_browser_restored session=$browserSessionIdentity currentUrl=${normalizeDiagnosticValue(currentUrl)} pageLoadCount=${retainedGeckoSurface.pageLoadCount}"
+            )
+        }
+        return attached
     }
 
     private fun hideInitialPagePaintCover(reason: String) {
@@ -1199,6 +1280,12 @@ class TavernGeckoViewHost(
         )
     }
 
+    /** 同步 Gecko 当前 URL 到进程级 record，避免 Activity 重建后误触发 loadUri。 */
+    private fun updateCurrentUrl(url: String) {
+        currentUrl = url
+        retainedGeckoSurface.currentUrl = url
+    }
+
     private fun buildGeckoLoadFlags(replaceHistory: Boolean, bypassCache: Boolean): Int {
         var flags = GeckoSession.LOAD_FLAGS_NONE
         if (replaceHistory) {
@@ -1252,6 +1339,7 @@ class TavernGeckoViewHost(
         return buildString {
             append("engine=GECKOVIEW")
             append(" currentUrl=${normalizeDiagnosticValue(currentUrl)}")
+            append(" pageLoadCount=${retainedGeckoSurface.pageLoadCount}")
             append(" rememberedUrl=${normalizeDiagnosticValue(homeViewModel.loadedUrl)}")
             append(" localBaseUrl=${normalizeDiagnosticValue(buildInitialTavernUrl(runtimeConfigRepository.localServiceUrl()))}")
             append(" retryAttempts=${homeViewModel.pendingLocalRetryAttempts}")

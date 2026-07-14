@@ -34,6 +34,10 @@
     <dimen name="sillydroid_floating_logs_scrollbar_visual_inset">4dp</dimen>
     <dimen name="sillydroid_floating_logs_scrollbar_end_margin">2dp</dimen>
     <dimen name="sillydroid_floating_logs_scrollbar_vertical_margin">6dp</dimen>
+    <dimen name="sillydroid_floating_logs_bubble_size">56dp</dimen>
+    <dimen name="sillydroid_floating_logs_bubble_icon_padding">15dp</dimen>
+    <dimen name="sillydroid_floating_browser_bubble_size">@dimen/sillydroid_floating_logs_bubble_size</dimen>
+    <dimen name="sillydroid_floating_browser_icon_padding">@dimen/sillydroid_floating_logs_bubble_icon_padding</dimen>
     <dimen name="sillydroid_feedback_dialog_padding_horizontal">24dp</dimen>
     <dimen name="sillydroid_feedback_dialog_padding_vertical">12dp</dimen>
     <dimen name="sillydroid_feedback_action_min_width">0dp</dimen>

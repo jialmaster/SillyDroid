@@ -72,6 +72,10 @@
     <string name="bootstrap_settings_host_launch_mode_restart_hint">启动模式已更新，重启服务后生效。</string>
     <string name="bootstrap_settings_host_floating_logs_title">日志球</string>
     <string name="bootstrap_settings_host_floating_logs_summary">悬浮工具球，包含实时查看日志，以及部分快捷功能。</string>
+    <string name="bootstrap_settings_host_floating_browser_title">后台悬浮浏览器</string>
+    <string name="bootstrap_settings_host_floating_browser_summary">切换到其他应用时，用屏幕悬浮球继续承载当前浏览器会话。需要“显示在其他应用上层”权限。</string>
+    <string name="bootstrap_settings_host_floating_browser_permission_denied">未获得悬浮窗权限，后台悬浮浏览器保持关闭。</string>
+    <string name="bootstrap_settings_host_floating_browser_permission_open_failed">无法打开悬浮窗授权页面。</string>
     <string name="bootstrap_settings_host_debug_diagnostics_title">调试模式</string>
     <string name="bootstrap_settings_host_debug_diagnostics_summary">记录更详细的宿主、浏览器、下载和崩溃诊断日志。</string>
     <string name="bootstrap_settings_host_unrestricted_file_import_selection_title">无限制文件选择</string>

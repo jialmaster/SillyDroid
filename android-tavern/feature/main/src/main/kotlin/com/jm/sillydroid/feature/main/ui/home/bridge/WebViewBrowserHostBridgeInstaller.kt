@@ -73,7 +73,8 @@ class WebViewBrowserHostBridgeInstaller(
                 notificationController = systemNotificationController,
                 isHostActive = actions.isHostActive,
                 runOnUiThread = actions.runOnUiThread,
-                requestNotificationPermission = requestNotificationPermission
+                requestNotificationPermission = requestNotificationPermission,
+                diagnosticSink = ::recordDiagnostic
             ),
             systemNotificationBridgeName
         )

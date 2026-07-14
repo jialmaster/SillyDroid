@@ -3,13 +3,16 @@ package com.jm.sillydroid.feature.settings
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
+import android.provider.Settings
 import android.view.MenuItem
 import android.view.View
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -33,6 +36,8 @@ import com.jm.sillydroid.core.ui.scroll.DraggableScrollThumbController
 import com.jm.sillydroid.core.model.settings.SettingsNavigationContract
 import com.jm.sillydroid.domain.app.SillyDroidAppGraph
 import com.jm.sillydroid.domain.app.SillyDroidAppGraphProvider
+import com.jm.sillydroid.domain.app.HostFloatingBrowserController
+import com.jm.sillydroid.domain.app.HostFloatingBrowserControllerProvider
 import com.jm.sillydroid.domain.bootstrap.BootstrapController
 import com.jm.sillydroid.feature.settings.model.SettingsActivityUiState
 import com.jm.sillydroid.feature.settings.model.SettingsTab
@@ -62,6 +67,11 @@ import java.util.Locale
 import java.util.zip.CRC32
 import kotlinx.coroutines.launch
 
+/**
+ * 宿主设置页，管理运行时配置、数据导入导出、日志、扩展、终端和关于信息。
+ *
+ * 允许：通过 domain/app 契约协调进程级能力；不允许直接依赖主界面 Activity 或创建浏览器窗口。
+ */
 class BootstrapSettingsActivity : AppCompatActivity() {
     companion object {
         private const val resultShouldStartKey = SettingsNavigationContract.resultShouldStartKey
@@ -124,6 +134,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var quickActionsButton: MaterialButton
     private lateinit var dataPanelView: View
     private lateinit var quickFieldContainer: LinearLayout
+    private lateinit var floatingBrowserSwitch: MaterialSwitch
     private lateinit var floatingLogsSwitch: MaterialSwitch
     private lateinit var backgroundOnlyModeSwitch: MaterialSwitch
     private lateinit var backgroundHealthCheckSwitch: MaterialSwitch
@@ -200,6 +211,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private val hostLogRepository by lazy { appGraph.hostLogRepository }
     private val processManager by lazy<BootstrapController> { appGraph.bootstrapController }
     private val runtimeConfigRepository by lazy { appGraph.runtimeConfigRepository }
+    private val floatingBrowserController: HostFloatingBrowserController?
+        get() = (application as? HostFloatingBrowserControllerProvider)?.hostFloatingBrowserController
     private val settingsActivityViewModel by lazy {
         ViewModelProvider(
             this,
@@ -222,6 +235,8 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private lateinit var logsCoordinator: BootstrapSettingsLogsCoordinator
     private lateinit var terminalPageController: TerminalPageController
     private lateinit var appUpdateCoordinator: AppUpdateCoordinator
+    private var floatingBrowserPermissionRequestPending = false
+    private var externalFlowFloatingBrowserSuppression: AutoCloseable? = null
     private val consoleSessionStore by lazy {
         HostConsoleSessionStoreRegistry.getOrCreate(
             consoleRuntimeRepository = appGraph.consoleRuntimeRepository,
@@ -231,12 +246,14 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     }
 
     private val exportArchiveLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { targetUri ->
+        releaseExternalFlowFloatingBrowserSuppression()
         if (targetUri != null) {
             dataCoordinator.exportArchive(targetUri)
         }
     }
 
     private val importArchiveLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { sourceUri ->
+        releaseExternalFlowFloatingBrowserSuppression()
         if (sourceUri != null) {
             dataCoordinator.inspectArchive(sourceUri) { preview ->
                 screenController.confirmImport(preview) {
@@ -244,6 +261,15 @@ class BootstrapSettingsActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private val floatingBrowserPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        // 系统悬浮窗设置页通常不返回可靠 resultCode，必须回读 Settings.canDrawOverlays 作为唯一真值。
+        releaseExternalFlowFloatingBrowserSuppression()
+        floatingBrowserPermissionRequestPending = false
+        applyFloatingBrowserPermissionResult(showDeniedMessage = true)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -280,11 +306,17 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             }
         }
         importButton.setOnClickListener {
-            importArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
+            launchWithFloatingBrowserSuppression(
+                reason = "settings_import_archive",
+                onLaunch = { importArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }
+            )
         }
         exportButton.setOnClickListener {
             val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-            exportArchiveLauncher.launch(getString(R.string.bootstrap_settings_export_name, timestamp))
+            launchWithFloatingBrowserSuppression(
+                reason = "settings_export_archive",
+                onLaunch = { exportArchiveLauncher.launch(getString(R.string.bootstrap_settings_export_name, timestamp)) }
+            )
         }
         openTavernDirectoryMtButton.setOnClickListener {
             openTavernDirectoryInMtWithGuide()
@@ -354,6 +386,24 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         return super.onOptionsItemSelected(item)
     }
 
+    /** 从系统或外部页面返回后释放抑制令牌，并复核已启用功能的 overlay 权限。 */
+    override fun onResume() {
+        super.onResume()
+        if (!floatingBrowserPermissionRequestPending) {
+            releaseExternalFlowFloatingBrowserSuppression()
+        }
+        if (!floatingBrowserPermissionRequestPending && settingsActivityViewModel.uiState.value.floatingBrowserEnabled) {
+            // 用户可能从系统设置外部撤销授权；设置页恢复时同步关闭，禁止保留并行假状态。
+            applyFloatingBrowserPermissionResult(showDeniedMessage = false)
+        }
+    }
+
+    /** 设置页销毁时确保外部流程抑制令牌不会泄漏到后续 Activity。 */
+    override fun onDestroy() {
+        releaseExternalFlowFloatingBrowserSuppression()
+        super.onDestroy()
+    }
+
     private fun bindViews() {
         rootView = findViewById(R.id.bootstrapSettingsRoot)
         topShellView = findViewById(R.id.bootstrapSettingsTopShell)
@@ -368,6 +418,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         quickActionsButton = findViewById(R.id.bootstrapSettingsQuickActionsButton)
         dataPanelView = findViewById(R.id.bootstrapSettingsDataPanel)
         quickFieldContainer = findViewById(R.id.bootstrapSettingsQuickFieldContainer)
+        floatingBrowserSwitch = findViewById(R.id.bootstrapSettingsFloatingBrowserSwitch)
         floatingLogsSwitch = findViewById(R.id.bootstrapSettingsFloatingLogsSwitch)
         backgroundOnlyModeSwitch = findViewById(R.id.bootstrapSettingsBackgroundOnlyModeSwitch)
         backgroundHealthCheckSwitch = findViewById(R.id.bootstrapSettingsBackgroundHealthCheckSwitch)
@@ -458,6 +509,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             loadingIndicator = loadingIndicator,
             searchLayout = searchLayout,
             quickActionsButton = quickActionsButton,
+            floatingBrowserSwitch = floatingBrowserSwitch,
             floatingLogsSwitch = floatingLogsSwitch,
             backgroundOnlyModeSwitch = backgroundOnlyModeSwitch,
             backgroundHealthCheckSwitch = backgroundHealthCheckSwitch,
@@ -517,6 +569,7 @@ class BootstrapSettingsActivity : AppCompatActivity() {
         stateController = SettingsActivityStateController(
             activity = this,
             viewModel = settingsActivityViewModel,
+            floatingBrowserSwitch = floatingBrowserSwitch,
             floatingLogsSwitch = floatingLogsSwitch,
             backgroundOnlyModeSwitch = backgroundOnlyModeSwitch,
             backgroundHealthCheckSwitch = backgroundHealthCheckSwitch,
@@ -536,6 +589,11 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             hostDisplayModeValueView = displayModeValueView,
             debugDiagnosticsSwitch = debugDiagnosticsSwitch,
             unrestrictedFileImportSelectionSwitch = unrestrictedFileImportSelectionSwitch,
+            onFloatingBrowserEnableRequested = ::requestFloatingBrowserPermission,
+            onFloatingBrowserDisabled = {
+                settingsActivityViewModel.setFloatingBrowserEnabled(false)
+                floatingBrowserController?.stop()
+            },
             showRuntimePatchBottomSheet = runtimePatchBottomSheetController::show,
             onServiceRestartRequired = { screenController.updateRestartServicePending(true) },
             applyHostDisplayMode = ::applySettingsSurfaceSystemBars,
@@ -547,7 +605,13 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             crashUploadSwitch = aboutCrashUploadSwitch,
             hostPreferencesRepository = hostConfigStore,
             githubRepository = appGraph.appUpdateBuildConfig.githubRepository,
-            externalBrowserFailureMessage = { getString(R.string.browser_open_external_failed) }
+            externalBrowserFailureMessage = { getString(R.string.browser_open_external_failed) },
+            launchExternalIntent = { intent ->
+                launchExternalActivityWithFloatingBrowserSuppression(
+                    reason = "settings_about_external_browser",
+                    intent = intent
+                )
+            }
         )
         appUpdateCoordinator = AppUpdateCoordinator(
             activity = this,
@@ -814,10 +878,10 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     }
 
     private fun startTavernDirectoryIntent(intent: Intent): Boolean {
-        return runCatching {
-            startActivity(intent)
-            true
-        }.getOrDefault(false)
+        return launchExternalActivityWithFloatingBrowserSuppression(
+            reason = "settings_open_tavern_directory",
+            intent = intent
+        )
     }
 
     private fun tavernDocumentsAuthority(): String {
@@ -827,6 +891,57 @@ class BootstrapSettingsActivity : AppCompatActivity() {
     private fun createTavernDirectoryTreeUri() =
         DocumentsContract.buildTreeDocumentUri(tavernDocumentsAuthority(), tavernDocumentsRootDocumentId)
 
+    /**
+     * 打开当前包名的系统 overlay 授权页；授权结果只在返回后通过 canDrawOverlays 复核。
+     *
+     * 该方法不得提前写入启用偏好，避免用户取消授权后 App 仍尝试创建系统窗口。
+     */
+    private fun requestFloatingBrowserPermission() {
+        if (Settings.canDrawOverlays(this)) {
+            settingsActivityViewModel.setFloatingBrowserEnabled(true)
+            floatingBrowserController?.prepare()
+            return
+        }
+        floatingBrowserPermissionRequestPending = true
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:$packageName")
+        )
+        launchWithFloatingBrowserSuppression(
+            reason = "settings_overlay_permission",
+            onLaunch = { floatingBrowserPermissionLauncher.launch(intent) },
+            onFailure = {
+                floatingBrowserPermissionRequestPending = false
+                settingsActivityViewModel.setFloatingBrowserEnabled(false)
+                Toast.makeText(
+                    this,
+                    R.string.bootstrap_settings_host_floating_browser_permission_open_failed,
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        )
+    }
+
+    /**
+     * 将系统 overlay 授权状态同步到设置真值；未授权时只允许关闭，不提供权限兜底路径。
+     */
+    private fun applyFloatingBrowserPermissionResult(showDeniedMessage: Boolean) {
+        val granted = Settings.canDrawOverlays(this)
+        settingsActivityViewModel.setFloatingBrowserEnabled(granted)
+        if (granted) {
+            floatingBrowserController?.prepare()
+        } else {
+            floatingBrowserController?.stop()
+        }
+        if (!granted && showDeniedMessage) {
+            Toast.makeText(
+                this,
+                R.string.bootstrap_settings_host_floating_browser_permission_denied,
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
     private fun applySettingsSurfaceSystemBars(mode: HostDisplayMode = hostConfigStore.hostDisplayMode) {
         // 设置页本身也属于宿主界面；这里按用户选择的显示模式统一处理系统栏显示状态，
         // 但背景继续跟随设置页 surface，避免切到设置页后出现和主界面无关的系统底色。
@@ -835,6 +950,43 @@ class BootstrapSettingsActivity : AppCompatActivity() {
             mode = mode,
             surfaceColorAttr = MaterialR.attr.colorSurfaceContainerLowest
         )
+    }
+
+    /** 外部 ActivityResult 或系统页面启动前持有抑制令牌，启动失败时立即释放。 */
+    private fun launchWithFloatingBrowserSuppression(
+        reason: String,
+        onLaunch: () -> Unit,
+        onFailure: (Throwable) -> Unit = { throw it }
+    ) {
+        acquireExternalFlowFloatingBrowserSuppression(reason)
+        runCatching { onLaunch() }
+            .onFailure { error ->
+                releaseExternalFlowFloatingBrowserSuppression()
+                onFailure(error)
+            }
+    }
+
+    /** 打开外部 Activity 时复用同一抑制策略，避免系统页面上方出现浏览器悬浮球。 */
+    private fun launchExternalActivityWithFloatingBrowserSuppression(reason: String, intent: Intent): Boolean {
+        acquireExternalFlowFloatingBrowserSuppression(reason)
+        return runCatching {
+            startActivity(intent)
+            true
+        }.onFailure {
+            releaseExternalFlowFloatingBrowserSuppression()
+        }.getOrDefault(false)
+    }
+
+    /** 重新进入外部流程前释放旧令牌，保证同一设置页不会累积多份抑制原因。 */
+    private fun acquireExternalFlowFloatingBrowserSuppression(reason: String) {
+        releaseExternalFlowFloatingBrowserSuppression()
+        externalFlowFloatingBrowserSuppression = floatingBrowserController?.acquireSuppression(reason)
+    }
+
+    /** 外部流程完成、失败或设置页销毁时对称释放抑制令牌。 */
+    private fun releaseExternalFlowFloatingBrowserSuppression() {
+        externalFlowFloatingBrowserSuppression?.close()
+        externalFlowFloatingBrowserSuppression = null
     }
 
 }

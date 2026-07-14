@@ -4,6 +4,7 @@ import android.content.Context
 import com.jm.sillydroid.core.model.bootstrap.defaultBootstrapServicePort
 import com.jm.sillydroid.core.model.settings.BrowserEngine
 import com.jm.sillydroid.core.model.settings.BrowserZoomOptions
+import com.jm.sillydroid.core.model.settings.FloatingBrowserPosition
 import com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition
 import com.jm.sillydroid.core.model.settings.FloatingLogRefreshIntervals
 import com.jm.sillydroid.core.model.settings.HostDisplayMode
@@ -15,6 +16,11 @@ import com.jm.sillydroid.domain.bootstrap.RuntimePatchSettingOverrides
 import com.jm.sillydroid.domain.bootstrap.RuntimePatchSettingOverridesCodec
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 
+/**
+ * 持久化宿主本地设置，并在读取时统一执行范围校验与默认值策略。
+ *
+ * 允许：保存悬浮浏览器开关及独立位置；不允许绕过系统权限校验主动启用 overlay。
+ */
 class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
     companion object {
         internal const val preferencesName = "bootstrap-host-config"
@@ -38,6 +44,9 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
         private const val terminalFontSizePxKey = "terminal-font-size-px"
         private const val terminalCursorBlinkEnabledKey = "terminal-cursor-blink-enabled"
         private const val terminalExtraKeysEnabledKey = "terminal-extra-keys-enabled"
+        private const val floatingBrowserEnabledKey = "floating-browser-enabled"
+        private const val floatingBrowserXKey = "floating-browser-x"
+        private const val floatingBrowserYKey = "floating-browser-y"
         private const val floatingLogBubbleEnabledKey = "floating-log-bubble-enabled"
         private const val floatingLogRefreshIntervalMillisKey = "floating-log-refresh-interval-millis"
         private const val floatingLogBubbleXKey = "floating-log-bubble-x"
@@ -269,6 +278,37 @@ class BootstrapHostConfigStore(context: Context) : HostPreferencesRepository {
             preferences.edit()
                 .putBoolean(terminalExtraKeysEnabledKey, value)
                 .apply()
+        }
+
+    override var floatingBrowserEnabled: Boolean
+        // 悬浮浏览器涉及高敏感 overlay 权限；新装和未保存用户必须保持关闭。
+        get() = preferences.getBoolean(floatingBrowserEnabledKey, false)
+        set(value) {
+            preferences.edit()
+                .putBoolean(floatingBrowserEnabledKey, value)
+                .apply()
+        }
+
+    override var floatingBrowserPosition: FloatingBrowserPosition?
+        get() {
+            if (!preferences.contains(floatingBrowserXKey) || !preferences.contains(floatingBrowserYKey)) {
+                return null
+            }
+            return FloatingBrowserPosition(
+                horizontalFraction = sanitizeFraction(preferences.getFloat(floatingBrowserXKey, 1f)),
+                verticalFraction = sanitizeFraction(preferences.getFloat(floatingBrowserYKey, 0.5f))
+            )
+        }
+        set(value) {
+            preferences.edit().apply {
+                if (value == null) {
+                    remove(floatingBrowserXKey)
+                    remove(floatingBrowserYKey)
+                } else {
+                    putFloat(floatingBrowserXKey, sanitizeFraction(value.horizontalFraction))
+                    putFloat(floatingBrowserYKey, sanitizeFraction(value.verticalFraction))
+                }
+            }.apply()
         }
 
     override var floatingLogBubbleEnabled: Boolean

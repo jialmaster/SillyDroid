@@ -32,26 +32,27 @@ class BrowserHostBridgeInstallerFactory(
     }
 
     private fun createWebViewInstaller(): BrowserHostBridgeInstaller {
+        val appContext = activity.applicationContext
         return WebViewBrowserHostBridgeInstaller(
             actions = actions,
             blobDownloadController = hostIo.blobDownloadController,
             scope = scope,
             dispatchers = dispatchers,
             systemNotificationController = hostIo.systemNotificationController,
-            requestNotificationPermission = { hostIo.requestNotificationPermissionIfNeeded() },
-            unknownDownloadErrorMessage = { activity.getString(R.string.download_failed_unknown) },
-            emptyDownloadPayloadMessage = { activity.getString(R.string.download_failed_empty_payload) },
+            requestNotificationPermission = actions.requestNotificationPermission,
+            unknownDownloadErrorMessage = { appContext.getString(R.string.download_failed_unknown) },
+            emptyDownloadPayloadMessage = { appContext.getString(R.string.download_failed_empty_payload) },
             onBlobDownloadPreparing = { fileName ->
                 Toast.makeText(
-                    activity,
-                    activity.getString(R.string.download_status_preparing, fileName),
+                    appContext,
+                    appContext.getString(R.string.download_status_preparing, fileName),
                     Toast.LENGTH_SHORT
                 ).show()
             },
             onBlobDownloadSaving = { fileName ->
                 Toast.makeText(
-                    activity,
-                    activity.getString(R.string.download_status_saving, fileName),
+                    appContext,
+                    appContext.getString(R.string.download_status_saving, fileName),
                     Toast.LENGTH_SHORT
                 ).show()
             },
@@ -64,40 +65,45 @@ class BrowserHostBridgeInstallerFactory(
                     displayPath = savedFile.displayPath
                 )
                 Toast.makeText(
-                    activity,
-                    activity.getString(R.string.download_saved, savedFile.fileName),
+                    appContext,
+                    appContext.getString(R.string.download_saved, savedFile.fileName),
                     Toast.LENGTH_SHORT
                 ).show()
             },
-            onBlobDownloadFailure = hostIo::showDownloadFailure,
+            onBlobDownloadFailure = actions.showDownloadFailure,
             diagnosticSink = { body ->
-                recordDiagnostic(category = "download", body = body)
+                val category = if (body.startsWith("event=notification_bridge")) {
+                    "notification"
+                } else {
+                    "download"
+                }
+                recordDiagnostic(category = category, body = body)
             }
         )
     }
 
     private fun createGeckoViewInstaller(): BrowserHostBridgeInstaller {
+        val appContext = activity.applicationContext
         return GeckoViewBrowserHostBridgeInstaller(
-            activity = activity,
             actions = actions,
             blobDownloadController = hostIo.blobDownloadController,
             scope = scope,
             dispatchers = dispatchers,
             systemNotificationController = hostIo.systemNotificationController,
-            requestNotificationPermission = { hostIo.requestNotificationPermissionIfNeeded() },
-            unknownDownloadErrorMessage = { activity.getString(R.string.download_failed_unknown) },
-            emptyDownloadPayloadMessage = { activity.getString(R.string.download_failed_empty_payload) },
+            requestNotificationPermission = actions.requestNotificationPermission,
+            unknownDownloadErrorMessage = { appContext.getString(R.string.download_failed_unknown) },
+            emptyDownloadPayloadMessage = { appContext.getString(R.string.download_failed_empty_payload) },
             onBlobDownloadPreparing = { fileName ->
                 Toast.makeText(
-                    activity,
-                    activity.getString(R.string.download_status_preparing, fileName),
+                    appContext,
+                    appContext.getString(R.string.download_status_preparing, fileName),
                     Toast.LENGTH_SHORT
                 ).show()
             },
             onBlobDownloadSaving = { fileName ->
                 Toast.makeText(
-                    activity,
-                    activity.getString(R.string.download_status_saving, fileName),
+                    appContext,
+                    appContext.getString(R.string.download_status_saving, fileName),
                     Toast.LENGTH_SHORT
                 ).show()
             },
@@ -109,12 +115,12 @@ class BrowserHostBridgeInstallerFactory(
                     displayPath = savedFile.displayPath
                 )
                 Toast.makeText(
-                    activity,
-                    activity.getString(R.string.download_saved, savedFile.fileName),
+                    appContext,
+                    appContext.getString(R.string.download_saved, savedFile.fileName),
                     Toast.LENGTH_SHORT
                 ).show()
             },
-            onBlobDownloadFailure = hostIo::showDownloadFailure,
+            onBlobDownloadFailure = actions.showDownloadFailure,
             diagnosticSink = { body ->
                 recordDiagnostic(category = resolveGeckoBridgeDiagnosticCategory(body), body = body)
             }
@@ -127,7 +133,8 @@ class BrowserHostBridgeInstallerFactory(
             compactBody.startsWith("event=blob_bridge") ||
                 compactBody.startsWith("event=gecko_download_bridge") ||
                 compactBody.contains("action=download.") -> "download"
-            compactBody.contains("action=notification.") -> "notification"
+            compactBody.startsWith("event=notification_bridge") ||
+                compactBody.contains("action=notification.") -> "notification"
             else -> "browser_bridge"
         }
     }

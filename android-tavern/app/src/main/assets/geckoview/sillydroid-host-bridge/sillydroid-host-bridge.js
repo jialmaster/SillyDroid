@@ -94,6 +94,24 @@
     sendNative('recordWebPerformanceDiagnostic', String(payload || '')).catch(function() {});
   }
 
+  // GeckoView 没有 System WebView 的 setSupportZoom 开关；用标准 viewport 约束锁定当前密度，
+  // 只禁止用户手势缩放，不改变宿主提供的 50%-100% 界面密度能力。
+  function lockViewportScale(content, lockedScale, fallbackContent) {
+    const normalizedScale = String(Number(Number(lockedScale || 1).toFixed(4)));
+    const source = String(content || fallbackContent || 'width=device-width, initial-scale=1, viewport-fit=cover');
+    const preservedTokens = source
+      .split(',')
+      .map(function(token) { return token.trim(); })
+      .filter(function(token) {
+        const key = String(token.split('=')[0] || '').trim().toLowerCase();
+        return key !== 'minimum-scale' && key !== 'maximum-scale' && key !== 'user-scalable';
+      });
+    preservedTokens.push('minimum-scale=' + normalizedScale);
+    preservedTokens.push('maximum-scale=' + normalizedScale);
+    preservedTokens.push('user-scalable=no');
+    return preservedTokens.join(', ');
+  }
+
   function applyViewportDensity(percent, baseViewportWidthCssPx, reason) {
     const sanitizedPercent = Math.max(50, Math.min(100, Math.round(Number(percent || 100) / 5) * 5));
     const baseWidth = Math.max(240, Math.round(Number(baseViewportWidthCssPx || window.innerWidth || 360)));
@@ -129,7 +147,10 @@
     }
     const originalViewport = viewport.dataset.sillydroidOriginalViewport || '';
     if (sanitizedPercent === 100) {
-      viewport.setAttribute('content', originalViewport || 'width=device-width, initial-scale=1, viewport-fit=cover');
+      viewport.setAttribute(
+        'content',
+        lockViewportScale(originalViewport, 1, 'width=device-width, initial-scale=1, viewport-fit=cover')
+      );
       delete viewport.dataset.sillydroidViewportDensityPercent;
       delete viewport.dataset.sillydroidViewportDensityReason;
       delete viewport.dataset.sillydroidViewportDensityWidth;
@@ -149,7 +170,10 @@
     // 让同屏 CSS 内容更多。这不是 Gecko tabs/page zoom，也不是 transform 位图缩放。
     viewport.setAttribute(
       'content',
-      'width=' + viewportWidth + ', initial-scale=' + initialScale + ', maximum-scale=1, viewport-fit=cover'
+      lockViewportScale(
+        'width=' + viewportWidth + ', initial-scale=' + initialScale + ', viewport-fit=cover',
+        initialScale
+      )
     );
     viewport.dataset.sillydroidViewportDensityPercent = String(sanitizedPercent);
     viewport.dataset.sillydroidViewportDensityReason = String(reason || 'host');
@@ -173,6 +197,10 @@
       try {
         port = browser.runtime.connectNative(nativeApp);
         port.onMessage.addListener(function(message) {
+          if (message && message.action === 'recordDocumentVisibility') {
+            recordDocumentVisibility(message.reason || 'host_request');
+            return;
+          }
           if (!message || message.action !== 'setViewportDensity') {
             return;
           }
@@ -204,6 +232,27 @@
       }
     }
     connect();
+  }
+
+  // 页面可见性诊断只记录枚举状态和时间，不读取页面内容。
+  function recordDocumentVisibility(reason) {
+    recordBridgeDiagnostic(
+      'event=document_visibility engine=GECKOVIEW reason=' + String(reason || 'unknown') +
+        ' state=' + String(document.visibilityState || 'unknown') +
+        ' atEpochMs=' + Date.now()
+    );
+  }
+
+  // 页面可见性是悬浮迁移是否真正维持 renderer 的关键证据。
+  function installVisibilityDiagnostic() {
+    if (globalThis.__sillyDroidGeckoVisibilityDiagnosticInstalled) {
+      return;
+    }
+    globalThis.__sillyDroidGeckoVisibilityDiagnosticInstalled = true;
+    document.addEventListener('visibilitychange', function() {
+      recordDocumentVisibility('visibilitychange');
+    }, false);
+    recordDocumentVisibility('document_start');
   }
 
   function injectPageScript() {
@@ -1637,5 +1686,6 @@
   }
 
   installViewportDensityPort();
+  installVisibilityDiagnostic();
   injectPageScript();
 })();

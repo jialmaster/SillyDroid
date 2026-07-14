@@ -17,6 +17,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
+/**
+ * 管理设置页可观察状态并把已验证的用户选择写入宿主偏好。
+ *
+ * 允许：维护悬浮浏览器与纯后台模式互斥；不允许申请系统权限或直接控制 overlay 服务。
+ */
 class SettingsActivityViewModel(
     private val hostPreferencesRepository: HostPreferencesRepository,
     runtimeMetadataRepository: RuntimeMetadataRepository? = null
@@ -34,6 +39,7 @@ class SettingsActivityViewModel(
             tavernRuntimePatchDisabledModuleIds = hostPreferencesRepository.tavernRuntimePatchDisabledModuleIds,
             tavernRuntimePatchSettingOverrides = hostPreferencesRepository.tavernRuntimePatchSettingOverrides,
             tavernRuntimePatchMetadata = runtimeMetadataRepository?.resolveRuntimePatchMetadataSnapshot(),
+            floatingBrowserEnabled = hostPreferencesRepository.floatingBrowserEnabled,
             floatingLogsEnabled = hostPreferencesRepository.floatingLogBubbleEnabled,
             pullRefreshEnabled = hostPreferencesRepository.webViewPullRefreshEnabled,
             debugDiagnosticsEnabled = hostPreferencesRepository.debugDiagnosticsEnabled,
@@ -42,6 +48,18 @@ class SettingsActivityViewModel(
     )
 
     val uiState: StateFlow<SettingsActivityUiState> = _uiState.asStateFlow()
+
+    /**
+     * 保存已经通过系统 overlay 权限复核的悬浮浏览器状态。
+     *
+     * 本方法不申请权限；调用方必须先完成 Settings.canDrawOverlays 鉴权，避免偏好与系统真实权限分叉。
+     */
+    fun setFloatingBrowserEnabled(enabled: Boolean) {
+        if (hostPreferencesRepository.floatingBrowserEnabled != enabled) {
+            hostPreferencesRepository.floatingBrowserEnabled = enabled
+        }
+        _uiState.update { current -> current.copy(floatingBrowserEnabled = enabled) }
+    }
 
     fun selectTab(tab: SettingsTab) {
         _uiState.update { current ->
@@ -107,7 +125,16 @@ class SettingsActivityViewModel(
         if (hostPreferencesRepository.launchWebViewOnReady != launchWebViewOnReady) {
             hostPreferencesRepository.launchWebViewOnReady = launchWebViewOnReady
         }
-        _uiState.update { current -> current.copy(backgroundOnlyModeEnabled = enabled) }
+        if (enabled && hostPreferencesRepository.floatingBrowserEnabled) {
+            // 纯后台模式根本不创建浏览器表面，不能保留一个无法兑现的悬浮浏览器开关。
+            hostPreferencesRepository.floatingBrowserEnabled = false
+        }
+        _uiState.update { current ->
+            current.copy(
+                backgroundOnlyModeEnabled = enabled,
+                floatingBrowserEnabled = if (enabled) false else current.floatingBrowserEnabled
+            )
+        }
     }
 
     fun setBackgroundHealthCheckEnabled(enabled: Boolean): Boolean {

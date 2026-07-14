@@ -257,6 +257,10 @@ internal object HostLogBundleInfoFormatter {
             appendLine("    \"terminalFontSizePx\": ${baseInfo.hostConfigSnapshot.terminalFontSizePx},")
             appendLine("    \"terminalCursorBlinkEnabled\": ${baseInfo.hostConfigSnapshot.terminalCursorBlinkEnabled},")
             appendLine("    \"terminalExtraKeysEnabled\": ${baseInfo.hostConfigSnapshot.terminalExtraKeysEnabled},")
+            appendLine("    \"floatingBrowserEnabled\": ${baseInfo.hostConfigSnapshot.floatingBrowserEnabled},")
+            appendLine(
+                "    \"floatingBrowserPosition\": ${jsonFloatingBrowserPositionOrNull(baseInfo.hostConfigSnapshot)},"
+            )
             appendLine("    \"floatingLogBubbleEnabled\": ${baseInfo.hostConfigSnapshot.floatingLogBubbleEnabled},")
             appendLine("    \"floatingLogRefreshIntervalMillis\": ${baseInfo.hostConfigSnapshot.floatingLogRefreshIntervalMillis},")
             appendLine(
@@ -492,6 +496,22 @@ internal object HostLogBundleInfoFormatter {
 
     private fun jsonFloatingLogBubblePositionOrNull(hostConfigSnapshot: HostConfigSnapshot): String {
         val position = hostConfigSnapshot.floatingLogBubblePosition ?: return "null"
+        return buildString {
+            append('{')
+            append("\"horizontalFraction\": ")
+            append(position.horizontalFraction)
+            append(", ")
+            append("\"verticalFraction\": ")
+            append(position.verticalFraction)
+            append('}')
+        }
+    }
+
+    /**
+     * 将悬浮浏览器位置写入诊断 bundle；只记录归一化坐标，不记录页面或消息内容。
+     */
+    private fun jsonFloatingBrowserPositionOrNull(hostConfigSnapshot: HostConfigSnapshot): String {
+        val position = hostConfigSnapshot.floatingBrowserPosition ?: return "null"
         return buildString {
             append('{')
             append("\"horizontalFraction\": ")

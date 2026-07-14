@@ -2,6 +2,7 @@ package com.jm.sillydroid.domain.settings
 
 import android.net.Uri
 import com.jm.sillydroid.core.model.settings.BrowserEngine
+import com.jm.sillydroid.core.model.settings.FloatingBrowserPosition
 import com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition
 import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.core.model.settings.LoadedTavernConfig
@@ -68,6 +69,10 @@ interface HostPreferencesRepository {
     var terminalFontSizePx: Int
     var terminalCursorBlinkEnabled: Boolean
     var terminalExtraKeysEnabled: Boolean
+    // 后台悬浮浏览器必须在显式 overlay 授权后由设置页写入；默认关闭。
+    var floatingBrowserEnabled: Boolean
+    // 系统 overlay 球的位置独立保存，不能复用应用内悬浮日志球位置。
+    var floatingBrowserPosition: FloatingBrowserPosition?
     var floatingLogBubbleEnabled: Boolean
     var floatingLogRefreshIntervalMillis: Int
     var floatingLogBubblePosition: FloatingLogBubblePosition?

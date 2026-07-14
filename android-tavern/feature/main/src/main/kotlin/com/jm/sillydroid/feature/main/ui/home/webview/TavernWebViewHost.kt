@@ -40,11 +40,17 @@ import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 import com.jm.sillydroid.feature.main.R
 import com.jm.sillydroid.feature.main.diagnostics.formatTrimMemoryLevel
 import com.jm.sillydroid.feature.main.diagnostics.normalizeDiagnosticValue
+import com.jm.sillydroid.feature.main.floatingbrowser.FloatingBrowserSurfaceStore
 import com.jm.sillydroid.feature.main.model.download.BrowserDownloadRequest
 import com.jm.sillydroid.feature.main.ui.home.bridge.BrowserHostBridgeInstaller
 import com.jm.sillydroid.feature.main.ui.home.bridge.BrowserHostBridgeTarget
 import com.jm.sillydroid.feature.main.ui.home.HomeViewModel
 
+/**
+ * 管理 System WebView 的页面、桥接、下载、文件选择和 renderer 生命周期。
+ *
+ * 允许：把进程级同一 WebView 在 Activity 与 overlay 间迁移；不允许在迁移时导航、刷新或创建替代页面。
+ */
 class TavernWebViewHost(
     private val activity: AppCompatActivity,
     private val homeViewModel: HomeViewModel,
@@ -62,6 +68,7 @@ class TavernWebViewHost(
     private val uploadRendererGoneLogBundle: (WebViewRendererGoneInfo) -> Unit = {},
     private val onWebViewRendererCrash: () -> Unit = {},
     private val onDocumentStartScriptUnsupported: () -> Unit = {},
+    private val floatingBrowserSurfaceStore: FloatingBrowserSurfaceStore = FloatingBrowserSurfaceStore(),
 ) : TavernBrowserHost {
     companion object {
         private const val LOG_TAG = "SillyDroidMain"
@@ -79,14 +86,8 @@ class TavernWebViewHost(
 
     override val browserEngine: BrowserEngine = BrowserEngine.SYSTEM_WEBVIEW
     val webViewRefreshLayout: ViewGroup = activity.findViewById(R.id.webViewRefreshLayout)
-    val webView: WebView = WebView(activity).also { createdWebView ->
-        // 浏览器 surface 由具体 host 动态创建，避免 GeckoView 模式也提前 inflate 系统 WebView provider。
-        createdWebView.layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
-        webViewRefreshLayout.addView(createdWebView)
-    }
+    private val retainedWebViewSurface = floatingBrowserSurfaceStore.acquireWebView(activity, webViewRefreshLayout)
+    val webView: WebView = retainedWebViewSurface.webView
     override val browserContainer: View
         get() = webViewRefreshLayout
     override val browserSurface: View
@@ -111,6 +112,7 @@ class TavernWebViewHost(
     }
 
     private var rendererRecoveryActivityRecreateScheduled = false
+    private var browserSurfaceDestroyed = false
     private var lastVolatileWebViewCacheClearElapsedMs = -1L
     private val webReloadTracer by lazy { WebReloadTracer(LOG_TAG) }
     private val httpAuthPromptController by lazy {
@@ -346,15 +348,81 @@ class TavernWebViewHost(
     }
 
     override fun onDestroy() {
+        if (browserSurfaceDestroyed) {
+            return
+        }
+        releaseWebViewActivityBindings(reason = "permanent_destroy")
+        destroyWebViewForActivityTeardown()
+    }
+
+    /** Activity 销毁时解除窗口回调和旧容器，但保留进程级 WebView 文档。 */
+    override fun releaseActivityBindings() {
+        if (!browserSurfaceDestroyed) {
+            releaseWebViewActivityBindings(reason = "activity_destroy")
+        }
+        floatingBrowserSurfaceStore.releaseActivityBinding(webView, webViewRefreshLayout)
+        if (!browserSurfaceDestroyed) {
+            recordCriticalHostDiagnostic(
+                category = "webview",
+                body = "event=activity_bindings_released session=$browserSessionIdentity ${currentWebViewDiagnosticState()}"
+            )
+        }
+    }
+
+    /** 释放所有 Activity 专属 client、弹窗和文件下载回调，不销毁当前文档。 */
+    private fun releaseWebViewActivityBindings(reason: String) {
         // renderer gone 后安排的 exit-info 延迟刷新（postDelayed 1.5s/5s）必须随 Activity 销毁一并取消；
         // 否则回调会落到已销毁的宿主上下文，造成无意义的后台 exit-info 刷新与潜在泄漏。
         mainHandler.removeCallbacksAndMessages(null)
         uninstallDebugRendererCrashReceiver()
         webDocumentStartScriptController?.close()
         webDocumentStartScriptController = null
-        httpAuthPromptController.dismissActivePrompt(reason = "webview_destroy")
+        httpAuthPromptController.dismissActivePrompt(reason = "webview_$reason")
         bridgeInstaller.close()
-        destroyWebViewForActivityTeardown()
+        // 当前文档和进程安全通知桥继续保留；Activity client、下载桥必须及时解除。
+        runCatching { webView.webChromeClient = null }
+        runCatching { webView.webViewClient = android.webkit.WebViewClient() }
+        runCatching { webView.setDownloadListener(null) }
+        runCatching { webView.removeJavascriptInterface(bridgeInstaller.blobDownloadBridgeName) }
+    }
+
+    /** 只根据进程级 WebView 的真实加载与可见状态判断迁移资格。 */
+    override fun canAttachToFloatingBrowser(): Boolean {
+        // Activity 可能在 overlay 期间销毁；迁移资格只由进程级页面实例和可见状态决定。
+        return retainedWebViewSurface.canAttachToOverlay()
+    }
+
+    /** 把同一 WebView 移入 overlay 容器，不调用加载或刷新 API。 */
+    override fun attachToFloatingBrowser(container: ViewGroup): Boolean {
+        // System WebView 必须迁移当前实例；这里不能创建替代 WebView，也不能触发 loadUrl/reload。
+        val attached = retainedWebViewSurface.attachToOverlay(container)
+        if (attached) {
+            recordCriticalHostDiagnostic(
+                category = "webview",
+                body = "event=floating_browser_attached session=$browserSessionIdentity currentUrl=${normalizeDiagnosticValue(webView.url)} pageLoadCount=${retainedWebViewSurface.pageLoadCount}"
+            )
+        }
+        return attached
+    }
+
+    /** WindowManager 完成 addView 后再读取可见性，避免把迁移中尚未挂窗的瞬时 hidden 当成最终状态。 */
+    override fun onFloatingBrowserWindowVisible() {
+        recordDocumentVisibility("floating_browser_window_visible")
+    }
+
+    /** 把同一 WebView 恢复到仍存活的 Activity 容器。 */
+    override fun attachToActivityBrowser(): Boolean {
+        val attached = retainedWebViewSurface.restoreToActivity()
+        if (attached) {
+            webViewRefreshLayout.isVisible = true
+            updateRefreshLayoutEnabled()
+            recordCriticalHostDiagnostic(
+                category = "webview",
+                body = "event=floating_browser_restored session=$browserSessionIdentity currentUrl=${normalizeDiagnosticValue(webView.url)} pageLoadCount=${retainedWebViewSurface.pageLoadCount}"
+            )
+            recordDocumentVisibility("floating_browser_restored")
+        }
+        return attached
     }
 
     private fun destroyWebViewForActivityTeardown() {
@@ -370,15 +438,8 @@ class TavernWebViewHost(
         runCatching { webView.webViewClient = android.webkit.WebViewClient() }
         runCatching { webView.removeJavascriptInterface(bridgeInstaller.systemNotificationBridgeName) }
         runCatching { webView.removeJavascriptInterface(bridgeInstaller.androidHostBridgeName) }
-        runCatching { (webView.parent as? ViewGroup)?.removeView(webView) }
-        runCatching { webView.destroy() }
-            .onFailure { error ->
-                recordCriticalHostDiagnostic(
-                    category = "webview",
-                    body = "event=destroy_webview_failed error=${normalizeDiagnosticValue(error.message ?: error.javaClass.simpleName)} ${currentHostMemoryDiagnosticState()}"
-                )
-                return
-            }
+        floatingBrowserSurfaceStore.destroyWebViewIfSame(webView)
+        browserSurfaceDestroyed = true
         recordCriticalHostDiagnostic(
             category = "webview",
             body = "event=destroy_webview_finished ${currentHostMemoryDiagnosticState()}"
@@ -559,6 +620,7 @@ class TavernWebViewHost(
         if (!isCurrentWebViewInstance(sourceWebView)) {
             return
         }
+        floatingBrowserSurfaceStore.incrementPageLoadCount(sourceWebView)
         logActiveWebReloadTrace(phase = "page_started", url = url)
     }
 
@@ -1289,12 +1351,13 @@ class TavernWebViewHost(
                 append(rendererFailureSnapshot)
             }
         )
+        destroyWebViewAfterRendererGone()
         if (!activity.isFinishing && !activity.isDestroyed) {
             webViewRefreshLayout.post {
                 if (activity.isFinishing || activity.isDestroyed) {
                     recordCriticalHostDiagnostic(
                         category = "webview",
-                        body = "event=renderer_gone_recreate_aborted reason=activity_not_alive ${currentWebViewDiagnosticState()} ${rendererFailureSnapshot}"
+                        body = "event=renderer_gone_recreate_aborted reason=activity_not_alive session=$browserSessionIdentity $rendererFailureSnapshot"
                     )
                     return@post
                 }
@@ -1303,8 +1366,32 @@ class TavernWebViewHost(
         } else {
             recordCriticalHostDiagnostic(
                 category = "webview",
-                body = "event=renderer_gone_recreate_skipped reason=activity_not_alive ${currentWebViewDiagnosticState()} ${rendererFailureSnapshot}"
+                body = "event=renderer_gone_recreate_skipped reason=activity_not_alive session=$browserSessionIdentity $rendererFailureSnapshot"
             )
+        }
+    }
+
+    /** renderer gone 后只允许直接 destroy；禁止再调用 loadUrl/stopLoading 等失效实例 API。 */
+    private fun destroyWebViewAfterRendererGone() {
+        mainHandler.removeCallbacksAndMessages(null)
+        uninstallDebugRendererCrashReceiver()
+        webDocumentStartScriptController?.close()
+        webDocumentStartScriptController = null
+        httpAuthPromptController.dismissActivePrompt(reason = "webview_renderer_gone")
+        bridgeInstaller.close()
+        floatingBrowserSurfaceStore.destroyWebViewIfSame(webView)
+        browserSurfaceDestroyed = true
+    }
+
+    /** 读取当前文档可见性用于迁移验收；回调只记录状态，不读取消息或页面内容。 */
+    private fun recordDocumentVisibility(event: String) {
+        runCatching {
+            webView.evaluateJavascript("document.visibilityState") { value ->
+                recordCriticalHostDiagnostic(
+                    category = "floating-browser",
+                    body = "event=document_visibility source=$event engine=SYSTEM_WEBVIEW session=$browserSessionIdentity state=${normalizeDiagnosticValue(value)} pageLoadCount=${retainedWebViewSurface.pageLoadCount}"
+                )
+            }
         }
     }
 
@@ -1641,6 +1728,7 @@ class TavernWebViewHost(
     private fun currentWebViewDiagnosticState(): String {
         return buildString {
             append("currentUrl=${normalizeDiagnosticValue(webView.url)}")
+            append(" pageLoadCount=${retainedWebViewSurface.pageLoadCount}")
             append(" rememberedUrl=${normalizeDiagnosticValue(homeViewModel.loadedUrl)}")
             append(" localBaseUrl=${normalizeDiagnosticValue(buildInitialTavernUrl(runtimeConfigRepository.localServiceUrl()))}")
             append(" retryAttempts=${homeViewModel.pendingLocalRetryAttempts}")

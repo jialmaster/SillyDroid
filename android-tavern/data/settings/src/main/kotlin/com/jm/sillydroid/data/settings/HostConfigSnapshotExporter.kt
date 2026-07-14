@@ -2,6 +2,7 @@ package com.jm.sillydroid.data.settings
 
 import android.content.Context
 import com.jm.sillydroid.core.model.settings.BrowserEngine
+import com.jm.sillydroid.core.model.settings.FloatingBrowserPosition
 import com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition
 import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.core.model.settings.TavernServerLaunchMode
@@ -32,6 +33,8 @@ data class HostConfigSnapshot(
     val terminalFontSizePx: Int,
     val terminalCursorBlinkEnabled: Boolean,
     val terminalExtraKeysEnabled: Boolean,
+    val floatingBrowserEnabled: Boolean,
+    val floatingBrowserPosition: FloatingBrowserPosition?,
     val floatingLogBubbleEnabled: Boolean,
     val floatingLogRefreshIntervalMillis: Int,
     val floatingLogBubblePosition: FloatingLogBubblePosition?,
@@ -75,6 +78,8 @@ object HostConfigSnapshotExporter {
             terminalFontSizePx = hostPreferences.terminalFontSizePx,
             terminalCursorBlinkEnabled = hostPreferences.terminalCursorBlinkEnabled,
             terminalExtraKeysEnabled = hostPreferences.terminalExtraKeysEnabled,
+            floatingBrowserEnabled = hostPreferences.floatingBrowserEnabled,
+            floatingBrowserPosition = hostPreferences.floatingBrowserPosition,
             floatingLogBubbleEnabled = hostPreferences.floatingLogBubbleEnabled,
             floatingLogRefreshIntervalMillis = hostPreferences.floatingLogRefreshIntervalMillis,
             floatingLogBubblePosition = hostPreferences.floatingLogBubblePosition,

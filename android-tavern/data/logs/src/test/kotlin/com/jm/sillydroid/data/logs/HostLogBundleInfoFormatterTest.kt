@@ -1,6 +1,7 @@
 package com.jm.sillydroid.data.logs
 
 import com.jm.sillydroid.core.model.settings.BrowserEngine
+import com.jm.sillydroid.core.model.settings.FloatingBrowserPosition
 import com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition
 import com.jm.sillydroid.core.model.settings.HostDisplayMode
 import com.jm.sillydroid.core.model.settings.TavernServerLaunchMode
@@ -268,6 +269,11 @@ class HostLogBundleInfoFormatterTest {
             terminalFontSizePx = 16,
             terminalCursorBlinkEnabled = true,
             terminalExtraKeysEnabled = true,
+            floatingBrowserEnabled = true,
+            floatingBrowserPosition = FloatingBrowserPosition(
+                horizontalFraction = 1f,
+                verticalFraction = 0.5f
+            ),
             floatingLogBubbleEnabled = false,
             floatingLogRefreshIntervalMillis = 1000,
             floatingLogBubblePosition = FloatingLogBubblePosition(

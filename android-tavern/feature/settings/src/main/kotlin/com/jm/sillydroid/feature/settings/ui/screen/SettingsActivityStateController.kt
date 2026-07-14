@@ -20,9 +20,15 @@ import com.jm.sillydroid.feature.settings.model.SettingsActivityUiState
 import com.jm.sillydroid.feature.settings.viewmodel.SettingsActivityViewModel
 import kotlinx.coroutines.launch
 
+/**
+ * 绑定设置页开关与状态流，并把用户操作转成明确的 ViewModel 或宿主动作。
+ *
+ * 允许：触发悬浮浏览器授权请求和关闭动作；不允许自行写入未经权限复核的启用状态。
+ */
 class SettingsActivityStateController(
     private val activity: AppCompatActivity,
     private val viewModel: SettingsActivityViewModel,
+    private val floatingBrowserSwitch: MaterialSwitch,
     private val floatingLogsSwitch: MaterialSwitch,
     private val backgroundOnlyModeSwitch: MaterialSwitch,
     private val backgroundHealthCheckSwitch: MaterialSwitch,
@@ -42,13 +48,25 @@ class SettingsActivityStateController(
     private val hostDisplayModeValueView: TextView,
     private val debugDiagnosticsSwitch: MaterialSwitch,
     private val unrestrictedFileImportSelectionSwitch: MaterialSwitch,
+    private val onFloatingBrowserEnableRequested: () -> Unit,
+    private val onFloatingBrowserDisabled: () -> Unit,
     private val showRuntimePatchBottomSheet: (SettingsActivityUiState) -> Unit,
     private val onServiceRestartRequired: () -> Unit,
     private val applyHostDisplayMode: (HostDisplayMode) -> Unit,
     private val renderResultFlags: (SettingsActivityUiState) -> Unit
 ) {
+    /** 初始化控件监听并订阅状态流，保证开关始终反映持久化真值。 */
     fun initialize() {
         val initialState = viewModel.uiState.value
+        floatingBrowserSwitch.isChecked = initialState.floatingBrowserEnabled
+        floatingBrowserSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                // 开启动作必须先离开 App 进入系统 overlay 授权页；只有授权回调能写入真实启用状态。
+                onFloatingBrowserEnableRequested()
+            } else {
+                onFloatingBrowserDisabled()
+            }
+        }
         floatingLogsSwitch.isChecked = initialState.floatingLogsEnabled
         floatingLogsSwitch.setOnCheckedChangeListener { _, isChecked ->
             viewModel.setFloatingLogsEnabled(isChecked)
@@ -130,7 +148,13 @@ class SettingsActivityStateController(
         }
     }
 
+    /** 渲染设置状态；纯后台模式下禁用没有浏览器表面的悬浮入口。 */
     private fun render(state: SettingsActivityUiState) {
+        if (floatingBrowserSwitch.isChecked != state.floatingBrowserEnabled) {
+            floatingBrowserSwitch.isChecked = state.floatingBrowserEnabled
+        }
+        // 纯后台模式不创建浏览器表面，必须禁用悬浮浏览器入口而不是让用户保存无效配置。
+        floatingBrowserSwitch.isEnabled = !state.backgroundOnlyModeEnabled
         if (floatingLogsSwitch.isChecked != state.floatingLogsEnabled) {
             floatingLogsSwitch.isChecked = state.floatingLogsEnabled
         }

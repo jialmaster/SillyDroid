@@ -48,3 +48,28 @@ interface SillyDroidAppGraph {
 interface SillyDroidAppGraphProvider {
     val sillyDroidAppGraph: SillyDroidAppGraph
 }
+
+/**
+ * 进程级后台悬浮浏览器控制器。
+ *
+ * 允许：设置页等非主界面请求预热、停止和短期抑制；不允许暴露具体浏览器 View 或窗口实现。
+ */
+interface HostFloatingBrowserController {
+    /** 持有短期抑制令牌，关闭令牌前应用退后台不显示悬浮浏览器。 */
+    fun acquireSuppression(reason: String): AutoCloseable
+
+    /** 在 App 前台预启动悬浮浏览器服务，避免后台时机命中服务启动限制。 */
+    fun prepare()
+
+    /** 停止悬浮浏览器服务并移除窗口，不影响 Node 后端前台服务。 */
+    fun stop()
+}
+
+/**
+ * 暴露悬浮浏览器进程控制能力的 Application 契约。
+ *
+ * 允许：feature 模块通过 Application 获取控制器；不允许 feature 模块反向依赖具体 app 实现类。
+ */
+interface HostFloatingBrowserControllerProvider {
+    val hostFloatingBrowserController: HostFloatingBrowserController
+}

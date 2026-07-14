@@ -23,6 +23,7 @@ import com.jm.sillydroid.domain.bootstrap.RuntimeConfigRepository
 import com.jm.sillydroid.domain.settings.HostPreferencesRepository
 import com.jm.sillydroid.feature.main.R
 import com.jm.sillydroid.feature.main.diagnostics.normalizeDiagnosticValue
+import com.jm.sillydroid.feature.main.floatingbrowser.FloatingBrowserSuppressionRegistry
 import com.jm.sillydroid.feature.main.model.download.BrowserDownloadRequest
 import com.jm.sillydroid.feature.main.model.download.BrowserResponseDownloadRequest
 import com.jm.sillydroid.feature.main.model.download.BrowserDownloadResult
@@ -56,6 +57,7 @@ class HostIoController(
     private val blobDownloadBridgeName: String = BrowserHostBridgeNames.DEFAULT_BLOB_DOWNLOAD_BRIDGE_NAME,
     private val downloadDiagnosticSink: (String) -> Unit = {},
     private val hostDiagnosticSink: (category: String, body: String) -> Unit = { _, _ -> },
+    private val floatingBrowserSuppressionRegistry: FloatingBrowserSuppressionRegistry = FloatingBrowserSuppressionRegistry(),
 ) {
     data class BrowserFileChooserRequest(
         val intent: Intent,
@@ -97,11 +99,12 @@ class HostIoController(
     }
 
     val blobDownloadController: BlobDownloadController by lazy {
+        val appContext = activity.applicationContext
         BlobDownloadController(
-            contentResolver = activity.contentResolver,
+            contentResolver = appContext.contentResolver,
             // GeckoView 的 native messaging 不适合承载超大 base64 单包；blob/data 导出先分块落在宿主 cache，
             // 完成后再流式写入系统下载目录，避免导出大文件时挤爆 Java heap 或消息序列化上限。
-            chunkTempDirectory = java.io.File(activity.cacheDir, "blob-download-chunks")
+            chunkTempDirectory = java.io.File(appContext.cacheDir, "blob-download-chunks")
         )
     }
 
@@ -109,7 +112,7 @@ class HostIoController(
         SystemNotificationController(
             hostNotificationService = hostNotificationService,
             smallIconResId = android.R.drawable.stat_notify_chat,
-            alertSoundPlayer = AndroidSystemAlertSoundPlayer(activity)
+            alertSoundPlayer = AndroidSystemAlertSoundPlayer(activity.applicationContext)
         )
     }
 
@@ -121,6 +124,7 @@ class HostIoController(
     private var pendingFileChooserCallback: ((Array<Uri>?) -> Unit)? = null
     private var pendingFileChooserSelectionFilter: ((Uri) -> Boolean)? = null
     private var pendingFileChooserSource: String = ""
+    private var fileChooserFloatingBrowserSuppression: AutoCloseable? = null
     private val fileChooserLauncher = activity.registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -130,6 +134,7 @@ class HostIoController(
         val selectionFilter = pendingFileChooserSelectionFilter
         pendingFileChooserSelectionFilter = null
         pendingFileChooserSource = ""
+        releaseFileChooserFloatingBrowserSuppression()
         val resolvedResult = resolveFileChooserResult(result.resultCode, result.data, selectionFilter)
         recordFileChooserDiagnostic(
             "event=file_chooser_result source=$source resultCode=${result.resultCode} " +
@@ -192,6 +197,8 @@ class HostIoController(
         pendingFileChooserCallback = callback
         pendingFileChooserSelectionFilter = launchRequest.selectionFilter
         pendingFileChooserSource = source
+        fileChooserFloatingBrowserSuppression?.close()
+        fileChooserFloatingBrowserSuppression = floatingBrowserSuppressionRegistry.acquire("file_chooser")
         recordFileChooserDiagnostic(
             "event=file_chooser_launch_requested source=$source action=${normalizeDiagnosticValue(launchRequest.intent.action)} " +
                 "type=${normalizeDiagnosticValue(launchRequest.intent.type)} allowMultiple=${request.allowMultiple} " +
@@ -218,6 +225,7 @@ class HostIoController(
         pendingFileChooserCallback = null
         pendingFileChooserSelectionFilter = null
         pendingFileChooserSource = ""
+        releaseFileChooserFloatingBrowserSuppression()
     }
 
     private fun failPendingFileChooserLaunch(
@@ -228,12 +236,19 @@ class HostIoController(
         pendingFileChooserCallback = null
         pendingFileChooserSelectionFilter = null
         pendingFileChooserSource = ""
+        releaseFileChooserFloatingBrowserSuppression()
         recordFileChooserDiagnostic(
             "event=file_chooser_launch_failed source=$source error=${error.javaClass.simpleName} " +
                 "message=${normalizeDiagnosticValue(error.message)}"
         )
         Toast.makeText(activity, R.string.file_chooser_open_failed, Toast.LENGTH_LONG).show()
         callback.invoke(null)
+    }
+
+    /** 文件选择器返回、失败或 Activity 销毁时必须对称释放 overlay 抑制令牌。 */
+    private fun releaseFileChooserFloatingBrowserSuppression() {
+        fileChooserFloatingBrowserSuppression?.close()
+        fileChooserFloatingBrowserSuppression = null
     }
 
     private fun launchFallbackFileChooser(

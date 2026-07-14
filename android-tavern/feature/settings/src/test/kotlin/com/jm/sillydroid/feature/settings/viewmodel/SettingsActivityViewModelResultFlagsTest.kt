@@ -11,7 +11,34 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/** 验证设置页 ViewModel 的持久化结果标记和互斥开关。 */
 class SettingsActivityViewModelResultFlagsTest {
+
+    /** 已授权的悬浮浏览器开关必须同步写入 repository 和 UI state。 */
+    @Test
+    fun `floating browser toggle persists enabled state`() {
+        val repository = FakeHostPreferencesRepository()
+        val viewModel = SettingsActivityViewModel(repository)
+
+        viewModel.setFloatingBrowserEnabled(true)
+
+        assertTrue(repository.floatingBrowserEnabled)
+        assertTrue(viewModel.uiState.value.floatingBrowserEnabled)
+    }
+
+    /** 纯后台模式没有浏览器 surface，开启时必须强制关闭悬浮浏览器。 */
+    @Test
+    fun `background only mode disables floating browser`() {
+        val repository = FakeHostPreferencesRepository().apply {
+            floatingBrowserEnabled = true
+        }
+        val viewModel = SettingsActivityViewModel(repository)
+
+        viewModel.setBackgroundOnlyModeEnabled(true)
+
+        assertFalse(repository.floatingBrowserEnabled)
+        assertFalse(viewModel.uiState.value.floatingBrowserEnabled)
+    }
 
     @Test
     fun `markResultFlags keeps force fresh webview load flag once requested`() {
@@ -176,6 +203,8 @@ class SettingsActivityViewModelResultFlagsTest {
         override var terminalFontSizePx: Int = 14
         override var terminalCursorBlinkEnabled: Boolean = true
         override var terminalExtraKeysEnabled: Boolean = true
+        override var floatingBrowserEnabled: Boolean = false
+        override var floatingBrowserPosition: com.jm.sillydroid.core.model.settings.FloatingBrowserPosition? = null
         override var floatingLogBubbleEnabled: Boolean = false
         override var floatingLogRefreshIntervalMillis: Int = 1_000
         override var floatingLogBubblePosition: com.jm.sillydroid.core.model.settings.FloatingLogBubblePosition? = null

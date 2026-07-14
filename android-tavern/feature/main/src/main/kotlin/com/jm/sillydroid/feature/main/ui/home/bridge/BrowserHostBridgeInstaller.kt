@@ -2,6 +2,7 @@ package com.jm.sillydroid.feature.main.ui.home.bridge
 
 import android.view.View
 import com.jm.sillydroid.core.model.settings.BrowserEngine
+import com.jm.sillydroid.feature.main.model.download.DownloadFailureReport
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
@@ -27,6 +28,9 @@ interface BrowserHostBridgeInstaller {
 
     fun requestViewportDensityPercent(percent: Int, baseViewportWidthCssPx: Int): Boolean = false
 
+    /** 请求浏览器侧记录当前 document.visibilityState；只允许写无内容诊断。 */
+    fun requestDocumentVisibilityDiagnostic(reason: String): Boolean = false
+
     fun close() = Unit
 
     companion object {
@@ -50,6 +54,11 @@ data class BrowserHostBridgeTarget(
     val geckoSession: GeckoSession? = null
 )
 
+/**
+ * 浏览器桥可调用的进程安全宿主动作集合。
+ *
+ * Activity 专属动作必须由动态 delegate 提供；默认空实现不得持有已销毁窗口。
+ */
 data class BrowserHostBridgeActions(
     val isHostActive: () -> Boolean,
     val runOnUiThread: (() -> Unit) -> Unit,
@@ -62,5 +71,7 @@ data class BrowserHostBridgeActions(
     val applySystemBarsBackgroundColors: (String, String) -> Unit,
     val reloadTavern: () -> Unit,
     val hostVersionInfoJson: () -> String,
-    val recordWebPerformanceDiagnosticPayload: (String) -> Unit = {}
+    val recordWebPerformanceDiagnosticPayload: (String) -> Unit = {},
+    val requestNotificationPermission: () -> Unit = {},
+    val showDownloadFailure: (DownloadFailureReport) -> Unit = {}
 )

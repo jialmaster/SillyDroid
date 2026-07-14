@@ -52,6 +52,7 @@ class BootstrapSettingsScreenController(
     private val loadingIndicator: LinearProgressIndicator,
     private val searchLayout: TextInputLayout,
     private val quickActionsButton: MaterialButton,
+    private val floatingBrowserSwitch: MaterialSwitch,
     private val floatingLogsSwitch: MaterialSwitch,
     private val backgroundOnlyModeSwitch: MaterialSwitch,
     private val backgroundHealthCheckSwitch: MaterialSwitch,
@@ -107,6 +108,8 @@ class BootstrapSettingsScreenController(
         toolbarAboutEntryView.isEnabled = !busy
         searchLayout.isEnabled = !busy
         quickActionsButton.isEnabled = !busy
+        // 后台纯服务模式不承载浏览器 surface；busy 结束时也不能把悬浮浏览器入口重新放开。
+        floatingBrowserSwitch.isEnabled = !busy && !backgroundOnlyModeSwitch.isChecked
         floatingLogsSwitch.isEnabled = !busy
         backgroundOnlyModeSwitch.isEnabled = !busy
         backgroundHealthCheckSwitch.isEnabled = !busy

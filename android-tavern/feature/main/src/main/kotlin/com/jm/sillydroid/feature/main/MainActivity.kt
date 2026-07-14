@@ -7,14 +7,18 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.WindowManager
 import androidx.annotation.ColorInt
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.pm.PackageInfoCompat
+import androidx.core.app.ActivityOptionsCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewCompat
@@ -28,6 +32,10 @@ import com.jm.sillydroid.domain.app.SillyDroidAppGraph
 import com.jm.sillydroid.domain.app.SillyDroidAppGraphProvider
 import com.jm.sillydroid.domain.bootstrap.BootstrapController
 import com.jm.sillydroid.feature.main.diagnostics.formatTrimMemoryLevel
+import com.jm.sillydroid.feature.main.floatingbrowser.FloatingBrowserAttachmentState
+import com.jm.sillydroid.feature.main.floatingbrowser.FloatingBrowserRuntimeProvider
+import com.jm.sillydroid.feature.main.floatingbrowser.FloatingBrowserRuntimeState
+import com.jm.sillydroid.feature.main.floatingbrowser.FloatingBrowserService
 import com.jm.sillydroid.feature.main.ui.extensions.DefaultExtensionsInstallerLauncher
 import com.jm.sillydroid.feature.main.ui.home.HomeViewModel
 import com.jm.sillydroid.feature.main.ui.home.bridge.BrowserHostBridgeActions
@@ -73,6 +81,8 @@ class MainActivity : AppCompatActivity() {
 
     private val appGraph: SillyDroidAppGraph
         get() = (application as SillyDroidAppGraphProvider).sillyDroidAppGraph
+    private val floatingBrowserRuntime: FloatingBrowserRuntimeState
+        get() = (application as FloatingBrowserRuntimeProvider).floatingBrowserRuntime
     private val hostConfigStore by lazy { appGraph.hostConfigStore }
     private val hostLogRepository by lazy { appGraph.hostLogRepository }
     private val processManager by lazy<BootstrapController> { appGraph.bootstrapController }
@@ -87,11 +97,35 @@ class MainActivity : AppCompatActivity() {
     private var lastWebViewSystemBarsColorHex: String? = null
     private var lastWebViewStatusBarColorHex: String? = null
     private var lastWebViewNavigationBarColorHex: String? = null
+    private var feedbackImageFloatingBrowserSuppression: AutoCloseable? = null
 
     private val feedbackImageLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        releaseFeedbackImageFloatingBrowserSuppression()
         if (::floatingLogsHost.isInitialized) {
             floatingLogsHost.onFeedbackImagesSelected(uris)
         }
+    }
+
+    private val suppressingFeedbackImageLauncher = object : ActivityResultLauncher<String>() {
+        /** 打开系统图片选择器前持有 overlay 抑制令牌，返回或启动失败后对称释放。 */
+        override fun launch(input: String, options: ActivityOptionsCompat?) {
+            releaseFeedbackImageFloatingBrowserSuppression()
+            feedbackImageFloatingBrowserSuppression =
+                floatingBrowserRuntime.suppressionRegistry.acquire("feedback_image_picker")
+            runCatching { feedbackImageLauncher.launch(input, options) }
+                .onFailure {
+                    releaseFeedbackImageFloatingBrowserSuppression()
+                    throw it
+                }
+        }
+
+        /** 由真实 launcher 处理注销，包装器不维护第二份 ActivityResult 注册。 */
+        override fun unregister() {
+            feedbackImageLauncher.unregister()
+        }
+
+        /** 暴露真实 launcher 契约，保持 ActivityResult 类型检查一致。 */
+        override fun getContract(): ActivityResultContract<String, *> = feedbackImageLauncher.contract
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -138,7 +172,8 @@ class MainActivity : AppCompatActivity() {
             },
             hostDiagnosticSink = { category, body ->
                 recordDefaultHostDiagnostic(category = category, body = body)
-            }
+            },
+            floatingBrowserSuppressionRegistry = floatingBrowserRuntime.suppressionRegistry
         )
         floatingLogsHost = FloatingLogsHost(
             activity = this,
@@ -153,7 +188,7 @@ class MainActivity : AppCompatActivity() {
             reloadTavernWebView = { browserHost.reloadTavernWebView(source = "floating_logs_button") },
             applyBrowserZoomPercent = ::applyBrowserZoomPercentFromFloatingLogs,
             applyBrowserPageZoomPercent = ::applyBrowserPageZoomPercentFromFloatingLogs,
-            feedbackImageLauncher = feedbackImageLauncher,
+            feedbackImageLauncher = suppressingFeedbackImageLauncher,
             feedbackUploadConfig = {
                 HostLogBundleUploadRequestConfig(
                     uploadUrl = appGraph.appUpdateBuildConfig.crashLogUploadUrl,
@@ -190,6 +225,10 @@ class MainActivity : AppCompatActivity() {
             onImeChanged = { visible -> browserHost.onImeVisibilityChanged(visible) },
             onContentBoundsChanged = { floatingLogsHost.onContentBoundsChanged() }
         )
+        floatingBrowserRuntime.uiDelegateRegistry.register(
+            owner = this,
+            delegate = createActivityBrowserHostBridgeActions()
+        )
     }
 
     private fun installSystemUi() {
@@ -207,12 +246,33 @@ class MainActivity : AppCompatActivity() {
             return
         }
         browserHost.configure()
+        floatingBrowserRuntime.coordinator.registerHost(browserHost) { body ->
+            recordDefaultHostDiagnostic(category = "floating-browser", body = body)
+        }
         registerBackPressHandler()
     }
 
     private fun installBootstrapWiring() {
         bootstrapOverlayHost.observe()
         bootstrapOverlayHost.bindButtons()
+    }
+
+    /** 主界面可见前恢复同一浏览器表面，并按最新权限决定是否预热悬浮服务。 */
+    override fun onStart() {
+        super.onStart()
+        floatingBrowserRuntime.coordinator.restoreToActivity()
+        synchronizeFloatingBrowserPermission()
+        if (shouldPrepareFloatingBrowser()) {
+            runCatching { FloatingBrowserService.prepare(applicationContext) }
+                .onFailure { error ->
+                    recordDefaultHostDiagnostic(
+                        category = "floating-browser",
+                        body = "event=service_prepare_failed error=${error.javaClass.simpleName}"
+                    )
+                }
+        } else {
+            FloatingBrowserService.stop(applicationContext)
+        }
     }
 
     override fun onResume() {
@@ -237,8 +297,16 @@ class MainActivity : AppCompatActivity() {
             event = "on_destroy",
             extra = "browserHostInitialized=${::browserHost.isInitialized} changingConfigMask=$changingConfigurations"
         )
+        releaseFeedbackImageFloatingBrowserSuppression()
+        floatingBrowserRuntime.uiDelegateRegistry.unregister(this)
         if (::browserHost.isInitialized) {
-            browserHost.onDestroy()
+            val browserAttachedToOverlay =
+                floatingBrowserRuntime.coordinator.state == FloatingBrowserAttachmentState.OVERLAY
+            browserHost.releaseActivityBindings()
+            floatingBrowserRuntime.coordinator.unregisterHost(browserHost)
+            if (!browserAttachedToOverlay) {
+                FloatingBrowserService.stop(applicationContext)
+            }
         }
         hostIo.cancelPendingFileChooser()
         hostIo.blobDownloadController.close()
@@ -298,6 +366,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun shouldUseWebViewSurface(): Boolean = hostConfigStore.launchWebViewOnReady
+
+    /** 只有真实浏览器模式、用户开关和系统权限同时成立时才预启动 overlay 服务。 */
+    private fun shouldPrepareFloatingBrowser(): Boolean {
+        return shouldUseWebViewSurface() &&
+            hostConfigStore.floatingBrowserEnabled &&
+            Settings.canDrawOverlays(this)
+    }
+
+    /** 主界面恢复时复核 overlay 权限；被系统撤销后立即同步关闭持久化开关。 */
+    private fun synchronizeFloatingBrowserPermission() {
+        if (!hostConfigStore.floatingBrowserEnabled || Settings.canDrawOverlays(this)) {
+            return
+        }
+        hostConfigStore.floatingBrowserEnabled = false
+        recordDefaultHostDiagnostic(
+            category = "floating-browser",
+            body = "event=permission_revoked action=disable_feature"
+        )
+    }
+
+    /** 图片选择器完成、失败或 Activity 销毁时对称释放 overlay 抑制令牌。 */
+    private fun releaseFeedbackImageFloatingBrowserSuppression() {
+        feedbackImageFloatingBrowserSuppression?.close()
+        feedbackImageFloatingBrowserSuppression = null
+    }
 
     private fun maybePromptCrashLogUploadConsent(): Boolean {
         if (hostConfigStore.crashLogUploadPromptConsumed) {
@@ -577,7 +670,8 @@ class MainActivity : AppCompatActivity() {
                 refreshApplicationExitInfo = { hostLogRepository.refreshApplicationExitInfoAsync() },
                 uploadRendererGoneLogBundle = ::uploadRendererGoneLogBundle,
                 onWebViewRendererCrash = ::requestWebViewRendererCrashBrowserEngineHint,
-                onDocumentStartScriptUnsupported = ::requestWebViewDocumentStartUnsupportedHint
+                onDocumentStartScriptUnsupported = ::requestWebViewDocumentStartUnsupportedHint,
+                floatingBrowserSurfaceStore = floatingBrowserRuntime.browserSurfaceStore
             )
         }.getOrElse { error ->
             recordDefaultHostDiagnostic(
@@ -619,29 +713,26 @@ class MainActivity : AppCompatActivity() {
             },
             criticalHostDiagnosticSink = HostDiagnosticSink { category, body ->
                 recordDefaultHostDiagnostic(category = category, body = body)
-            }
+            },
+            floatingBrowserSurfaceStore = floatingBrowserRuntime.browserSurfaceStore
         )
     }
 
     private fun createBrowserBridgeInstaller(browserEngine: BrowserEngine): BrowserHostBridgeInstaller {
+        val bridgeDiagnosticSink = createProcessSafeBrowserBridgeDiagnosticSink()
         return BrowserHostBridgeInstallerFactory(
             activity = this,
             hostIo = hostIo,
             downloadNotificationCoordinator = appGraph.hostDownloadNotificationCoordinator,
-            actions = createBrowserHostBridgeActions(),
-            scope = lifecycleScope,
+            actions = floatingBrowserRuntime.uiDelegateRegistry.createProcessActions(),
+            scope = floatingBrowserRuntime.browserBridgeScope,
             dispatchers = appGraph.dispatchers,
-            diagnosticSink = { category, body ->
-                if (category == "download") {
-                    recordDetailedHostDiagnostic(category = category, body = body)
-                } else {
-                    recordDefaultHostDiagnostic(category = category, body = body)
-                }
-            }
+            diagnosticSink = bridgeDiagnosticSink
         ).create(browserEngine)
     }
 
-    private fun createBrowserHostBridgeActions(): BrowserHostBridgeActions {
+    /** 构建只在当前 Activity 存活期间有效的 UI delegate。 */
+    private fun createActivityBrowserHostBridgeActions(): BrowserHostBridgeActions {
         return BrowserHostBridgeActions(
             isHostActive = { !isFinishing && !isDestroyed },
             runOnUiThread = { action -> runOnUiThread(action) },
@@ -659,8 +750,25 @@ class MainActivity : AppCompatActivity() {
             hostVersionInfoJson = ::buildAndroidHostVersionInfoJson,
             recordWebPerformanceDiagnosticPayload = { payload ->
                 recordWebPerformanceDiagnosticPayload(payload)
-            }
+            },
+            requestNotificationPermission = { hostIo.requestNotificationPermissionIfNeeded() },
+            showDownloadFailure = hostIo::showDownloadFailure
         )
+    }
+
+    /**
+     * 创建不捕获 Activity 的桥接诊断出口。
+     *
+     * Activity 销毁后 Gecko native delegate 仍可记录通知事件，但详细下载日志仍遵守调试开关。
+     */
+    private fun createProcessSafeBrowserBridgeDiagnosticSink(): (String, String) -> Unit {
+        val logRepository = hostLogRepository
+        val preferences = hostConfigStore
+        return { category, body ->
+            if (category != "download" || preferences.debugDiagnosticsEnabled) {
+                logRepository.recordHostDiagnostic(category = category, body = body)
+            }
+        }
     }
 
     private fun applyHostSurfaceSystemBars() {

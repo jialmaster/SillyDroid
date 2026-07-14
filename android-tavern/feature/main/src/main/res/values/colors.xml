@@ -17,4 +17,7 @@
     <color name="floating_logs_panel_content">#111827</color>
     <color name="floating_logs_bubble_background">#E61F2937</color>
     <color name="floating_logs_bubble_text">#FFFFFF</color>
+    <color name="floating_browser_stroke">#CCFFFFFF</color>
+    <color name="floating_browser_shield">#66111827</color>
+    <color name="floating_browser_icon">#FFFFFFFF</color>
 </resources>

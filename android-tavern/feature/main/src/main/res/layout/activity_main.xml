@@ -514,15 +514,15 @@
 
         <ImageButton
             android:id="@+id/floatingLogsBubble"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
+            android:layout_width="@dimen/sillydroid_floating_logs_bubble_size"
+            android:layout_height="@dimen/sillydroid_floating_logs_bubble_size"
             android:layout_gravity="bottom|end"
             android:layout_marginEnd="18dp"
             android:layout_marginBottom="18dp"
             android:background="@drawable/bg_floating_logs_bubble"
             android:contentDescription="@string/floating_logs_bubble_description"
             android:elevation="14dp"
-            android:padding="15dp"
+            android:padding="@dimen/sillydroid_floating_logs_bubble_icon_padding"
             android:scaleType="center"
             android:src="@drawable/ic_bootstrap_settings"
             android:tint="@color/floating_logs_bubble_text"

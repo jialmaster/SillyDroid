@@ -19,6 +19,7 @@ data class SettingsActivityUiState(
     val tavernRuntimePatchDisabledModuleIds: Set<String> = emptySet(),
     val tavernRuntimePatchSettingOverrides: RuntimePatchSettingOverrides = emptyMap(),
     val tavernRuntimePatchMetadata: RuntimePatchMetadataSnapshot? = null,
+    val floatingBrowserEnabled: Boolean = false,
     val floatingLogsEnabled: Boolean = false,
     val pullRefreshEnabled: Boolean = false,
     val debugDiagnosticsEnabled: Boolean = false,

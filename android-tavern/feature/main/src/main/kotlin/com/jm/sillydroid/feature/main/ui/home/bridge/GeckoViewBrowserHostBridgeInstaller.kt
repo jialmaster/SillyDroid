@@ -1,7 +1,5 @@
 package com.jm.sillydroid.feature.main.ui.home.bridge
 
-import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import com.jm.sillydroid.core.common.DispatcherProvider
 import com.jm.sillydroid.core.model.settings.BrowserEngine
 import com.jm.sillydroid.core.model.settings.BrowserZoomOptions
@@ -25,7 +23,6 @@ import org.mozilla.geckoview.WebExtension
  * native messaging 只把消息转回现有宿主动作和下载/通知控制器，避免重新实现一套业务规则。
  */
 class GeckoViewBrowserHostBridgeInstaller(
-    private val activity: AppCompatActivity,
     private val actions: BrowserHostBridgeActions,
     private val blobDownloadController: BlobDownloadController,
     private val scope: CoroutineScope,
@@ -74,7 +71,8 @@ class GeckoViewBrowserHostBridgeInstaller(
             notificationController = systemNotificationController,
             isHostActive = actions.isHostActive,
             runOnUiThread = actions.runOnUiThread,
-            requestNotificationPermission = requestNotificationPermission
+            requestNotificationPermission = requestNotificationPermission,
+            diagnosticSink = ::recordDiagnostic
         )
     }
 
@@ -167,6 +165,29 @@ class GeckoViewBrowserHostBridgeInstaller(
             )
         }
         return true
+    }
+
+    /** 通过已建立的扩展控制端口请求页面侧记录最终可见性；消息不包含页面内容。 */
+    override fun requestDocumentVisibilityDiagnostic(reason: String): Boolean {
+        val port = viewportDensityPort ?: run {
+            recordDiagnostic("event=gecko_document_visibility_command_skipped reason=port_not_ready source=$reason")
+            return false
+        }
+        val payload = JSONObject()
+            .put("action", "recordDocumentVisibility")
+            .put("reason", reason)
+        return runCatching {
+            port.postMessage(payload)
+        }.onSuccess {
+            recordDiagnostic("event=gecko_document_visibility_command_sent source=$reason")
+        }.onFailure { error ->
+            if (viewportDensityPort === port) {
+                viewportDensityPort = null
+            }
+            recordDiagnostic(
+                "event=gecko_document_visibility_command_failed source=$reason error=${error.message ?: error.javaClass.simpleName}"
+            )
+        }.isSuccess
     }
 
     private fun bindExtensionMessageDelegate(installedExtension: WebExtension) {

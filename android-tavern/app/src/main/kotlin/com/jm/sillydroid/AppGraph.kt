@@ -42,10 +42,18 @@ import com.jm.sillydroid.domain.settings.SettingsConfigRepository
 import com.jm.sillydroid.domain.update.AppUpdateRepository
 import com.jm.sillydroid.domain.update.AppUpdateStateRepository
 
-class AppGraph(private val application: Application) : SillyDroidAppGraph {
+/**
+ * App 进程依赖图，集中装配宿主运行时、设置、日志、更新和功能模块入口。
+ *
+ * 允许：创建进程级 repository/service 单例；不允许持有 Activity View 或直接执行业务 UI 流程。
+ */
+class AppGraph(
+    private val application: Application,
+    onAppForegroundChanged: (Boolean) -> Unit = {}
+) : SillyDroidAppGraph {
     override val dispatchers: DispatcherProvider = AndroidDispatcherProvider
 
-    private val appForegroundStateStore = ApplicationForegroundStateStore().also { foregroundStateStore ->
+    private val appForegroundStateStore = ApplicationForegroundStateStore(onAppForegroundChanged).also { foregroundStateStore ->
         application.registerActivityLifecycleCallbacks(foregroundStateStore)
     }
 
