@@ -32,7 +32,9 @@
             android:name="com.jm.sillydroid.feature.main.MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:exported="true"
-            android:launchMode="singleTask">
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <!-- 主界面必须请求 IME resize，避免 GeckoView 输入框被设备默认的 pan/nothing 策略遮挡。 -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
